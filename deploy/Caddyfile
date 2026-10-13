@@ -1,0 +1,32 @@
+# Production Caddy config for the CS2 clone.
+#
+# HTTP only (fastest to set up on a fresh VPS):
+#   docker compose up -d  →  open http://YOUR_SERVER_IP
+#
+# For HTTPS with your own domain, replace ":80" below with your domain
+# (e.g. "dust2.example.com") — Caddy will auto-provision certificates.
+
+:80 {
+	# WebSocket / game traffic is marked with ?XTransformPort=3003
+	@transform_port_query {
+		query XTransformPort=*
+	}
+
+	handle @transform_port_query {
+		reverse_proxy game:3003 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		reverse_proxy game:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}

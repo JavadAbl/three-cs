@@ -1,0 +1,38 @@
+services:
+  game:
+    build: .
+    image: cs2-web-clone
+    container_name: cs2-web
+    restart: unless-stopped
+    environment:
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+    networks:
+      - cs2net
+    # no public ports — Caddy is the only entry point
+    expose:
+      - "3000"
+      - "3003"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: cs2-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - game
+    networks:
+      - cs2net
+
+networks:
+  cs2net:
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+*.log
+scripts
+skills
+examples
+agent-ctx
+shot-*.png
+*.json.bak
+tehran_game.json
+db
+.dev
+.zscripts
