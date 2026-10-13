@@ -80,6 +80,8 @@ const EYE_CROUCH = 1.08
 const GRAVITY = 22
 const JUMP_V = 7.4
 const STEP_UP = 0.55
+const CROUCH_TUCK = 0.55   // airborne crouch raises virtual feet (CS-style crouch-jump)
+const FALL_SAFE_V = 12.5   // max safe landing speed (~2.8m drop); above this = fall damage
 
 const KICK: Partial<Record<WeaponId, number>> = {
   ak47: 0.55, m4: 0.42, mp5: 0.22, deagle: 1.3, awp: 2.2, glock: 0.55, usp: 0.6,
@@ -110,6 +112,9 @@ export class Engine {
   private pitch = 0
   private onGround = false
   private crouchAmt = 0
+  private tuck = 0          // airborne crouch feet-tuck (0..CROUCH_TUCK)
+  private eyeY = 0          // smoothed camera base height (absorbs stair steps)
+  private lastFallAt = 0
   private keys = new Set<string>()
   private firing = false
   private wantScope = false
@@ -176,6 +181,7 @@ export class Engine {
   private stateSentAt = 0
   private running = false
   private disposed = false
+  private loopTick = 0
   private pointerLocked = false
   private stepAccum = 0
 
@@ -214,6 +220,17 @@ export class Engine {
     this.map = buildMap(this.scene)
     this.fx = new Effects(this.scene)
     this.pm = new PlayerManager(this.scene, this.myTeam)
+
+    // debug/testing hook (harmless in production)
+    if (typeof window !== 'undefined') {
+      ;(window as unknown as Record<string, unknown>).__eng = {
+        teleport: (x: number, y: number, z: number, yaw?: number) => {
+          this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.eyeY = y
+          if (typeof yaw === 'number') { this.yaw = yaw; this.pitch = 0 }
+        },
+        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, mapv: MAP_VERSION, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen }),
+      }
+    }
 
     audio.init()
     audio.setVolume(this.opts.volume)
@@ -376,6 +393,7 @@ export class Engine {
       const me = (d.players as Array<Record<string, unknown>>).find(p => p.id === this.myId)
       if (me) {
         this.pos.set(me.x as number, me.y as number, me.z as number)
+        this.eyeY = this.pos.y
         this.yaw = (me.yaw as number) ?? 0
       }
       this.pushToast(`Connected — room "${this.opts.room}"`)
@@ -397,6 +415,18 @@ export class Engine {
           this.armor = row[11] as number
           const alive = row[12] === 1
           this.hasBomb = row[13] === 1
+          // respawn / round-start position sync (server owns spawn placement)
+          {
+            const sx = row[1] as number, sy = row[2] as number, sz = row[3] as number
+            const dxz = Math.hypot(sx - this.pos.x, sz - this.pos.z)
+            if ((!this.alive && alive) ||
+                (this.alive && (this.phase === 'freeze' || this.phase === 'post' || this.phase === 'warmup') && dxz > 1.5) ||
+                (this.alive && dxz > 20)) {
+              this.pos.set(sx, sy, sz)
+              this.vel.set(0, 0, 0)
+              this.eyeY = sy
+            }
+          }
           const wname = row[14] as WeaponId
           if (!this.inventory.includes(wname) && wname !== 'knife') {
             // server inventory changed (buy/bomb) — resync
@@ -843,7 +873,9 @@ export class Engine {
   private movePlayer(dt: number) {
     const w = this.currentWeapon()
     const crouching = this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.keys.has('KeyC')
-    this.crouchAmt += ((crouching ? 1 : 0) - this.crouchAmt) * Math.min(1, 10 * dt)
+    // stay crouched while there is no headroom to stand
+    const wantCrouch = crouching || (this.crouchAmt > 0.02 && this.blockedStanding())
+    this.crouchAmt += ((wantCrouch ? 1 : 0) - this.crouchAmt) * Math.min(1, 10 * dt)
     const walking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
 
     let maxSpeed = w.moveSpeed
@@ -875,32 +907,40 @@ export class Engine {
     this.vel.y -= GRAVITY * dt
     if (this.vel.y < -35) this.vel.y = -35
 
+    // airborne crouch-jump: tuck the feet up (gains ~0.55m of jump reach)
+    this.tuck = (!this.onGround && this.crouchAmt > 0.5) ? CROUCH_TUCK : 0
+
     // X axis
     this.pos.x += this.vel.x * dt
     this.resolveHorizontal('x')
     // Z axis
     this.pos.z += this.vel.z * dt
     this.resolveHorizontal('z')
-    // Y axis
+    // Y axis (swept: catches tunneling through thin floors on frame hitches)
+    const fallV = this.vel.y
+    const prevFeet = this.pos.y + this.tuck
     this.pos.y += this.vel.y * dt
     this.onGround = false
     const h = this.playerHeight()
     for (const c of this.map.colliders) {
+      const feet = this.pos.y + this.tuck
       if (this.pos.x + PLAYER_R > c.min.x && this.pos.x - PLAYER_R < c.max.x &&
-        this.pos.y + h > c.min.y && this.pos.y < c.max.y &&
+        feet + h > c.min.y && feet < c.max.y + Math.max(0, prevFeet - feet) &&
         this.pos.z + PLAYER_R > c.min.z && this.pos.z - PLAYER_R < c.max.z) {
-        if (this.vel.y <= 0.01 && this.pos.y > c.max.y - 0.3) {
+        if (this.vel.y <= 0.01 && (feet > c.max.y - 0.3 || prevFeet >= c.max.y - 0.001)) {
           this.pos.y = c.max.y
           this.vel.y = 0
           this.onGround = true
-        } else if (this.vel.y > 0) {
-          this.pos.y = c.min.y - h - 0.001
+          this.tuck = 0
+          if (fallV < -FALL_SAFE_V) this.fallDamage(fallV)
+        } else if (this.vel.y > 0 && feet + h > c.min.y && prevFeet + h <= c.min.y + 0.001) {
+          this.pos.y = c.min.y - h - this.tuck - 0.001
           this.vel.y = 0
         }
       }
     }
     if (this.pos.y < -6) { // failsafe
-      this.pos.set(0, 2, 40); this.vel.set(0, 0, 0)
+      this.pos.set(0, 2, 40); this.vel.set(0, 0, 0); this.eyeY = 2
     }
 
     // footsteps
@@ -916,34 +956,59 @@ export class Engine {
 
   private resolveHorizontal(axis: 'x' | 'z') {
     const h = this.playerHeight()
+    const feet = this.pos.y + this.tuck
     for (const c of this.map.colliders) {
       if (this.pos.x + PLAYER_R > c.min.x && this.pos.x - PLAYER_R < c.max.x &&
-        this.pos.y + h > c.min.y && this.pos.y < c.max.y &&
+        feet + h > c.min.y && feet < c.max.y &&
         this.pos.z + PLAYER_R > c.min.z && this.pos.z - PLAYER_R < c.max.z) {
-        // try step up
+        // try step up (grounded climbing only - never while crouch-tucked in air)
         const rise = c.max.y - this.pos.y
-        if (rise > 0.01 && rise <= STEP_UP && this.vel.y <= 0.1) {
+        if (this.tuck === 0 && rise > 0.01 && rise <= STEP_UP && this.vel.y <= 0.1) {
           if (!this.overlapsAt(this.pos.x, c.max.y + 0.02, this.pos.z)) {
             this.pos.y = c.max.y + 0.02
             this.onGround = true
             continue
           }
         }
+        // push out along the axis, toward the side we penetrated from
         if (axis === 'x') {
-          this.pos.x = this.vel.x > 0 ? c.min.x - PLAYER_R - 0.001 : c.max.x + PLAYER_R + 0.001
+          this.pos.x = this.pos.x > c.box.x ? c.max.x + PLAYER_R + 0.001 : c.min.x - PLAYER_R - 0.001
           this.vel.x = 0
         } else {
-          this.pos.z = this.vel.z > 0 ? c.min.z - PLAYER_R - 0.001 : c.max.z + PLAYER_R + 0.001
+          this.pos.z = this.pos.z > c.box.z ? c.max.z + PLAYER_R + 0.001 : c.min.z - PLAYER_R - 0.001
           this.vel.z = 0
         }
       }
     }
   }
 
+  // would the standing-height collider overlap anything here? (uncrouch headroom check)
+  private blockedStanding(): boolean {
+    for (const c of this.map.colliders) {
+      if (this.pos.x + PLAYER_R > c.min.x && this.pos.x - PLAYER_R < c.max.x &&
+        this.pos.y + STAND_H > c.min.y && this.pos.y < c.max.y &&
+        this.pos.z + PLAYER_R > c.min.z && this.pos.z - PLAYER_R < c.max.z) return true
+    }
+    return false
+  }
+
+  // landing impact damage (validated server-side)
+  private fallDamage(v: number) {
+    const dmg = Math.round((-v - FALL_SAFE_V) * 5.5)
+    if (dmg < 4) return
+    const t = performance.now()
+    if (t - this.lastFallAt < 400) return
+    this.lastFallAt = t
+    this.damageAt = t
+    this.pushToast(`Fall damage: -${dmg} HP`)
+    this.socket?.emit('selfdamage', { dmg, reason: 'fall' })
+  }
+
   // ---------------------------------------------------------------- loop
   private loop = () => {
     if (!this.running || this.disposed) return
     this.raf = requestAnimationFrame(this.loop)
+    this.loopTick++
     const now = performance.now()
     let dt = (now - this.lastT) / 1000
     this.lastT = now
@@ -980,7 +1045,10 @@ export class Engine {
         this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ')
       }
     } else {
-      this.camera.position.set(this.pos.x, this.pos.y + eye, this.pos.z)
+      // smooth eye height: absorbs stair steps, tracks jumps/falls exactly
+      if (!this.onGround || Math.abs(this.pos.y - this.eyeY) > 0.9) this.eyeY = this.pos.y
+      else this.eyeY += (this.pos.y - this.eyeY) * Math.min(1, 26 * dt)
+      this.camera.position.set(this.pos.x, this.eyeY + eye, this.pos.z)
       this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ')
     }
 

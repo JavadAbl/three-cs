@@ -21,7 +21,7 @@ function fmtMoney(n: number): string {
 const WEAPON_SHORT: Record<string, string> = {
   ak47: 'AK-47', m4: 'M4A4', awp: 'AWP', deagle: 'Deagle', glock: 'Glock', usp: 'USP-S',
   mp5: 'MP5', knife: 'Knife', c4: 'C4', kevlar: 'Kevlar', kevlarhelm: 'Kevlar+Helm',
-  world: 'C4',
+  world: 'C4', fall: 'Gravity',
 }
 
 export interface HudCallbacks {

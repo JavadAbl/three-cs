@@ -1,6 +1,15 @@
 // ============================================================
-// Dust2-inspired map data (shared: server LOS/bots + client render/collision)
+// Dust2-inspired map data v4 (shared: server LOS/bots + client render/collision)
 // Coordinate system: X = east(+), Z = south(+), Y = up. CT side = north (-Z), T side = south (+Z).
+//
+// v4 changes:
+// - B doors corridor now actually connects CT side -> B (was a dead stub in v3)
+// - Window room: mid/CT-mid -> B rotation with a crouch-vault window
+// - Dead void west of tunnels sealed (SW city block)
+// - Catwalk stairs entry opened (north wall shortened), under-stairs pocket sealed
+// - Long A narrowed to a real corridor (12m), pit stairs x 30..42
+// - Mid doors widened to double doors, panels slid to jambs
+// - Waypoint graph fixed: no more paths through solid geometry
 // ============================================================
 
 export interface Box {
@@ -52,52 +61,54 @@ wall(48, 46, -50, 46, 6)
 wall(-50, 46, -50, -46, 6)
 
 // ---------------- T spawn (south, open) ----------------
-wall(-6, 30, 2, 30, 4)       // wT1 west of mid entrance gap (gap x 2..8)
+wall(-6, 30, 2, 30, 4)       // T spawn wall west of mid entrance (gap x 2..8 = mid entrance)
 box(14, 19, 12, 22, 4, 'wall')          // T NE building mass x 8..20 z 8..30 (mid east boundary)
 wall(20, 44, 20, 34, 4)       // T spawn east wall (south piece), gap z 30..34 = exit to outside long
-box(8, 38, 1.6, 1.6, 1.6, 'crate')
-box(10.2, 38, 1.6, 1.6, 1.6, 'crate')
-box(9, 38, 1.6, 1.6, 1.6, 'crate', 1.6)
+box(-4, 36, 1.6, 1.6, 1.6, 'crate')
+box(-1.8, 36, 1.6, 1.6, 1.6, 'crate')
+box(-2.9, 36, 1.6, 1.6, 1.6, 'crate', 1.6)
 box(-10, 42, 2, 2, 2, 'crate')
-box(15, 34, 1.8, 1.8, 1.8, 'crate')
+box(16, 37, 1.8, 1.8, 1.8, 'crate')
 
 // ---------------- mid lane ----------------
 wall(-6, 30, -6, -9, 4)       // mid west wall (to T spawn line)
 wall(8, 30, 8, -6, 4)         // mid east wall (upper) — cat gap at z -13..-6
 wall(8, -13, 8, -26, 4)       // mid east wall (lower/CT-mid side)
-wall(-6, -9, 0, -9, 3)        // mid doors wall (west part) — door gap x 0..2.6
-wall(2.6, -9, 8, -9, 3)       // mid doors wall (east part)
-wall(0, -9, 2.6, -9, 0.6, 'metal', 0.6, 2.4) // door frame top
-box(0.15, -9, 0.3, 1.2, 2.4, 'door', 0)      // door panel (half open)
+wall(-6, -9, 0, -9, 3)        // mid doors wall (west part) — gap x 0..4.2 = double doors
+wall(4.2, -9, 8, -9, 3)       // mid doors wall (east part)
+wall(0, -9, 4.2, -9, 0.6, 'metal', 0.6, 2.4) // door lintel
+box(0.15, -9, 0.3, 1.2, 2.4, 'door', 0)      // door panel west (slid against jamb)
+box(4.05, -9, 0.3, 1.2, 2.4, 'door', 0)      // door panel east (slid against jamb)
 box(2, 4, 1.4, 1.4, 1.4, 'crate')            // "xbox" mid cover
 box(-3, -3, 1.4, 1.4, 1.4, 'crate')
 
 // ---------------- catwalk / short A ----------------
-wall(8, -6, 15, -6, 4)        // cat south wall  (z=-6, from mid wall to x 15)
-wall(8, -13, 15, -13, 4)      // cat north wall
+wall(8, -6, 15, -6, 4)        // cat south wall (z=-6, from mid wall to x 15)
+wall(8, -13, 12, -13, 4)      // cat north wall — x 8..12 only, stairs entry open east of x12
 wall(17, -13, 17, -18, 4)     // cat stairs east wall
 stairs(12, 17, -13, -18, 2, 'z')          // cat stairs 0 -> 2 climbing north
 box(14.5, -20, 5, 4, 2, 'wall', 0)       // cat top platform x12..17 z -22..-18 (top y=2)
 box(14.5, -24, 5, 4, 2, 'wall', 0)       // cat neck x12..17 z -26..-22 (top y=2)
-box(11, -9, 1, 1, 1, 'crate')             // short boost box
-box(14.5, -16.5, 1.2, 1.2, 1.2, 'crate')  // crate on stairs corner
+box(10.5, -6.9, 1, 1, 1, 'crate')         // short boost box (south side, off the bot path)
+box(12.5, -17, 1.2, 1.2, 1.2, 'crate', 1.75) // crate tucked against stairs west edge
+box(10.2, -19.5, 3.5, 13, 4, 'wall')      // under-cat fill x 8.45..11.95 z -26..-13 (seals dead pocket)
 
 // ---------------- A site platform ----------------
 box(30, -33, 36, 14, 2, 'wall')            // main platform x12..48 z -40..-26 (top y=2)
 box(30, -33, 36, 14, 0.05, 'sand', 2)      // platform sandy top layer
-box(20, -33, 20, 8, 0.04, 'plank', 2.01)   // plank deck detail
-// pit stairs: long/pit (y0) up to platform south edge (y2), x 30..48
-stairs(30, 48, -18, -26, 2, 'z', 'plank')
+box(21, -33, 18, 8, 0.04, 'plank', 2.01)   // plank deck detail (x 12..30 — never overhang the ramp)
+// pit stairs: long (y0) up to platform south edge (y2), x 30..42
+stairs(30, 42, -18, -26, 2, 'z', 'plank')
 // A site props
-box(24, -33, 2.2, 2.2, 2.2, 'crate', 2)    // default plant crate
-box(24, -33, 1.6, 1.6, 1.6, 'crate', 4.2)
-box(36, -31, 1.8, 1.8, 1.8, 'crate', 2)
+box(24, -30, 2.2, 2.2, 2.2, 'crate', 2)    // default plant crate (north of goose path)
+box(24, -30, 1.6, 1.6, 1.6, 'crate', 4.2)
+box(39, -31, 1.8, 1.8, 1.8, 'crate', 2)    // pit-top crate
 box(40, -37, 2, 2, 2, 'crate', 2)          // goose corner
-box(19, -36, 1.5, 1.5, 1.5, 'crate', 2)
+box(19.5, -38, 1.5, 1.5, 1.5, 'crate', 2)  // goose crates
 box(44, -28, 2.2, 2.2, 2.2, 'crate', 2)    // A car/corner crates
-box(31, -20, 1.6, 1.6, 1.6, 'crate')       // pit crate
-box(42, -8, 2, 2, 2, 'crate')              // long corner crate
-box(36, -4, 1.4, 1.4, 1.4, 'crate')        // long crate cover
+box(31, -20, 1.6, 1.6, 1.6, 'crate')       // pit crate (on stairs)
+box(38, -11, 2, 2, 2, 'crate')             // long corner crate
+box(38.5, -3, 1.4, 1.4, 1.4, 'crate')        // long crate cover (east side, off the lane)
 
 // ---------------- A ramp from CT ----------------
 stairs(8, 12, -34, -28, 2, 'x', 'plank')   // ramp 0 -> 2 climbing east (x8..12)
@@ -107,41 +118,49 @@ box(10, -27, 4, 2, 4, 'wall')              // block G x8..12 z -28..-26
 box(10, -24, 4, 4, 4, 'wall')              // pocket fill x8..12 z -26..-22
 
 // ---------------- CT spawn plaza ----------------
-box(-4, -38, 1.8, 1.8, 1.8, 'crate')
+box(-7, -44, 1.8, 1.8, 1.8, 'crate')
 box(5, -42, 1.8, 1.8, 1.8, 'crate')
 box(-11, -44, 2.2, 2.2, 1.2, 'crate')
-wall(-14, -46, -14, -27, 4)                // CT west wall, gap z -27..-21 = B doors
+wall(-14, -46, -14, -27, 4)                // CT spawn west wall
 
-// ---------------- B doors corridor ----------------
-wall(-22, -27, -14, -27, 3.5)
-wall(-22, -21, -14, -21, 3.5)
-box(-21.4, -24, 0.3, 2.4, 2.6, 'door', 0)  // B door panel
+// ---------------- B doors corridor (CT -> B) ----------------
+wall(-22, -27, -14, -27, 3.5)   // corridor south wall
+wall(-22, -21, -14, -21, 3.5)   // corridor north wall
+box(-21.4, -26.2, 0.3, 1.6, 2.6, 'door', 0)   // door panel slid open (flush south wall)
 
 // ---------------- B site ----------------
-box(-35, -30, 26, 24, 0.04, 'sand', 0.02)  // B ground detail
+box(-35, -29, 26, 26, 0.04, 'sand', 0.02)  // B ground detail z -42..-16
 box(-44, -37, 8, 10, 1.5, 'wall')          // back platform x -48..-40 z -42..-32 (top 1.5)
 stairs(-38, -40, -42, -32, 1.5, 'x', 'plank', 0.25) // stairs climb west up to plat
-box(-30, -26, 4, 2, 1.3, 'metal', 0)       // "the car"
+box(-29.5, -24.5, 4, 2, 1.3, 'metal', 0)       // "the car" (B entrance cover)
 box(-33, -35, 2, 2, 2, 'crate')            // double stack
 box(-33, -35, 1.6, 1.6, 1.6, 'crate', 2)
 box(-27, -32, 1.6, 1.6, 1.6, 'crate')
 box(-37, -23, 1.8, 1.8, 1.8, 'crate')      // plant zone crates
 box(-44, -22, 2, 2, 2, 'crate')            // window-side boxes
 box(-24, -36, 2, 2, 2, 'crate')            // "new box" site entrance
-box(-24, -34.5, 4, 15, 4, 'wall')          // solid fill x -26..-22 z -42..-27 (B east)
-box(-24, -19.5, 4, 3, 4, 'wall')           // solid fill x -26..-22 z -21..-18 (B east)
+box(-24, -34.5, 4, 15, 4, 'wall')          // solid fill x -26..-22 z -42..-27 (B east, south of doors exit)
+
+// ---------------- window room / corridor (mid -> B rotation) ----------------
+// corridor z -19..-16 runs from CT-mid (window at x -7..-6) west into B site (exit x=-26)
+box(-16, -20, 20, 2, 4, 'wall')            // south mass x -26..-6 z -21..-19
+box(-16, -12.5, 20, 7, 4, 'wall')          // north mass x -26..-6 z -16..-9
+box(-16, -17.5, 19, 3, 0.5, 'dark', 3.2)   // corridor ceiling (room feel)
+box(-6.5, -18.8, 1, 0.4, 4, 'wall')        // window jamb south (z -19..-18.6)
+box(-6.5, -16.2, 1, 0.4, 4, 'wall')        // window jamb north (z -16.4..-16)
+box(-6.5, -17.5, 1, 2.2, 1, 'wall')        // window sill (y 0..1.0 — jump onto it)
+box(-6.5, -17.5, 1, 2.2, 1.4, 'wall', 2.6) // window lintel (y 2.6..4) — opening y 1..2.6, crouch through
 
 // ---------------- tunnels (T -> B) ----------------
-wall(-34, 24, -34, -18, 4, 'dark')         // tunnel west wall
-wall(-26, 24, -26, -18, 4, 'dark')         // tunnel east wall
-box(-30, 3, 8, 42, 0.5, 'dark', 3.2)       // tunnel ceiling
+wall(-34, 24, -34, -16, 4, 'dark')         // tunnel west wall (z -16..24)
+wall(-26, 24, -26, -16, 4, 'dark')         // tunnel east wall
+box(-30, 4, 8, 40, 0.5, 'dark', 3.2)       // tunnel ceiling (z -16..24)
 wall(-34, 30, -34, 24, 4, 'dark')          // entrance west piece
 box(-16, 27, 20, 6, 4, 'wall')              // solid block A x -26..-6 z 24..30 (upper tunnel mass)
 box(-16, 16.5, 20, 15, 4, 'wall')          // solid block A2 x -26..-6 z 9..24
 box(-16, 0, 20, 18, 4, 'wall')             // solid fill x -26..-6 z -9..9
-box(-16, -15, 20, 12, 4, 'wall')           // solid block B x -26..-6 z -21..-9
-box(-10, -18, 8, 18, 4, 'wall')            // solid fill x -14..-6 z -27..-9
 box(-18, -34.5, 8, 15, 4, 'wall')          // solid block C x -22..-14 z -42..-27
+box(-42, 3, 16, 42, 6, 'wall')             // SW city block x -50..-34 z -18..24 (seals void west of tunnels)
 
 // ---------------- long A ----------------
 wall(30, 2, 30, -18, 4)                    // long west wall
@@ -149,12 +168,13 @@ wall(20, 8, 30, 8, 4)                      // z=8 wall west of doors gap (gap x 
 wall(38, 8, 48, 8, 4)                      // z=8 wall east of doors gap
 wall(30, 8, 30, 2, 4)                      // doors side wall west
 wall(38, 8, 38, 2, 4)                      // doors side wall east
-box(34, 5.5, 0.3, 1.4, 2.6, 'door', 0)     // long doors panel
+box(37.8, 5.5, 0.3, 1.4, 2.6, 'door', 0)   // long doors panel (slid east against jamb)
 box(30.5, 4, 1.4, 1.4, 1.4, 'crate')       // blue container-ish cover in doors
 box(23.5, -16, 13, 20, 4, 'wall')          // solid block D x 17..30 z -26..-6 (under A / right of cat)
 box(19, 1, 22, 14, 4, 'wall')              // cat corner fill x 8..30 z -6..8
-box(44, 21, 8, 26, 4, 'wall')              // east shoulder (x 40..48) of outside long to narrow the yard
+box(44, 21, 8, 26, 4, 'wall')              // east shoulder (x 40..48) of outside long
 box(34, 41, 28, 10, 4, 'wall')             // south-east corner mass x 20..48 z 36..46
+box(45, -9, 6, 34, 4, 'wall')              // long east block x 42..48 z -26..8 (narrows long to a corridor)
 
 // ---------------- big building masses (skyline / fillers) ----------------
 box(-42, 35, 16, 22, 4, 'wall')            // block K SW x -50..-34 z 24..46
@@ -170,7 +190,7 @@ box(-20, 54, 12, 8, 10, 'wall', 0)
 box(10, 54, 10, 8, 8, 'wall', 0)
 
 export const MAP_BOXES = boxes
-export const MAP_VERSION = 3
+export const MAP_VERSION = 4
 
 // ---------------- spawns ----------------
 export const SPAWNS: { CT: Vec3[]; T: Vec3[] } = {
@@ -194,52 +214,57 @@ export const SITES = {
 export interface WP { id: string; x: number; z: number; y: number }
 export const WAYPOINTS: WP[] = [
   { id: 'tspawn', x: 0, z: 40, y: 0 },
-  { id: 'tE', x: 22, z: 32, y: 0 },
+  { id: 'tE', x: 24, z: 31, y: 0 },
   { id: 'outLong', x: 34, z: 20, y: 0 },
   { id: 'longDoors', x: 34, z: 5, y: 0 },
-  { id: 'longS', x: 39, z: -6, y: 0 },
-  { id: 'longN', x: 39, z: -14, y: 0 },
-  { id: 'pitStairs', x: 39, z: -22, y: 1.2 },
-  { id: 'aPit', x: 39, z: -30, y: 2 },
-  { id: 'aDefault', x: 25, z: -33, y: 2 },
+  { id: 'longS', x: 36, z: -6, y: 0 },
+  { id: 'longN', x: 36, z: -14, y: 0 },
+  { id: 'pitStairs', x: 36, z: -22, y: 1.3 },
+  { id: 'aPit', x: 36, z: -30, y: 2 },
+  { id: 'aDefault', x: 28, z: -33, y: 2 },
   { id: 'aGoose', x: 17, z: -36, y: 2 },
   { id: 'aRampTop', x: 12.5, z: -31, y: 2 },
   { id: 'aRampBot', x: 5, z: -31, y: 0 },
   { id: 'ctSpawn', x: 0, z: -37, y: 0 },
   { id: 'ctMid', x: 1, z: -16, y: 0 },
-  { id: 'doorsGap', x: 1.3, z: -8, y: 0 },
+  { id: 'doorsGap', x: 2.1, z: -8, y: 0 },
   { id: 'midS', x: 0, z: -2, y: 0 },
   { id: 'midTop', x: 1, z: 10, y: 0 },
   { id: 'midIn', x: 1, z: 24, y: 0 },
+  { id: 'midEnt', x: 5, z: 32, y: 0 },
   { id: 'catGap', x: 9, z: -8, y: 0 },
   { id: 'catCor', x: 12, z: -10, y: 0 },
-  { id: 'catStairs', x: 14, z: -16, y: 0 },
+  { id: 'catStairs', x: 14, z: -16.5, y: 1.7 },
   { id: 'catTop', x: 14, z: -20, y: 2 },
-  { id: 'aShort', x: 15, z: -25, y: 2 },
+  { id: 'aShort', x: 14, z: -24, y: 2 },
+  { id: 'aSiteNW', x: 14, z: -29, y: 2 },
   { id: 'ctW', x: -10, z: -36, y: 0 },
-  { id: 'bDoors', x: -18, z: -24, y: 0 },
-  { id: 'bSite', x: -32, z: -30, y: 0 },
-  { id: 'bCar', x: -27, z: -27, y: 0 },
-  { id: 'bPlatSt', x: -39.5, z: -37, y: 0.6 },
+  { id: 'ctGap', x: -10, z: -24, y: 0 },
+  { id: 'bDoors', x: -18, z: -23, y: 0 },
+  { id: 'bSite', x: -34, z: -29, y: 0 },
+  { id: 'bCar', x: -27.5, z: -19.5, y: 0 },
+  { id: 'bPlatSt', x: -37, z: -37, y: 0 },
+  { id: 'bStair', x: -39, z: -37, y: 1.2 },
   { id: 'bPlat', x: -44, z: -37, y: 1.5 },
-  { id: 'tunN', x: -30, z: -16, y: 0 },
+  { id: 'tunN', x: -30, z: -13, y: 0 },
   { id: 'tunMid', x: -30, z: 4, y: 0 },
   { id: 'tunS', x: -30, z: 20, y: 0 },
-  { id: 'tAppr', x: -16, z: 27, y: 0 },
+  { id: 'tAppr', x: -30, z: 27, y: 0 },
+  { id: 'tunM', x: -30, z: 32, y: 0 },
   { id: 'tW', x: -14, z: 34, y: 0 },
 ]
 
 export const WAYPOINT_EDGES: Array<[string, string]> = [
-  ['tspawn', 'tW'], ['tW', 'tAppr'], ['tAppr', 'tunS'], ['tunS', 'tunMid'], ['tunMid', 'tunN'],
-  ['tunN', 'bSite'], ['bSite', 'bPlatSt'], ['bPlatSt', 'bPlat'], ['bSite', 'bCar'],
-  ['tspawn', 'midIn'], ['midIn', 'midTop'], ['midTop', 'midS'], ['midS', 'doorsGap'],
+  ['tspawn', 'tW'], ['tW', 'tunM'], ['tunM', 'tAppr'], ['tAppr', 'tunS'], ['tunS', 'tunMid'], ['tunMid', 'tunN'],
+  ['tunN', 'bSite'], ['bSite', 'bPlatSt'], ['bPlatSt', 'bStair'], ['bStair', 'bPlat'], ['tunN', 'bCar'],
+  ['tspawn', 'midEnt'], ['midEnt', 'midIn'], ['midIn', 'midTop'], ['midTop', 'midS'], ['midS', 'doorsGap'],
   ['doorsGap', 'ctMid'], ['ctMid', 'ctSpawn'],
   ['midS', 'catGap'], ['catGap', 'catCor'], ['catCor', 'catStairs'], ['catStairs', 'catTop'],
-  ['catTop', 'aShort'], ['aShort', 'aDefault'],
+  ['catTop', 'aShort'], ['aShort', 'aSiteNW'], ['aSiteNW', 'aDefault'],
   ['tspawn', 'tE'], ['tE', 'outLong'], ['outLong', 'longDoors'], ['longDoors', 'longS'],
   ['longS', 'longN'], ['longN', 'pitStairs'], ['pitStairs', 'aPit'], ['aPit', 'aDefault'],
   ['aDefault', 'aGoose'], ['aGoose', 'aRampTop'], ['aRampTop', 'aRampBot'], ['aRampBot', 'ctSpawn'],
-  ['ctSpawn', 'ctW'], ['ctW', 'bDoors'], ['bDoors', 'bSite'],
+  ['ctSpawn', 'ctW'], ['ctW', 'ctGap'], ['ctGap', 'bDoors'], ['bDoors', 'bSite'],
   ['ctSpawn', 'ctMid'],
 ]
 

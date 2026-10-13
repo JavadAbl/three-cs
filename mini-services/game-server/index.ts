@@ -636,6 +636,44 @@ io.on('connection', (socket) => {
     applyDamage(m, victim, attacker, w.id, part, dist, part === 'head')
   })
 
+  socket.on('selfdamage', (data: { dmg?: number; reason?: string }) => {
+    if (!joinedRoom) return
+    const m = matches.get(joinedRoom)
+    const p = m?.players.get(socket.id)
+    if (!m || !p || !p.alive || m.phase !== 'live') return
+    const dmg = Math.round(clamp(Number(data.dmg) || 0, 0, 85))
+    if (dmg < 4) return
+    const t = now()
+    if (t - (p.lastSelfDmgAt ?? 0) < 400) return
+    p.lastSelfDmgAt = t
+    p.hp = Math.max(0, p.hp - dmg)
+    broadcast(m, 'hitConfirm', {
+      victimId: p.id, attackerId: null, dmg, part: 'body', hs: false, hp: p.hp, victimTeam: p.team,
+    })
+    if (p.hp <= 0) {
+      p.alive = false
+      p.deaths++
+      p.plantingSince = 0; p.defusingSince = 0
+      if (p.hasBomb && !m.bomb.planted) {
+        p.hasBomb = false
+        p.inventory = p.inventory.filter(w => w !== 'c4')
+        const ts = aliveOf(m, 'T')
+        if (ts.length) {
+          const heir = ts.find(q => !q.bot) ?? ts[0]
+          heir.hasBomb = true
+          if (!heir.inventory.includes('c4')) heir.inventory.push('c4')
+          sendInvSync(heir)
+          broadcast(m, 'toast', { msg: `${heir.name} picked up the bomb` })
+        }
+      }
+      broadcast(m, 'kill', {
+        killer: null, victim: p.id, weapon: 'fall' as WeaponId, headshot: false,
+        killerName: '', victimName: p.name, killerTeam: p.team, victimTeam: p.team,
+      })
+      checkElimination(m)
+    }
+  })
+
   socket.on('reload', (data: { weapon?: string }) => {
     if (!joinedRoom) return
     const m = matches.get(joinedRoom)

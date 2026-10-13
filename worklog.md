@@ -38,3 +38,42 @@ Stage Summary:
 - Game server: mini-services/game-server on :3003 (running), web on :3000 (dev), Caddy gateway :81
 - Verified end-to-end: rendering, netcode, rounds, economy, buying, kills, deaths, bots
 - Self-deployment: DEPLOY.md + Dockerfile + docker-compose + Caddy config for the user's own VPS
+
+---
+Task ID: 2
+Agent: Super Z (main agent)
+Task: v2 overhaul — fix map layout + physics problems reported by the player after first playtest
+
+Work Log:
+- Diagnosed v1 map bugs from geometry analysis + wrote scripts/validate_map.ts (node/bun checker: bot-path clearance vs solids, spawn clearance, window vault, graph connectivity)
+- MAP v4 (src/game/dust2.ts + server copy, MAP_VERSION=4) — fixed:
+  - B doors corridor was a dead stub (solid fill blocked the CT entrance; B only reachable via tunnels) → removed fill, added ctGap vestibule; CT->B rotation now exists (bots verified using it)
+  - 16x42m dead void west of tunnels (x -50..-34, z -18..24) leaked from B site → sealed with SW city block
+  - Catwalk stairs nearly inaccessible (cat north wall x 8..15 blocked the stair base, only 1.1m slot) → wall shortened to x 8..12; under-stairs dead pocket filled
+  - A ramp was impassable for players: plank deck detail (y 2.01) overhung the ramp x 10..12 at head height → clamped to x 12..30
+  - Long A was 18m wide → narrowed to 12m (new east block x 42..48, pit stairs x 30..42)
+  - Mid doors widened to double doors (x 0..4.2), panels slid to jambs; B door panel + long doors panel moved off walking lines
+  - NEW: window room (mid/CT-mid -> B rotation): corridor z -19..-16 with ceiling, crouch-vault window (sill y1.0, opening y1..2.6) at x -7..-6 — validator confirms crouch passable
+  - Crates/waypoints moved off paths (T spawn stack, boost box, plant crate, car, pit-top crate); CT spawn no longer overlaps a crate
+  - Waypoint graph rebuilt: removed 4 through-wall edges (tspawn->midIn, tW->tAppr through block A, ctW->bDoors through CT wall, catCor->catStairs through cat wall); added midEnt/tunM/ctGap/aSiteNW/bStair nodes; 39/39 reachable, ALL CHECKS PASSED
+- PHYSICS v2 (src/game/engine.ts):
+  - Smooth eye height (eyeY lerp when grounded) — removes stair-step camera jitter
+  - CS-style crouch-jump: airborne crouch tucks virtual feet +0.55m (can now mount 1.4-1.6m crates)
+  - Uncrouch headroom check (blockedStanding) — no more clipping into ceilings/window lintel
+  - Horizontal push-out by penetration side instead of velocity sign (fixes corner sticking when vel=0)
+  - Swept Y collision (prevFeet crossing test) — fixes falling through the thin floor on frame hitches (verified: 8m drop now lands, previously tunneled)
+  - Fall damage: landing faster than 12.5 m/s -> (v-12.5)*5.5 dmg, client detects + emits, server validates ('selfdamage' handler, clamped, rate-limited, killfeed weapon 'fall' -> HUD 'Gravity')
+  - Respawn/round-start position sync from server snapshots (fixes v1 desync where survivors stayed at old spot after round reset; also fixes respawn teleport)
+  - Debug hook window.__eng (teleport/state) for testing
+- Server: 'selfdamage' socket handler + lastSelfDmgAt in types.ts; game server restarted on :3003 (map v4)
+- Verification:
+  - scripts/validate_map.ts: ALL CHECKS PASSED (39 waypoints, 52 edges+spawns+vault)
+  - scripts/test-map-v4.ts (75s live bot sim): 2 full rounds, kills, plant+defuse, 0 bot pathing clips (moving), 0 stuck bots, CT bots rotate via B doors (Rex/Wolf/Viper), 7 distinct bots reach sites
+  - Browser (agent-browser via :81 gateway): lobby + game render, mapv 4, ramp climbing verified (step-up onto step 0 -> continues), 8m drop lands with fall damage (100->53hp), 10 location screenshots VLM-verified clean (no broken/black geometry), 0 console errors
+  - tsc --noEmit clean
+
+Stage Summary:
+- Map v4: sealed layout, all three lanes + window rotation, every bot path wall-clear, CT->B rotation restored
+- Physics: stair jitter gone, crouch-jump, no corner sticking, no floor tunneling, fall damage, round-start desync fixed
+- Services live: web :3000, game-server :3003 (map v4), Caddy gateway :81
+- Files: src/game/dust2.ts (+server copy), src/game/engine.ts, src/game/hud.tsx, mini-services/game-server/{index,types}.ts, scripts/{validate_map,test-map-v4}.ts

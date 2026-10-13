@@ -29,6 +29,7 @@ export interface PlayerState {
   ammo: Partial<Record<WeaponId, Ammo>>
   lastShotAt: number
   reloadEndsAt: number
+  lastSelfDmgAt?: number
   // objective
   hasBomb: boolean
   plantingSince: number
