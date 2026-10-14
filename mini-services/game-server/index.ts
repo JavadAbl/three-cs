@@ -683,15 +683,20 @@ io.on('connection', (socket) => {
     if (!w || w.mag === Infinity) return
     const am = p.ammo[w.id]
     if (!am || am.mag >= w.mag || am.reserve <= 0 || p.reloadEndsAt > now()) return
-    p.reloadEndsAt = now() + w.reloadMs
+    const endsAt = now() + w.reloadMs
+    p.reloadEndsAt = endsAt
     setTimeout(() => {
       const mm = matches.get(joinedRoom!)
       const pp = mm?.players.get(socket.id)
       const amm = pp?.ammo[w.id]
       if (!mm || !pp || !amm || !pp.alive) return
+      // canceled by weapon switch / death / round reset (they all clear reloadEndsAt)
+      if (pp.reloadEndsAt !== endsAt) return
       const need = w.mag - amm.mag
       const take = Math.min(need, amm.reserve)
       amm.mag += take; amm.reserve -= take
+      // sync the refilled ammo back to the player (their local copy drives HUD + fire gate)
+      socket.emit('ammo', { weapon: w.id, mag: amm.mag, reserve: amm.reserve })
     }, w.reloadMs)
     socket.to(m.roomId).emit('reloadFx', { id: p.id })
   })

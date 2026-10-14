@@ -111,6 +111,18 @@ export class GameAudio {
     setTimeout(() => this.noise(0.06, 1500, 0.3), 240)
   }
 
+  reloadMagIn() { // heavier double click: magazine seats
+    this.tone(420, 0.05, 0.3, 'square', 200)
+    setTimeout(() => this.tone(310, 0.06, 0.3, 'square', 140), 70)
+    this.noise(0.05, 900, 0.25)
+  }
+
+  reloadSlide() { // slide/bolt rack at the end of the reload
+    this.noise(0.08, 2000, 0.35)
+    setTimeout(() => this.noise(0.07, 1400, 0.4), 90)
+    setTimeout(() => this.tone(520, 0.05, 0.3, 'square', 240), 170)
+  }
+
   dryFire() { this.tone(900, 0.04, 0.2, 'square') }
 
   bombBeep(urgent: boolean) {

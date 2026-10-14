@@ -113,3 +113,31 @@ Stage Summary:
 - Root causes fixed: mirrored stair geometry (v4), phantom ceiling slabs, floating/buried windows+signs, cap/parapet embedding, prop burial, arch wall intersections, coplanar junction faces
 - Deliverables: src/game/dust2.ts (+server copy, MAP_VERSION 5), src/game/mapview.ts (decals), src/game/mapdetails.ts (detail layer), scripts/check-overlaps.ts + scripts/domstub.ts (re-runnable audit)
 - Services live: web :3000, game-server :3003 (map v5), caddy gateway :81
+
+---
+Task ID: 4
+Agent: Super Z (main agent)
+Task: fix "reloading don't work" reported after v5c
+
+Work Log:
+- Root cause: server reload handler refilled p.ammo in a setTimeout but NEVER synced the result back — the client's local ammo copy (which drives the HUD counter and the fire gate `am.mag <= 0`) stayed at the drained value, so the gun stayed bricked after emptying a mag
+- Server fix (mini-services/game-server/index.ts reload handler):
+  - after the timeout refills the mag, emit 'ammo' {weapon, mag, reserve} back to the reloading player
+  - cancellation guard: capture `endsAt` in the closure and skip the refill if `pp.reloadEndsAt !== endsAt` — weapon switch / death / round reset (which all clear reloadEndsAt) now correctly cancel a pending reload instead of magically granting ammo
+- Client fix (src/game/engine.ts):
+  - new `socket.on('ammo')` handler updates the local mag/reserve for that weapon
+  - staged reload audio: mag-out click at start, mag-in at ~68% (audio.reloadMagIn), slide rack at the end (audio.reloadSlide); pending sfx timers are cleared on switch / round reset / death (cancelReloadSfx)
+  - reload viewmodel animation: during the reload window the gun dips down 0.14, pulls back 0.07, pitches down 0.62 rad and rolls 0.42 rad with smooth ramp-in (22%) / ramp-out (28%) — verified by VLM against idle pose
+  - died() now clears reloadEndsAt + pending sfx; switchLast() bounds check fixed (lastW >= 0 && !== wIdx)
+  - debug hooks added to __eng: ammo(), reload(), sock(), setAmmo() (dev-only, consistent with existing teleport/state/vm hooks)
+- Verification:
+  - scripts/test-reload.ts (server probe, 6/6 PASS): drain 5 → reload → 'ammo' {mag:12, reserve:19}; switch mid-reload → NO refill event; double-R → single refill
+  - browser E2E via :81 gateway (solo room, no bots): drain both sides to mag 2, real KeyR keydown → reloadEndsIn 2199 → after 2.7s client ammo = {mag:12, reserve:14} — exactly the server refill math, proving the 'ammo' → handler chain end-to-end
+  - interference handling verified as correct behavior: round/match end mid-reload cancels the refill (guard), round start refills client to full
+  - VLM: mid-reload gun is lowered+tilted vs idle; tsc clean; 0 console errors
+- Ops: game-server restarted properly daemonized (spawn detached, PPID=1 — plain `&` backgrounding was being reaped between tool calls)
+
+Stage Summary:
+- Reload fully functional: R → mag out → mag in → slide rack sounds + animated gun dip, ammo counter refills from server-authoritative state
+- Files touched: mini-services/game-server/index.ts, src/game/engine.ts, src/game/audio.ts (+ scripts/test-reload.ts probe)
+- Services live: web :3000, game-server :3003 (reload fix), caddy :81

@@ -126,6 +126,7 @@ export class Engine {
   private ammo: Partial<Record<WeaponId, { mag: number; reserve: number }>> = {}
   private lastShotAt = 0
   private reloadEndsAt = 0
+  private reloadSfxTimers: ReturnType<typeof setTimeout>[] = []
   private recoil = 0
   private scoped = false
   private vmGroup: THREE.Group | null = null
@@ -260,6 +261,14 @@ export class Engine {
           if (typeof yaw === 'number') { this.yaw = yaw; this.pitch = 0 }
         },
         state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, mapv: MAP_VERSION, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen }),
+        ammo: () => ({ weapon: this.inventory[this.wIdx], ammo: this.ammo[this.inventory[this.wIdx]], all: { ...this.ammo }, reloadEndsIn: Math.max(0, this.reloadEndsAt - performance.now()) }),
+        reload: () => this.tryReload(),
+        sock: () => this.socket,
+        setAmmo: (mag: number, reserve: number) => {
+          const w = this.inventory[this.wIdx]
+          if (w && this.ammo[w]) this.ammo[w] = { mag, reserve }
+          return this.ammo[w]
+        },
         vm: () => this.vmGroup ? { visible: this.vmGroup.visible, parts: this.vmGroup.children.length, parent: this.vmGroup.parent?.type ?? null, w: this.inventory[this.wIdx] } : null,
         fxdemo: () => {
           const p = this.camera.position.clone()
@@ -516,6 +525,7 @@ export class Engine {
         this.specIdx = 0
         this.wIdx = 0
         this.reloadEndsAt = 0
+        this.cancelReloadSfx()
         for (const w of this.inventory) {
           const def = WEAPONS[w]
           if (def && def.mag !== Infinity) this.ammo[w] = { mag: def.mag, reserve: def.reserve }
@@ -585,6 +595,14 @@ export class Engine {
     })
 
     socket.on('reloadFx', () => audio.reloadClick())
+
+    // server refilled our mag after a reload — update local copy (drives HUD + fire gate)
+    socket.on('ammo', (d: { weapon?: string; mag?: number; reserve?: number }) => {
+      const id = (d.weapon ?? '') as WeaponId
+      const def = WEAPONS[id]
+      if (!def || def.mag === Infinity) return
+      this.ammo[id] = { mag: Math.max(0, Number(d.mag) || 0), reserve: Math.max(0, Number(d.reserve) || 0) }
+    })
 
     socket.on('bomb', (d: { planted?: boolean; exploded?: boolean; defused?: boolean; pos?: number[]; explodeIn?: number }) => {
       if (d.planted && d.pos) {
@@ -685,6 +703,8 @@ export class Engine {
     this.alive = false
     this.deathBy = by
     this.firing = false
+    this.reloadEndsAt = 0
+    this.cancelReloadSfx()
     this.setScoped(false)
     this.scoped = false; this.wantScope = false
     audio.death()
@@ -722,6 +742,7 @@ export class Engine {
       this.lastW = this.wIdx
       this.wIdx = idx
       this.reloadEndsAt = 0
+      this.cancelReloadSfx()
       this.recoil = 0
       this.setScoped(false)
       this.wantScope = false
@@ -732,11 +753,12 @@ export class Engine {
   }
 
   private switchLast() {
-    if (this.lastW < this.inventory.length) {
+    if (this.lastW >= 0 && this.lastW < this.inventory.length && this.lastW !== this.wIdx) {
       const t = this.wIdx
       this.wIdx = this.lastW
       this.lastW = t
       this.reloadEndsAt = 0
+      this.cancelReloadSfx()
       this.rebuildViewmodel()
       this.socket?.emit('switch', { wIdx: this.wIdx })
       audio.switchWeapon()
@@ -775,7 +797,18 @@ export class Engine {
     if (!am || am.mag >= w.mag || am.reserve <= 0 || this.reloadEndsAt > performance.now()) return
     this.socket?.emit('reload', { weapon: w.id })
     this.reloadEndsAt = performance.now() + w.reloadMs
+    // staged reload audio: mag out now, mag in ~70%, slide rack at the end
     audio.reloadClick()
+    this.cancelReloadSfx()
+    this.reloadSfxTimers.push(
+      setTimeout(() => audio.reloadMagIn(), Math.max(150, w.reloadMs * 0.68)),
+      setTimeout(() => audio.reloadSlide(), Math.max(250, w.reloadMs - 170)),
+    )
+  }
+
+  private cancelReloadSfx() {
+    for (const t of this.reloadSfxTimers) clearTimeout(t)
+    this.reloadSfxTimers = []
   }
 
   private spreadDeg(): number {
@@ -1147,15 +1180,25 @@ export class Engine {
       this.swayX += (targetX - this.swayX) * Math.min(1, 12 * dt)
       this.swayY += (targetY - this.swayY) * Math.min(1, 12 * dt)
       const dip = this.landDip * 0.35
+      // reload animation: gun drops + rolls while the mag is out, returns before the slide rack
+      let rl = 0
+      if (this.reloadEndsAt > now) {
+        const w = this.currentWeapon()
+        const total = Math.max(1, w.reloadMs)
+        const remaining = this.reloadEndsAt - now
+        const inT = Math.min(1, (total - remaining) / (total * 0.22))
+        const outT = Math.min(1, remaining / (total * 0.28))
+        rl = Math.min(inT, outT)
+      }
       this.vmGroup.position.set(
         0.26 + Math.cos(this.bobPhase) * 0.008 * bobA - this.swayX * 0.5,
-        -0.24 + Math.abs(Math.sin(this.bobPhase)) * 0.01 * bobA - this.crouchAmt * 0.02 - this.swayY * 0.5 - dip,
-        -0.45 + this.vmKick * 0.07,
+        -0.24 + Math.abs(Math.sin(this.bobPhase)) * 0.01 * bobA - this.crouchAmt * 0.02 - this.swayY * 0.5 - dip - rl * 0.14,
+        -0.45 + this.vmKick * 0.07 + rl * 0.07,
       )
       this.vmGroup.rotation.set(
-        this.vmKick * 0.16 + this.swayY * 1.6,
-        0.06 + this.swayX * 1.8,
-        Math.sin(this.bobPhase) * 0.006 * bobA - this.swayX * 0.8,
+        this.vmKick * 0.16 + this.swayY * 1.6 + rl * 0.62,
+        0.06 + this.swayX * 1.8 + rl * 0.25,
+        Math.sin(this.bobPhase) * 0.006 * bobA - this.swayX * 0.8 + rl * 0.42,
       )
     }
 
