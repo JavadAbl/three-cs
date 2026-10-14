@@ -5,6 +5,7 @@ import { WEAPONS, ECONOMY, ROUND } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { MAP_VERSION, SITES } from './dust2'
 import { buildMap } from './mapview'
+import { buildDetails } from './mapdetails'
 import type { MapBuild } from './mapview'
 import { PlayerManager } from './players'
 import { Effects, buildViewModel, buildBombMesh } from './fx'
@@ -132,6 +133,14 @@ export class Engine {
   private vmKick = 0
   private bobPhase = 0
   private lastW = 0
+  // v5 feel: viewmodel sway + camera shake + landing dip
+  private swayX = 0
+  private swayY = 0
+  private prevYaw = 0
+  private prevPitch = 0
+  private camShake = 0
+  private landDip = 0
+  private wasOnGround = true
 
   // match state (from server)
   private phase = 'warmup'
@@ -203,21 +212,43 @@ export class Engine {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = 1.08
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = THREE.PCFShadowMap
 
     this.scene = new THREE.Scene()
-    this.scene.fog = new THREE.Fog(0xd8cdb0, 60, 220)
+    this.scene.fog = new THREE.Fog(0xd9cfb4, 55, 240)
 
-    this.camera = new THREE.PerspectiveCamera(this.opts.fov, window.innerWidth / window.innerHeight, 0.05, 400)
+    this.camera = new THREE.PerspectiveCamera(this.opts.fov, window.innerWidth / window.innerHeight, 0.05, 700)
     this.scene.add(this.camera)
 
-    // lights
-    const hemi = new THREE.HemisphereLight(0xdde8f0, 0x9a8a68, 0.85)
+    // lights — warm desert balance: strong sun, warm ambient bounce,
+    // shadowed areas must read warm-grey (not blue)
+    const hemi = new THREE.HemisphereLight(0xe6e2d2, 0x8a7a5e, 0.72)
     this.scene.add(hemi)
-    const sun = new THREE.DirectionalLight(0xfff0d0, 1.1)
-    sun.position.set(40, 60, 20)
+    this.scene.add(new THREE.AmbientLight(0xc9b896, 0.38))
+    // sun with shadows (matches the sky's sun disc — NE high)
+    const sun = new THREE.DirectionalLight(0xfff0d0, 1.9)
+    sun.position.set(55, 70, 18)
+    sun.castShadow = true
+    sun.shadow.mapSize.set(2048, 2048)
+    sun.shadow.camera.left = -62
+    sun.shadow.camera.right = 62
+    sun.shadow.camera.top = 62
+    sun.shadow.camera.bottom = -62
+    sun.shadow.camera.near = 10
+    sun.shadow.camera.far = 190
+    sun.shadow.bias = -0.00035
+    sun.shadow.normalBias = 0.03
     this.scene.add(sun)
+    this.scene.add(sun.target)
 
     this.map = buildMap(this.scene)
+    // visual detail layer (props, no gameplay colliders)
+    const details = buildDetails()
+    this.scene.add(details.group)
+    this.map.raycastMeshes.push(...details.raycastMeshes)
     this.fx = new Effects(this.scene)
     this.pm = new PlayerManager(this.scene, this.myTeam)
 
@@ -229,6 +260,24 @@ export class Engine {
           if (typeof yaw === 'number') { this.yaw = yaw; this.pitch = 0 }
         },
         state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, mapv: MAP_VERSION, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen }),
+        vm: () => this.vmGroup ? { visible: this.vmGroup.visible, parts: this.vmGroup.children.length, parent: this.vmGroup.parent?.type ?? null, w: this.inventory[this.wIdx] } : null,
+        fxdemo: () => {
+          const p = this.camera.position.clone()
+          const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion)
+          for (let i = 0; i < 8; i++) {
+            const dir = fwd.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.18, 0)).normalize()
+            this.raycaster.set(p, dir)
+            this.raycaster.far = 60
+            const hits = this.raycaster.intersectObjects(this.map.raycastMeshes, false)
+            if (hits.length) {
+              const h = hits[0]
+              this.fx.impact(h.point, h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : undefined, (h.object.userData as { surf?: string }).surf)
+            }
+          }
+          this.fx.explosion(p.clone().addScaledVector(fwd, 16))
+          this.camShake = 1.1
+          return 'ok'
+        },
       }
     }
 
@@ -510,6 +559,7 @@ export class Engine {
       if (d.victimId === this.myId) {
         this.damageAt = performance.now()
         this.hp = d.hp
+        this.camShake = Math.max(this.camShake, 0.35)
         audio.damageTaken()
       }
     })
@@ -518,11 +568,16 @@ export class Engine {
       // remote shot fx
       const o = new THREE.Vector3(d.origin[0], d.origin[1], d.origin[2])
       const dir = new THREE.Vector3(d.dir[0], d.dir[1], d.dir[2])
-      // find map hit for tracer end
+      // find map hit for tracer end + impact fx
       this.raycaster.set(o, dir)
       this.raycaster.far = 150
       const hits = this.raycaster.intersectObjects(this.map.raycastMeshes, false)
       const end = hits.length ? hits[0].point : o.clone().addScaledVector(dir, 120)
+      if (hits.length) {
+        const h0 = hits[0]
+        const surf = (h0.object.userData as { surf?: string }).surf
+        this.fx.impact(h0.point, h0.face ? h0.face.normal.clone().transformDirection(h0.object.matrixWorld) : undefined, surf)
+      }
       this.fx.tracer(o.clone().addScaledVector(dir, 0.8), end)
       this.fx.muzzleFlash(o.clone().addScaledVector(dir, 0.5))
       const myEye = this.camera.position
@@ -542,8 +597,12 @@ export class Engine {
         audio.bombPlanted()
         this.pushToast('The bomb has been planted!')
       } else if (d.exploded && d.pos) {
-        this.fx.explosion(new THREE.Vector3(d.pos[0], d.pos[1] + 0.5, d.pos[2]))
+        const ex = new THREE.Vector3(d.pos[0], d.pos[1] + 0.5, d.pos[2])
+        this.fx.explosion(ex)
         audio.bombExplode()
+        // camera shake scaled by distance
+        const dist = this.camera.position.distanceTo(ex)
+        this.camShake = Math.max(this.camShake, THREE.MathUtils.clamp(1.6 - dist / 30, 0.25, 1.4))
         if (this.bombMesh) { this.scene.remove(this.bombMesh); this.bombMesh = null }
         this.bombPlanted = false
       } else if (d.defused) {
@@ -783,7 +842,7 @@ export class Engine {
         if (rp) {
           if (rp.team !== this.myTeam) {
             this.socket?.emit('hit', { target: ud.pid, part: ud.part, dist: hit.distance, weapon: w.id })
-            this.fx.blood(hit.point)
+            this.fx.blood(hit.point, dir)
             // local instant feedback
             this.hitmarkerAt = performance.now()
             if (ud.part === 'head') { this.headshotAt = performance.now(); audio.headshotDing() }
@@ -791,12 +850,14 @@ export class Engine {
             audio.gunshot(w.id)
           } else {
             // teammate: just blood, no damage
-            this.fx.blood(hit.point)
+            this.fx.blood(hit.point, dir)
           }
         }
       } else {
         // map hit
-        this.fx.impact(hit.point, hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : undefined)
+        const surf = (hit.object.userData as { surf?: string }).surf
+        const nrm = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : undefined
+        this.fx.impact(hit.point, nrm, surf)
         audio.gunshot(w.id)
       }
     } else {
@@ -835,11 +896,12 @@ export class Engine {
         const rp = this.pm.getById(ud.pid)
         if (rp && rp.team !== this.myTeam) {
           this.socket?.emit('hit', { target: ud.pid, part: ud.part ?? 'body', dist: hit.distance, weapon })
-          this.fx.blood(hit.point)
+          this.fx.blood(hit.point, dir)
           audio.knifeHit()
         }
       } else {
-        this.fx.impact(hit.point)
+        const surf = (hit.object.userData as { surf?: string }).surf
+        this.fx.impact(hit.point, hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : undefined, surf)
       }
     }
     this.vmKick = 0.6
@@ -932,6 +994,7 @@ export class Engine {
           this.vel.y = 0
           this.onGround = true
           this.tuck = 0
+          if (fallV < -3) this.landDip = Math.min(0.24, (-fallV - 3) * 0.022) // camera dip on landing
           if (fallV < -FALL_SAFE_V) this.fallDamage(fallV)
         } else if (this.vel.y > 0 && feet + h > c.min.y && prevFeet + h <= c.min.y + 0.001) {
           this.pos.y = c.min.y - h - this.tuck - 0.001
@@ -1028,9 +1091,17 @@ export class Engine {
     // recoil decay
     this.recoil = Math.max(0, this.recoil - dt * 6)
     this.vmKick = Math.max(0, this.vmKick - dt * 9)
+    this.camShake = Math.max(0, this.camShake - dt * 2.2)
+    this.landDip = Math.max(0, this.landDip - dt * 1.6)
 
     // auto fire
     if (this.firing && this.currentWeapon().auto && this.alive) this.tryFire()
+
+    // slow cloud drift + skybox follows camera (never clips through far plane)
+    if (this.map.sky) {
+      this.map.sky.rotation.y += dt * 0.004
+      this.map.sky.position.set(this.camera.position.x, 0, this.camera.position.z)
+    }
 
     // camera
     const eye = EYE_STAND - this.crouchAmt * (EYE_STAND - EYE_CROUCH)
@@ -1048,21 +1119,44 @@ export class Engine {
       // smooth eye height: absorbs stair steps, tracks jumps/falls exactly
       if (!this.onGround || Math.abs(this.pos.y - this.eyeY) > 0.9) this.eyeY = this.pos.y
       else this.eyeY += (this.pos.y - this.eyeY) * Math.min(1, 26 * dt)
-      this.camera.position.set(this.pos.x, this.eyeY + eye, this.pos.z)
+      const dip = Math.sin(Math.min(1, this.landDip / 0.22) * Math.PI) * this.landDip * 0.55
+      this.camera.position.set(this.pos.x, this.eyeY + eye - dip, this.pos.z)
       this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ')
+      // camera shake (explosions / damage)
+      if (this.camShake > 0) {
+        const s = this.camShake * this.camShake
+        this.camera.position.x += (Math.random() - 0.5) * 0.22 * s
+        this.camera.position.y += (Math.random() - 0.5) * 0.22 * s
+        this.camera.position.z += (Math.random() - 0.5) * 0.22 * s
+        this.camera.rotation.z += (Math.random() - 0.5) * 0.015 * s
+      }
     }
 
-    // viewmodel bob & kick
+    // viewmodel: bob + kick + mouse sway + recoil spring
     if (this.vmGroup) {
       const hSpeed = Math.hypot(this.vel.x, this.vel.z)
       this.bobPhase += dt * hSpeed * 3.4
       const bobA = Math.min(1, hSpeed / 5) * (this.onGround ? 1 : 0.2)
+      // mouse-lag sway
+      const dYaw = this.yaw - this.prevYaw
+      const dPitch = this.pitch - this.prevPitch
+      this.prevYaw = this.yaw
+      this.prevPitch = this.pitch
+      const targetX = THREE.MathUtils.clamp(dYaw * 1.8, -0.06, 0.06)
+      const targetY = THREE.MathUtils.clamp(dPitch * 1.4, -0.05, 0.05)
+      this.swayX += (targetX - this.swayX) * Math.min(1, 12 * dt)
+      this.swayY += (targetY - this.swayY) * Math.min(1, 12 * dt)
+      const dip = this.landDip * 0.35
       this.vmGroup.position.set(
-        0.26 + Math.cos(this.bobPhase) * 0.008 * bobA,
-        -0.24 + Math.abs(Math.sin(this.bobPhase)) * 0.01 * bobA - this.crouchAmt * 0.02,
-        -0.45 + this.vmKick * 0.06,
+        0.26 + Math.cos(this.bobPhase) * 0.008 * bobA - this.swayX * 0.5,
+        -0.24 + Math.abs(Math.sin(this.bobPhase)) * 0.01 * bobA - this.crouchAmt * 0.02 - this.swayY * 0.5 - dip,
+        -0.45 + this.vmKick * 0.07,
       )
-      this.vmGroup.rotation.set(this.vmKick * 0.14, 0.06, Math.sin(this.bobPhase) * 0.006 * bobA)
+      this.vmGroup.rotation.set(
+        this.vmKick * 0.16 + this.swayY * 1.6,
+        0.06 + this.swayX * 1.8,
+        Math.sin(this.bobPhase) * 0.006 * bobA - this.swayX * 0.8,
+      )
     }
 
     // bomb beep + LED blink

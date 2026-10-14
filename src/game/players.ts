@@ -73,6 +73,10 @@ export class PlayerManager {
     const head = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R, 12, 10), new THREE.MeshLambertMaterial({ color: 0xd8b590 }))
     head.position.y = 1.62
     const gunStub = buildGunStub()
+    body.castShadow = true
+    legs.castShadow = true
+    head.castShadow = true
+    body.receiveShadow = true
     root.add(body, legs, head, gunStub)
 
     // nametag only for teammates

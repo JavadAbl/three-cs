@@ -15,7 +15,7 @@
 export interface Box {
   x: number; y: number; z: number   // center
   w: number; h: number; d: number   // full sizes (X, Y, Z)
-  tex: 'sand' | 'wall' | 'crate' | 'metal' | 'dark' | 'plank' | 'door'
+  tex: 'sand' | 'wall' | 'crate' | 'metal' | 'dark' | 'plank' | 'door' | 'doorBlue' | 'brick' | 'concrete'
 }
 
 export interface Vec3 { x: number; y: number; z: number }
@@ -77,8 +77,8 @@ wall(8, -13, 8, -26, 4)       // mid east wall (lower/CT-mid side)
 wall(-6, -9, 0, -9, 3)        // mid doors wall (west part) — gap x 0..4.2 = double doors
 wall(4.2, -9, 8, -9, 3)       // mid doors wall (east part)
 wall(0, -9, 4.2, -9, 0.6, 'metal', 0.6, 2.4) // door lintel
-box(0.15, -9, 0.3, 1.2, 2.4, 'door', 0)      // door panel west (slid against jamb)
-box(4.05, -9, 0.3, 1.2, 2.4, 'door', 0)      // door panel east (slid against jamb)
+box(0.15, -9, 0.3, 1.2, 2.4, 'doorBlue', 0)    // door panel west (slid against jamb)
+box(4.05, -9, 0.3, 1.2, 2.4, 'doorBlue', 0)    // door panel east (slid against jamb)
 box(2, 4, 1.4, 1.4, 1.4, 'crate')            // "xbox" mid cover
 box(-3, -3, 1.4, 1.4, 1.4, 'crate')
 
@@ -126,7 +126,7 @@ wall(-14, -46, -14, -27, 4)                // CT spawn west wall
 // ---------------- B doors corridor (CT -> B) ----------------
 wall(-22, -27, -14, -27, 3.5)   // corridor south wall
 wall(-22, -21, -14, -21, 3.5)   // corridor north wall
-box(-21.4, -26.2, 0.3, 1.6, 2.6, 'door', 0)   // door panel slid open (flush south wall)
+box(-21.4, -26.2, 0.3, 1.6, 2.6, 'doorBlue', 0) // door panel slid open (flush south wall)
 
 // ---------------- B site ----------------
 box(-35, -29, 26, 26, 0.04, 'sand', 0.02)  // B ground detail z -42..-16
