@@ -68,12 +68,12 @@ export function buildMap(scene: THREE.Scene): MapBuild {
   const sky = skyMesh()
   scene.add(sky)
 
-  // bomb site decals
+  // bomb site decals — must clear the thin sand top layers (A platform 2.05, B slab 0.06)
   const decalA = siteDecal('A')
-  decalA.position.set(SITES.A.x, SITES.A.y + 0.03, SITES.A.z)
+  decalA.position.set(SITES.A.x, SITES.A.y + 0.08, SITES.A.z)
   group.add(decalA)
   const decalB = siteDecal('B')
-  decalB.position.set(SITES.B.x, SITES.B.y + 0.03, SITES.B.z)
+  decalB.position.set(SITES.B.x, SITES.B.y + 0.13, SITES.B.z)
   group.add(decalB)
 
   scene.add(group)

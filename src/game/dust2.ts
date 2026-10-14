@@ -23,7 +23,9 @@ export interface Vec3 { x: number; y: number; z: number }
 const boxes: Box[] = []
 
 function box(x: number, z: number, w: number, d: number, h: number, tex: Box['tex'], y0 = 0): Box {
-  const b: Box = { x, y: y0 + h / 2, z, w, h, d, tex }
+  // abs(): stairs() emit negative w/d when climbing north/west — a negative scale
+  // would MIRROR the geometry (inside-out faces, inverted normals, swapped AABBs)
+  const b: Box = { x, y: y0 + h / 2, z, w: Math.abs(w), h, d: Math.abs(d), tex }
   boxes.push(b)
   return b
 }
@@ -61,7 +63,7 @@ wall(48, 46, -50, 46, 6)
 wall(-50, 46, -50, -46, 6)
 
 // ---------------- T spawn (south, open) ----------------
-wall(-6, 30, 2, 30, 4)       // T spawn wall west of mid entrance (gap x 2..8 = mid entrance)
+wall(-5.55, 30, 2, 30, 4)  // T spawn wall west of mid entrance (butts mid west wall; gap = entrance)
 box(14, 19, 12, 22, 4, 'wall')          // T NE building mass x 8..20 z 8..30 (mid east boundary)
 wall(20, 44, 20, 34, 4)       // T spawn east wall (south piece), gap z 30..34 = exit to outside long
 box(-4, 36, 1.6, 1.6, 1.6, 'crate')
@@ -71,8 +73,8 @@ box(-10, 42, 2, 2, 2, 'crate')
 box(16, 37, 1.8, 1.8, 1.8, 'crate')
 
 // ---------------- mid lane ----------------
-wall(-6, 30, -6, -9, 4)       // mid west wall (to T spawn line)
-wall(8, 30, 8, -6, 4)         // mid east wall (upper) — cat gap at z -13..-6
+wall(-6, 30.45, -6, -9, 4)  // mid west wall (laps past the T-spawn wall junction)
+wall(8, 30.45, 8, -6, 4)    // mid east wall (upper) — cat gap at z -13..-6 (laps T NE corner)
 wall(8, -13, 8, -26, 4)       // mid east wall (lower/CT-mid side)
 wall(-6, -9, 0, -9, 3)        // mid doors wall (west part) — gap x 0..4.2 = double doors
 wall(4.2, -9, 8, -9, 3)       // mid doors wall (east part)
@@ -86,33 +88,31 @@ box(-3, -3, 1.4, 1.4, 1.4, 'crate')
 wall(8, -6, 15, -6, 4)        // cat south wall (z=-6, from mid wall to x 15)
 wall(8, -13, 12, -13, 4)      // cat north wall — x 8..12 only, stairs entry open east of x12
 wall(17, -13, 17, -18, 4)     // cat stairs east wall
-stairs(12, 17, -13, -18, 2, 'z')          // cat stairs 0 -> 2 climbing north
+stairs(12, 16.55, -13, -18, 2, 'z')       // cat stairs 0 -> 2 climbing north (stop at east wall)
 box(14.5, -20, 5, 4, 2, 'wall', 0)       // cat top platform x12..17 z -22..-18 (top y=2)
 box(14.5, -24, 5, 4, 2, 'wall', 0)       // cat neck x12..17 z -26..-22 (top y=2)
-box(10.5, -6.9, 1, 1, 1, 'crate')         // short boost box (south side, off the bot path)
-box(12.5, -17, 1.2, 1.2, 1.2, 'crate', 1.75) // crate tucked against stairs west edge
+box(10.5, -7.05, 1, 1, 1, 'crate')         // short boost box (south side, clear of cat south wall)
+box(15.8, -10.5, 1.2, 1.2, 1.2, 'crate')   // crate in cat entry corridor (east side, off bot path)
 box(10.2, -19.5, 3.5, 13, 4, 'wall')      // under-cat fill x 8.45..11.95 z -26..-13 (seals dead pocket)
 
 // ---------------- A site platform ----------------
 box(30, -33, 36, 14, 2, 'wall')            // main platform x12..48 z -40..-26 (top y=2)
-box(30, -33, 36, 14, 0.05, 'sand', 2)      // platform sandy top layer
-box(21, -33, 18, 8, 0.04, 'plank', 2.01)   // plank deck detail (x 12..30 — never overhang the ramp)
+box(30, -33, 36, 14, 0.05, 'sand', 2)      // platform sandy top layer (the walking surface, y 2..2.05)
 // pit stairs: long (y0) up to platform south edge (y2), x 30..42
 stairs(30, 42, -18, -26, 2, 'z', 'plank')
-// A site props
-box(24, -30, 2.2, 2.2, 2.2, 'crate', 2)    // default plant crate (north of goose path)
-box(24, -30, 1.6, 1.6, 1.6, 'crate', 4.2)
-box(39, -31, 1.8, 1.8, 1.8, 'crate', 2)    // pit-top crate
-box(40, -37, 2, 2, 2, 'crate', 2)          // goose corner
-box(19.5, -38, 1.5, 1.5, 1.5, 'crate', 2)  // goose crates
-box(44, -28, 2.2, 2.2, 2.2, 'crate', 2)    // A car/corner crates
-box(31, -20, 1.6, 1.6, 1.6, 'crate')       // pit crate (on stairs)
+// A site props (all y0=2.05 = sand layer top, no sinking)
+box(24, -30, 2.2, 2.2, 2.2, 'crate', 2.05)    // default plant crate (north of goose path)
+box(24, -30, 1.6, 1.6, 1.6, 'crate', 4.25)
+box(39, -31, 1.8, 1.8, 1.8, 'crate', 2.05)    // pit-top crate
+box(40, -37, 2, 2, 2, 'crate', 2.05)          // goose corner
+box(19.5, -38, 1.5, 1.5, 1.5, 'crate', 2.05)  // goose crates
+box(44, -28, 2.2, 2.2, 2.2, 'crate', 2.05)    // A car/corner crates
+box(40, -14, 1.6, 1.6, 1.6, 'crate')       // long lane crate (near pit stairs foot, off bot path)
 box(38, -11, 2, 2, 2, 'crate')             // long corner crate
 box(38.5, -3, 1.4, 1.4, 1.4, 'crate')        // long crate cover (east side, off the lane)
 
 // ---------------- A ramp from CT ----------------
 stairs(8, 12, -34, -28, 2, 'x', 'plank')   // ramp 0 -> 2 climbing east (x8..12)
-wall(8, -40, 8, -34, 4, 'wall')            // block F west face piece
 box(10, -40, 4, 12, 4, 'wall')            // block F x8..12 z -46..-34
 box(10, -27, 4, 2, 4, 'wall')              // block G x8..12 z -28..-26
 box(10, -24, 4, 4, 4, 'wall')              // pocket fill x8..12 z -26..-22
@@ -126,10 +126,10 @@ wall(-14, -46, -14, -27, 4)                // CT spawn west wall
 // ---------------- B doors corridor (CT -> B) ----------------
 wall(-22, -27, -14, -27, 3.5)   // corridor south wall
 wall(-22, -21, -14, -21, 3.5)   // corridor north wall
-box(-21.4, -26.2, 0.3, 1.6, 2.6, 'doorBlue', 0) // door panel slid open (flush south wall)
+box(-21.4, -25.7, 0.3, 1.6, 2.6, 'doorBlue', 0) // door panel slid open (flush inside south wall face)
 
 // ---------------- B site ----------------
-box(-35, -29, 26, 26, 0.04, 'sand', 0.02)  // B ground detail z -42..-16
+box(-34.9, -29, 25.8, 26, 0.04, 'sand', 0.02)  // B ground detail z -42..-16 (west tip tucks into platform)
 box(-44, -37, 8, 10, 1.5, 'wall')          // back platform x -48..-40 z -42..-32 (top 1.5)
 stairs(-38, -40, -42, -32, 1.5, 'x', 'plank', 0.25) // stairs climb west up to plat
 box(-29.5, -24.5, 4, 2, 1.3, 'metal', 0)       // "the car" (B entrance cover)
@@ -153,8 +153,8 @@ box(-6.5, -17.5, 1, 2.2, 1.4, 'wall', 2.6) // window lintel (y 2.6..4) — openi
 
 // ---------------- tunnels (T -> B) ----------------
 wall(-34, 24, -34, -16, 4, 'dark')         // tunnel west wall (z -16..24)
-wall(-26, 24, -26, -16, 4, 'dark')         // tunnel east wall
-box(-30, 4, 8, 40, 0.5, 'dark', 3.2)       // tunnel ceiling (z -16..24)
+wall(-26, 24, -26, -16.45, 4, 'dark')      // tunnel east wall (juts past window-room mass face)
+box(-30, 4, 8, 40.9, 0.5, 'dark', 3.2)     // tunnel ceiling (z -16.45..24.45, laps past mouths)
 wall(-34, 30, -34, 24, 4, 'dark')          // entrance west piece
 box(-16, 27, 20, 6, 4, 'wall')              // solid block A x -26..-6 z 24..30 (upper tunnel mass)
 box(-16, 16.5, 20, 15, 4, 'wall')          // solid block A2 x -26..-6 z 9..24
@@ -163,15 +163,14 @@ box(-18, -34.5, 8, 15, 4, 'wall')          // solid block C x -22..-14 z -42..-2
 box(-42, 3, 16, 42, 6, 'wall')             // SW city block x -50..-34 z -18..24 (seals void west of tunnels)
 
 // ---------------- long A ----------------
-wall(30, 2, 30, -18, 4)                    // long west wall
-wall(20, 8, 30, 8, 4)                      // z=8 wall west of doors gap (gap x 30..38)
-wall(38, 8, 48, 8, 4)                      // z=8 wall east of doors gap
-wall(30, 8, 30, 2, 4)                      // doors side wall west
-wall(38, 8, 38, 2, 4)                      // doors side wall east
-box(37.8, 5.5, 0.3, 1.4, 2.6, 'door', 0)   // long doors panel (slid east against jamb)
-box(30.5, 4, 1.4, 1.4, 1.4, 'crate')       // blue container-ish cover in doors
+wall(30, -6, 30, -18, 4)                // long west wall (z -18..-6; north part = cat corner fill)
+wall(20, 8, 29.55, 8, 4)                // z=8 wall west of doors gap (stops at side wall)
+wall(38.45, 8, 48, 8, 4)                // z=8 wall east of doors gap (starts at side wall)
+wall(38, 8, 38, 2, 4)                      // doors side wall east (west jamb = cat corner fill face)
+box(37.3, 5.5, 0.3, 1.4, 2.6, 'door', 0)   // long doors panel (slid east, flush against jamb inside)
+box(31.6, 4, 1.4, 1.4, 1.4, 'crate')       // blue container-ish cover in doors (clear of side walls)
 box(23.5, -16, 13, 20, 4, 'wall')          // solid block D x 17..30 z -26..-6 (under A / right of cat)
-box(19, 1, 22, 14, 4, 'wall')              // cat corner fill x 8..30 z -6..8
+box(19.225, 1, 22.45, 14, 4, 'wall')       // cat corner fill x 8..30.45 z -6..8 (east face = doors jamb)
 box(44, 21, 8, 26, 4, 'wall')              // east shoulder (x 40..48) of outside long
 box(34, 41, 28, 10, 4, 'wall')             // south-east corner mass x 20..48 z 36..46
 box(45, -9, 6, 34, 4, 'wall')              // long east block x 42..48 z -26..8 (narrows long to a corridor)
@@ -190,7 +189,7 @@ box(-20, 54, 12, 8, 10, 'wall', 0)
 box(10, 54, 10, 8, 8, 'wall', 0)
 
 export const MAP_BOXES = boxes
-export const MAP_VERSION = 4
+export const MAP_VERSION = 5
 
 // ---------------- spawns ----------------
 export const SPAWNS: { CT: Vec3[]; T: Vec3[] } = {

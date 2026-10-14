@@ -77,3 +77,39 @@ Stage Summary:
 - Physics: stair jitter gone, crouch-jump, no corner sticking, no floor tunneling, fall damage, round-start desync fixed
 - Services live: web :3000, game-server :3003 (map v4), Caddy gateway :81
 - Files: src/game/dust2.ts (+server copy), src/game/engine.ts, src/game/hud.tsx, mini-services/game-server/{index,types}.ts, scripts/{validate_map,test-map-v4}.ts
+
+---
+Task ID: 3
+Agent: Super Z (main agent)
+Task: v5c — eliminate geometry overlap / ghost / phantom meshes reported after the visual-fidelity pass
+
+Work Log:
+- Wrote scripts/check-overlaps.ts (+ scripts/domstub.ts): automated geometry auditor — coplanar same-facing triangle pairs (z-fight, exact 2D SAT + raycast occlusion filter), vertex penetration into solids, fully-buried detail triangles, floating window panes/signs. Runs the real build pipeline (buildMap + buildDetails) headless under bun.
+- FIXED base-map bugs (dust2.ts + server copy, MAP_VERSION 5):
+  - stairs() emitted NEGATIVE w/d when climbing north/west → makeScale mirrored the box → inside-out faces, inverted normals, swapped AABBs (cat stairs, pit stairs, B-plat stairs since v4!) → box() now Math.abs()
+  - A-site: removed plank deck (z-fought the sand layer), crates raised to sit on sand (y0 2.05); site decals un-buried (A +0.08, B +0.13)
+  - B door panel / long doors panel / blue container: were half-embedded in jamb walls → slid flush inside the doorways
+  - pit crate straddling stairs → moved to long lane; cat tucked crate intersecting stairs → moved to cat entry; boost box 5cm wall clip fixed
+  - block F west face piece removed (redundant, coplanar fights); long doors z=8 wall pieces split off the side walls; cat corner fill extended to be the west doors jamb (west side wall removed)
+  - mid east/west walls lapped 0.45 past junctions (kill coplanar +Z faces at T NE / T-spawn walls); T-spawn wall piece butts mid west wall; tunnel east wall juts past window-room mass face; tunnel ceiling laps 0.45 past both mouths; long west wall shortened to exposed stretch
+- FIXED detail-layer bugs (mapdetails.ts):
+  - 3 giant phantom ceiling slabs: east-shoulder cap was at x 34 (should be 44 — floated over outside-long), block A & cat-corner-fill & block D caps mis-sized (floated over mid/cat-entry/long lane) → parapet-band system for the 8 perimeter masses (clutter-safe), correctly-sized slabs for interior fillers, x/z-split so no shared top faces
+  - window builder rewritten: face-plane mount convention; 16+ panes were floating 0.4-0.5m off walls or buried inside them; the REAL wall faces identified (T NE "west face" is behind the mid wall → windows moved to x 7.55; long wall west face is inside block D → windows on the lane side x 30.45); n/s panes had inverted sides (buried in masses); frame bars had swapped dims on w/e windows (1.6m protruding nubs); mullions z-fought panes → all rebuilt butt-jointed
+  - signs: all re-attached to real wall faces (several floated 0.5m or in open air, incl. LONG/SHORT/TUNNELS + arrows); stacks tightened
+  - arches: spans narrowed to actual openings (long doors, T mid, B doors, tunnel mouths, window room); voussoirs butt-jointed with alternating ring thickness (rusticated — no coplanar side planes); springs sit on ceiling top (3.7)
+  - parapets/caps moved to EXPOSED faces (perimeter walls eat 0.45 of each touching mass — H/I/SW/K/T-back/shoulder/SE bands were embedded inside walls); perimeter coping corners de-overlapped; wall caps split at shared planes
+  - props: 2 barrels that were fully buried inside walls relocated; sand pile inside T NE building + one inside T-back decor moved; 2 piles half-in lane walls nudged; sunken SE tank raised; B-door/long-doors caps shortened off embedded regions; wire pole/lamp removed from inside east shoulder; ring blocks rerouted around decor towers (2 were 80% inside them); shutters swing clear of walls; window room corridor windows flipped to corridor side
+- Verification:
+  - scripts/check-overlaps.ts: ALL CHECKS PASSED (16.5k triangles, 246 z-fight candidates all occluded/resolved, 0 clips, 0 buried, 0 floating)
+  - scripts/validate_map.ts: ALL CHECKS PASSED (39/39 waypoints, spawns, window vault)
+  - tsc --noEmit: 0 errors in src/ + mini-services/
+  - live bot sim (scripts/test-map-v4.ts, 110s): 1 round, 6 kills, 1 plant, 0 bot-in-solid, 0 stuck, 4 bots reach sites
+  - browser via :81 gateway: match live (warmup → live → freeze round 2), 0 console errors, mapv 5
+  - VLM inspected 11 screenshots (a-site, long doors, cat stairs, tunnel mouth, b-site, window room, mid lane, outside long, t-spawn + close-ups): all CLEAN; windows flush on walls, shutters attached, crates grounded
+- Ops: game-server (plain bun, no --hot — hot reloads during edits were killing it) restarted on :3003 with map v5; web :3000 + caddy :81 unchanged
+
+Stage Summary:
+- Map v5: every overlap/ghost/phantom mesh eliminated and now machine-verified by scripts/check-overlaps.ts
+- Root causes fixed: mirrored stair geometry (v4), phantom ceiling slabs, floating/buried windows+signs, cap/parapet embedding, prop burial, arch wall intersections, coplanar junction faces
+- Deliverables: src/game/dust2.ts (+server copy, MAP_VERSION 5), src/game/mapview.ts (decals), src/game/mapdetails.ts (detail layer), scripts/check-overlaps.ts + scripts/domstub.ts (re-runnable audit)
+- Services live: web :3000, game-server :3003 (map v5), caddy gateway :81
