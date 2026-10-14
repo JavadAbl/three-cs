@@ -6,6 +6,8 @@
 // Geometry is merged per material → ~20 extra draw calls total.
 // ============================================================
 import * as THREE from 'three'
+import { MAPS } from './mapdata'
+import type { MapDef } from './mapdata'
 import { surfaceMaterial, signTexture, arrowSignTexture, dirtTrackTexture } from './textures'
 import { mergeGeosSafe } from './mapview'
 import type { SurfaceTex } from './textures'
@@ -117,23 +119,36 @@ const stripMat = new THREE.MeshBasicMaterial({
 // ============================================================
 // build
 // ============================================================
-export function buildDetails(): DetailBuild {
+export function buildDetails(map: MapDef = MAPS.dust): DetailBuild {
   const group = new THREE.Group()
   const raycastMeshes: THREE.Object3D[] = []
   batches.clear()
 
-  buildParapets()
-  buildArches()
-  buildBarrels()
-  buildRooftopClutter()
-  buildWindows()
-  buildSandPiles()
-  buildPallets()
-  buildWires()
-  buildSkyline()
-  buildLamps()
-  buildStrips()
-  const signs = buildSigns()
+  if (map.id === 'dust2') {
+    buildDust2Parapets()
+    buildDust2Arches()
+    buildDust2Barrels()
+    buildDust2Windows()
+    buildDust2SandPiles()
+    buildDust2Pallets()
+    buildDust2Wires()
+    buildDust2Skyline()
+    buildDust2Lamps()
+    buildDust2Strips()
+  } else {
+    buildParapets()
+    buildArches()
+    buildBarrels()
+    buildRooftopClutter()
+    buildWindows()
+    buildSandPiles()
+    buildPallets()
+    buildWires()
+    buildSkyline()
+    buildLamps()
+    buildStrips()
+  }
+  const signs = map.id === 'dust2' ? buildDust2Signs() : buildSigns()
 
   // flush batches → merged meshes
   for (const [mat, geos] of batches) {
@@ -283,9 +298,48 @@ function buildRooftopClutter() {
 }
 
 // ---------------- windows (pane + frames mounted flush on the wall face) ----------------
+/** Mount one window (pane + frames, optional shutters) flush on a real wall face.
+ *  face = exact wall-face plane coordinate (x for 'e'/'w', z for 'n'/'s'). */
+function mountWindow(face: number, y: number, along: number, dir: 'n' | 's' | 'e' | 'w', shutters: boolean) {
+  const horiz = dir === 'w' || dir === 'e'
+  const rotY = dir === 'w' ? -Math.PI / 2 : dir === 'e' ? Math.PI / 2 : dir === 'n' ? Math.PI : 0
+  const out = dir === 'w' ? -1 : dir === 'e' ? 1 : dir === 'n' ? -1 : 1 // outward normal sign
+  const pp = face + out * 0.055 // pane plane (2cm clear of the wall face — no coplanar back face)
+  const x = horiz ? pp : along
+  const z = horiz ? along : pp
+  // dark inset pane (thin box)
+  pushMat(boxGeo(1.34, 1.64, 0.07, x, y, z, rotY), windowMat)
+  // frame bars (plank) — along-wall lengths sized to butt between the verticals
+  const fw = 0.14, fh = 1.78, fd = 0.16
+  if (horiz) {
+    pushSurf(boxGeo(fd, fh, fw, x, y, z - 0.72, rotY), 'plank')
+    pushSurf(boxGeo(fd, fh, fw, x, y, z + 0.72, rotY), 'plank')
+    pushSurf(boxGeo(1.26, fw, fd, x, y + 0.86, z, rotY), 'plank')
+    pushSurf(boxGeo(1.26, fw, fd, x, y - 0.86, z, rotY), 'concrete')
+    // mullion cross (proud of the pane; split vertical so pieces never overlap)
+    pushSurf(boxGeo(1.2, fw, fd, x, y, z, rotY), 'plank')
+    pushSurf(boxGeo(0.06, 0.64, fd, x, y + 0.4, z, rotY), 'plank')
+    pushSurf(boxGeo(0.06, 0.64, fd, x, y - 0.4, z, rotY), 'plank')
+    if (shutters) {
+      pushSurf(boxGeo(0.06, 1.5, 0.62, x + out * 0.2, y, z - 0.98, 0, 0.2), 'plank')
+      pushSurf(boxGeo(0.06, 1.5, 0.62, x + out * 0.2, y, z + 0.98, 0, -0.2), 'plank')
+    }
+  } else {
+    pushSurf(boxGeo(fw, fh, fd, x - 0.72, y, z, rotY), 'plank')
+    pushSurf(boxGeo(fw, fh, fd, x + 0.72, y, z, rotY), 'plank')
+    pushSurf(boxGeo(1.26, fw, fd, x, y + 0.86, z, rotY), 'plank')
+    pushSurf(boxGeo(1.26, fw, fd, x, y - 0.86, z, rotY), 'concrete')
+    pushSurf(boxGeo(1.2, fw, fd, x, y, z, rotY), 'plank')
+    pushSurf(boxGeo(0.06, 0.64, fd, x, y + 0.4, z, rotY), 'plank')
+    pushSurf(boxGeo(0.06, 0.64, fd, x, y - 0.4, z, rotY), 'plank')
+    if (shutters) {
+      pushSurf(boxGeo(0.62, 1.5, 0.06, x - 0.98, y, z + out * 0.2, 0.2, 0), 'plank')
+      pushSurf(boxGeo(0.62, 1.5, 0.06, x + 0.98, y, z + out * 0.2, -0.2, 0), 'plank')
+    }
+  }
+}
+
 function buildWindows() {
-  /** face = exact wall-face plane coordinate (x for 'e'/'w', z for 'n'/'s').
-   *  Pane mounts flush on that face; frames sit proud of it. */
   const wins: Array<[number, number, number, 'n' | 's' | 'e' | 'w', boolean]> = [
     // mid east wall west face (mid lane — the T NE face at x=8 is behind this wall)
     [7.55, 2.2, 13, 'w', true], [7.55, 2.2, 19, 'w', false], [7.55, 2.2, 25, 'w', true],
@@ -313,44 +367,7 @@ function buildWindows() {
     // SE mass north face (T spawn east)
     [36, 2.2, 26, 'n', false], [36, 2.2, 38, 'n', true],
   ]
-  for (const [face, y, along, dir, shutters] of wins) {
-    const horiz = dir === 'w' || dir === 'e'
-    const rotY = dir === 'w' ? -Math.PI / 2 : dir === 'e' ? Math.PI / 2 : dir === 'n' ? Math.PI : 0
-    const out = dir === 'w' ? -1 : dir === 'e' ? 1 : dir === 'n' ? -1 : 1 // outward normal sign
-    const pp = face + out * 0.055 // pane plane (2cm clear of the wall face — no coplanar back face)
-    const x = horiz ? pp : along
-    const z = horiz ? along : pp
-    // dark inset pane (thin box)
-    pushMat(boxGeo(1.34, 1.64, 0.07, x, y, z, rotY), windowMat)
-    // frame bars (plank) — along-wall lengths sized to butt between the verticals
-    const fw = 0.14, fh = 1.78, fd = 0.16
-    if (horiz) {
-      pushSurf(boxGeo(fd, fh, fw, x, y, z - 0.72, rotY), 'plank')
-      pushSurf(boxGeo(fd, fh, fw, x, y, z + 0.72, rotY), 'plank')
-      pushSurf(boxGeo(1.26, fw, fd, x, y + 0.86, z, rotY), 'plank')
-      pushSurf(boxGeo(1.26, fw, fd, x, y - 0.86, z, rotY), 'concrete')
-      // mullion cross (proud of the pane; split vertical so pieces never overlap)
-      pushSurf(boxGeo(1.2, fw, fd, x, y, z, rotY), 'plank')
-      pushSurf(boxGeo(0.06, 0.64, fd, x, y + 0.4, z, rotY), 'plank')
-      pushSurf(boxGeo(0.06, 0.64, fd, x, y - 0.4, z, rotY), 'plank')
-      if (shutters) {
-        pushSurf(boxGeo(0.06, 1.5, 0.62, x + out * 0.2, y, z - 0.98, 0, 0.2), 'plank')
-        pushSurf(boxGeo(0.06, 1.5, 0.62, x + out * 0.2, y, z + 0.98, 0, -0.2), 'plank')
-      }
-    } else {
-      pushSurf(boxGeo(fw, fh, fd, x - 0.72, y, z, rotY), 'plank')
-      pushSurf(boxGeo(fw, fh, fd, x + 0.72, y, z, rotY), 'plank')
-      pushSurf(boxGeo(1.26, fw, fd, x, y + 0.86, z, rotY), 'plank')
-      pushSurf(boxGeo(1.26, fw, fd, x, y - 0.86, z, rotY), 'concrete')
-      pushSurf(boxGeo(1.2, fw, fd, x, y, z, rotY), 'plank')
-      pushSurf(boxGeo(0.06, 0.64, fd, x, y + 0.4, z, rotY), 'plank')
-      pushSurf(boxGeo(0.06, 0.64, fd, x, y - 0.4, z, rotY), 'plank')
-      if (shutters) {
-        pushSurf(boxGeo(0.62, 1.5, 0.06, x - 0.98, y, z + out * 0.2, 0.2, 0), 'plank')
-        pushSurf(boxGeo(0.62, 1.5, 0.06, x + 0.98, y, z + out * 0.2, -0.2, 0), 'plank')
-      }
-    }
-  }
+  for (const [face, y, along, dir, shutters] of wins) mountWindow(face, y, along, dir, shutters)
 }
 
 // ---------------- sand piles ----------------
@@ -538,5 +555,268 @@ function buildSigns(): THREE.Mesh[] {
   add(arrowSignTexture('rgba(214,178,52,0.9)'), 7.51, 3.35, -14.5, 1.0, 1.0, -Math.PI / 2, Math.PI) // short/cat: north
   add(arrowSignTexture('rgba(214,178,52,0.9)'), -26.06, 2.85, 28.8, 1.0, 1.0, -Math.PI / 2, Math.PI)  // tunnels: north
   add(arrowSignTexture('rgba(214,178,52,0.9)'), 2, 2.7, -45.51, 1.0, 1.0, 0)                       // CT: A is east
+  return out
+}
+
+// ============================================================
+// DUST II detail layer
+// ============================================================
+
+// ---------------- parapets on non-walkable building tops ----------------
+function buildDust2Parapets() {
+  // ring parapets only on solid masses (never on the cat walkway / ramp surfaces)
+  parapet(8, 22, 14, 26, 4)      // top-mid east building
+  parapet(8, 16, -14, 14, 4)     // suicide mass west
+  parapet(22, 34, -12, 14, 4)    // suicide mass east
+  parapet(16, 22, -10, 14, 4)    // under-cat fill
+  parapet(8, 16, -28, -18, 4)    // cat-stairs building
+  parapet(-18, -4, 8, 26, 4)     // south mass (mid/tunnels)
+  parapet(-18, -4, -12, 2, 4)    // north mass (mid/tunnels)
+  parapet(-18, -14, -18, -12, 4) // pocket-side fill
+  parapet(-10, 0, -28, -26, 4)   // window room north fill
+  parapet(-14, 0, -18, -12, 4)   // window room south fill
+  parapet(-20, -10, -42, -36, 4) // B doors north fill
+  parapet(-20, -10, -30, -26, 4) // B doors south fill
+  parapet(-46.9, -26, -14, 30, 4)// SW city mass (west edge clear of perimeter wall)
+  parapet(-46.9, -26, 30, 44, 4) // T spawn SW block (west edge clear of perimeter wall)
+  // cat neck side rails (partial — walkway stays open at both ends)
+  pushSurf(boxGeo(0.5, 0.45, 14, 16.25, 3.02, -25), 'wall')  // west rail x 16..16.5
+  pushSurf(boxGeo(0.5, 0.45, 14, 21.55, 3.02, -25), 'wall')  // east rail x 21.3..21.8 (clear of neck east face)
+  // pit rim lip (dark rim walls get a concrete cap)
+  pushSurf(boxGeo(8.4, 0.18, 0.4, 30, 0.06, -19.9), 'concrete')
+  pushSurf(boxGeo(8.4, 0.18, 0.4, 30, 0.06, -10.1), 'concrete')
+}
+
+// ---------------- arches over passages ----------------
+function buildDust2Arches() {
+  const arches: Array<[number, number, number, number, number, number, boolean]> = [
+    // cx, cz, ySpring, span, rise, thick, alongZ — spans NARROWER than the openings (end voussoirs clear the jambs)
+    [4, -12.15, 3.0, 4.4, 0.55, 0.8, false],    // mid doors (offset into doorway — voussoirs clear the jamb faces)
+    [39, 18.2, 3.3, 5.4, 0.9, 0.9, false],      // long doors
+    [-16, -33, 3.3, 5.2, 0.8, 0.9, true],       // B doors (corridor E-W, arch spans z)
+    [-22, 26.2, 3.7, 7.2, 0.8, 1.0, false],     // tunnel south entrance
+    [-22, -14.2, 3.7, 7.2, 0.8, 1.0, false],    // tunnel north exit
+  ]
+  for (const [cx, cz, ys, s, r, t, az] of arches) {
+    for (const g of archGeos(cx, cz, ys, s, r, t, az)) pushSurf(g, 'brick')
+  }
+}
+
+// ---------------- barrels ----------------
+function buildDust2Barrels() {
+  const spots: Array<[number, number, number?]> = [
+    // T spawn + outside long
+    [-17.5, 41.5], [-16.4, 42.4], [24.5, 21], [43.2, 35], [43.3, 37.2],
+    // long lane (east side, off bot line x 39)
+    [43.3, 2], [43.4, -4],
+    // mid + top mid
+    [-3.3, 22.5], [-3.4, 23.6], [7.2, 18.5],
+    // CT plaza
+    [14.6, -30], [15.4, -31],
+    // B site + approach
+    [-43.3, -28.2], [-43.2, -29.4], [-21.2, -26.8],
+    // A site (on plateau 2.05)
+    [43.4, -40.2, 2.05], [43.3, -38.9, 2.05],
+    // tunnels (floor y1)
+    [-25.2, 18, 1], [-18.9, 12, 1],
+  ]
+  for (const [x, z, y = 0] of spots) {
+    pushSurf(cylGeo(0.34, 0.92, x, y + 0.46, z), 'metal')
+    pushSurf(cylGeo(0.36, 0.06, x, y + 0.92, z), 'metal')
+  }
+}
+
+// ---------------- windows on real wall faces ----------------
+function buildDust2Windows() {
+  // [face, y, along, dir, shutters] — face = the REAL wall/box face plane
+  const wins: Array<[number, number, number, 'n' | 's' | 'e' | 'w', boolean]> = [
+    // top-mid east building west face (x 8, faces mid lane)
+    [8, 2.2, 17, 'w', true], [8, 2.2, 23, 'w', false],
+    // west top-mid building east face (x -4, faces top mid)
+    [-4, 2.2, 28, 'e', false],
+    // suicide mass west face (x 8, faces mid lower)
+    [8, 2.2, -4, 'w', false], [8, 2.2, 2, 'w', true], [8, 2.2, 8, 'w', false],
+    // suicide mass east face (x 34, faces long corridor)
+    [34, 2.2, -6, 'e', false], [34, 2.2, 0, 'e', true], [34, 2.2, 6, 'e', false], [34, 2.2, 12, 'e', false],
+    // cat-stairs building west face (x 8, faces CT-mid)
+    [8, 2.2, -24, 'w', false],
+    // north mass east face (x -4, faces mid)
+    [-4, 2.2, -8, 'e', true],
+    // B north strip south face (z -42, B site backdrop)
+    [-42, 3.6, -28, 's', false], [-42, 3.6, -36, 's', true],
+    // A north block south face (z -42, A site backdrop)
+    [-42, 3.6, 28, 's', false], [-42, 3.6, 36, 's', true],
+    // T-back strip north face (z 44, T spawn backdrop)
+    [44, 3.9, -8, 'n', false], [44, 3.9, 8, 'n', true],
+    // B doors south fill north face (z -30, faces corridor)
+    [-30, 2.2, -13, 'n', false], [-30, 2.2, -17, 'n', false],
+    // CT ramp north jamb west face (x 16, faces plaza)
+    [16, 2.2, -42, 'w', false],
+    // window room north fill south face (z -26, faces into room)
+    [-26, 2.2, -5, 's', false],
+  ]
+  for (const [face, y, along, dir, shutters] of wins) mountWindow(face, y, along, dir, shutters)
+}
+
+// ---------------- sand piles ----------------
+function buildDust2SandPiles() {
+  const piles: Array<[number, number, number, number?]> = [
+    // x, z, r, baseY (default 0)
+    [30, -13, 1.1, -1.4],   // pit corner
+    [27.3, -18.7, 0.8, -1.4], // pit west corner (clear of rim + pit crate)
+    [-43, -29.5, 0.8],       // B NW corner (clear of shoulder + plat stairs)
+    [-22, -31, 0.8],        // B near doors
+    [43, -8, 0.8],          // long north corner
+    [-22, 33, 0.9],         // T spawn near tunnel stairs
+    [6.5, 18, 0.85],        // mid east
+    [14, -42, 0.8],         // CT plaza corner
+    [24, 26, 0.9],          // outside long corner
+  ]
+  for (const [x, z, r, y0 = 0] of piles) {
+    pushSurf(sphGeo(r, r * 0.3, r, x, y0 + r * 0.3, z), 'sand')
+  }
+}
+
+// ---------------- pallets + junk ----------------
+function buildDust2Pallets() {
+  const spots: Array<[number, number, number?]> = [
+    [33, 24.5], [-37, -20.5], [12, 41.5], [-8, -42.5], [40, 38], [31.5, -18.5, -1.4],
+  ]
+  for (const [x, z, y = 0] of spots) {
+    pushSurf(boxGeo(1.15, 0.09, 1.15, x, y + 0.045, z), 'plank')
+    pushSurf(boxGeo(0.9, 0.55, 0.9, x + 0.1, y + 0.35, z + 0.08), 'crate')
+  }
+}
+
+// ---------------- overhead wires ----------------
+function buildDust2Wires() {
+  const poles: Array<[number, number]> = [
+    [16, 38], [-40, 32], [42.5, 26],
+  ]
+  for (const [x, z] of poles) {
+    pushSurf(cylGeo(0.09, 5.2, x, 2.6, z), 'dark')
+    pushSurf(boxGeo(1.7, 0.1, 0.1, x, 5.05, z), 'dark')
+    pushSurf(cylGeo(0.05, 0.14, x - 0.7, 4.98, z), 'dark')
+    pushSurf(cylGeo(0.05, 0.14, x + 0.7, 4.98, z), 'dark')
+  }
+  const wires: Array<[THREE.Vector3, THREE.Vector3, number]> = [
+    [v(16, 5.05, 38), v(8, 4.4, 25.5), 1.0],        // pole -> top-mid east building parapet
+    [v(16, 5.05, 38), v(19, 4.45, 20), 0.9],        // pole -> building corner
+    [v(-40, 5.05, 32), v(-26, 4.1, 28), 1.1],       // pole -> tunnel entrance corner
+    [v(-40, 5.05, 32), v(-11, 4.35, 27.5), 1.0],    // pole -> west top-mid building parapet
+    [v(42.5, 5.05, 26), v(38, 4.5, 18.6), 0.9],     // pole -> long doors wall top
+  ]
+  for (const [a, b, sag] of wires) {
+    const mid = a.clone().add(b).multiplyScalar(0.5).add(new THREE.Vector3(0, -sag, 0))
+    const curve = new THREE.QuadraticBezierCurve3(a, mid, b)
+    pushMat(new THREE.TubeGeometry(curve, 18, 0.016, 4), wireMat)
+  }
+}
+
+// ---------------- skyline ----------------
+function buildDust2Skyline() {
+  // crowns on the decor towers from the base map
+  pushSurf(boxGeo(8.4, 0.7, 8.4, -56, 10.35, -30), 'brick')
+  pushSurf(boxGeo(5, 3, 5, -56, 12.2, -30), 'wall')
+  pushSurf(boxGeo(10.4, 0.7, 10.4, -56, 8.35, 10), 'brick')
+  pushSurf(boxGeo(8.4, 0.7, 8.4, 54, 12.35, 20), 'brick')
+  pushSurf(cylGeo(1.1, 2.2, 54, 13.8, 20), 'metal')
+  pushSurf(boxGeo(12.4, 0.7, 8.4, -30, 9.35, 54), 'brick')
+  pushSurf(boxGeo(10.4, 0.7, 8.4, 20, 11.35, 54), 'brick')
+  // minarets
+  minaret(-56, 40)
+  minaret(54, 40, 0.85)
+  minaret(-44, -54, 0.9)
+  // low city ring blocks (outside the perimeter walls)
+  const ring: Array<[number, number, number, number]> = [
+    [-40, -54, 10, 5], [-24, -54, 9, 4], [-8, -54, 11, 5], [8, -54, 9, 4], [24, -54, 10, 5.5], [40, -54, 9, 4],
+    [-44, 54, 10, 4.5], [-12, 54, 10, 4], [4, 54, 9, 3.5], [36, 54, 9, 4.5],
+    [56, -40, 9, 5], [56, -18, 10, 6], [56, 0, 9, 3.5], [56, 34, 10, 5],
+    [-56, -44, 10, 5], [-56, -14, 11, 5.5], [-56, 24, 10, 5],
+  ]
+  for (const [x, z, d, h] of ring) pushSurf(boxGeo(9 + (Math.abs(x + z) % 3), h, d, x, h / 2, z), 'wall')
+}
+
+// ---------------- lamps + tunnel bulbs ----------------
+function buildDust2Lamps() {
+  const lamps: Array<[number, number, number, number]> = [
+    [8, 34, 0, -1], [30, 22, -1, 0], [0, -32, 1, 0],
+  ]
+  for (const [x, z, dx, dz] of lamps) {
+    pushSurf(cylGeo(0.07, 4.6, x, 2.3, z), 'dark')
+    pushSurf(boxGeo(1.1, 0.08, 0.08, x + dx * 0.55, 4.55, z + dz * 0.55, dz !== 0 ? Math.PI / 2 : 0), 'dark')
+    pushMat(boxGeo(0.44, 0.18, 0.24, x + dx * 1.05, 4.47, z + dz * 1.05, dz !== 0 ? Math.PI / 2 : 0), lampGlowMat)
+  }
+  // hanging bulbs: tunnels (floor y1, ceiling bottom 3.2-0.25) + window room (bottom 3.2-0.25)
+  const bulbs: Array<[number, number, number]> = [
+    [-22, 20, 2.9], [-22, 8, 2.9], [-22, -4, 2.9], [-7, -22, 2.9],
+  ]
+  for (const [x, z, y] of bulbs) {
+    pushMat(cylGeo(0.02, 0.3, x, y + 0.15, z), wireMat)
+    pushMat(sphGeo(0.09, 0.12, 0.09, x, y, z), lampGlowMat)
+  }
+}
+
+// ---------------- dirt tracks ----------------
+function buildDust2Strips() {
+  const strips: Array<[number, number, number, boolean]> = [
+    // long lane
+    [39, 8, 0.03, false], [39, -4, 0.03, false],
+    // mid
+    [3, 18, 0.03, false], [3, 4, 0.03, false], [4, -8, 0.03, false],
+    // tunnels (floor top y1)
+    [-22, 16, 1.03, false], [-22, 2, 1.03, false], [-22, -10, 1.03, false],
+    // lower tunnel
+    [-10, 5, 0.03, true],
+    // T spawn + CT + outside long + B approach
+    [0, 37, 0.03, false], [4, -33, 0.03, false], [32, 30, 0.03, true], [-24, -22, 0.03, true],
+    // A site (y 2.11 clears sand 2.05 + decal 2.08)
+    [30, -30, 2.11, false], [36, -38, 2.11, true],
+    // pit (floor -1.4)
+    [30, -15, -1.37, false],
+  ]
+  const geoList: THREE.BufferGeometry[] = []
+  for (const [x, z, y, alongX] of strips) {
+    const g = new THREE.PlaneGeometry(3.2, 9.6)
+    g.applyMatrix4(M.makeRotationX(-Math.PI / 2))
+    if (alongX) g.applyMatrix4(M.makeRotationY(Math.PI / 2))
+    g.applyMatrix4(M.makeTranslation(x, y, z))
+    geoList.push(g)
+  }
+  pushMat(mergeGeosSafe(geoList), stripMat)
+}
+
+// ---------------- signs ----------------
+function buildDust2Signs(): THREE.Mesh[] {
+  const out: THREE.Mesh[] = []
+  const add = (tex: THREE.Texture, x: number, y: number, z: number, w: number, h: number, rotY: number, rotZ = 0, opacity = 0.85) => {
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, opacity, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -3,
+    })
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat)
+    m.position.set(x, y, z)
+    m.rotation.y = rotY
+    if (rotZ) m.rotation.z = rotZ
+    m.renderOrder = 2
+    out.push(m)
+  }
+  const red = 'rgba(198,54,38,0.9)'
+  const white = 'rgba(232,228,216,0.85)'
+  // site letters on the backdrop blocks (south faces, z -42)
+  add(signTexture('A', red), 30, 3.3, -41.94, 2.6, 2.6, 0)
+  add(signTexture('B', red), -32, 3.4, -41.94, 2.6, 2.6, 0)
+  // zone labels — 0.06 clear of the real faces
+  add(signTexture('MID', white), 7.94, 2.3, 20, 1.8, 1.1, -Math.PI / 2)       // top-mid east building west face (x 8)
+  add(signTexture('LONG', white), 43.94, 2.6, 24, 1.6, 0.8, Math.PI / 2)      // east shoulder south west face (x 44)
+  add(signTexture('CT', white), 4, 3.0, -47.49, 1.5, 1.1, 0)                  // north perimeter inner face (0.06 clear)
+  add(signTexture('T', red), 0, 2.9, 43.94, 1.5, 1.2, Math.PI)                // T-back strip north face (z 44)
+  add(signTexture('TUNNELS', white), -25.94, 2.2, 27.5, 2.3, 0.9, Math.PI / 2)// SW mass east face (x -26)
+  add(signTexture('B', white), -13, 2.4, -35.94, 1.5, 1.2, 0)                 // B doors north fill south face (z -36)
+  // direction arrows
+  add(arrowSignTexture('rgba(214,178,52,0.9)'), 7.94, 3.5, 20, 1.1, 1.1, -Math.PI / 2, Math.PI)      // mid: north (above the MID sign, below roof line)
+  add(arrowSignTexture('rgba(214,178,52,0.9)'), 43.94, 3.3, 20, 1.0, 1.0, Math.PI / 2, Math.PI)      // long doors: north
+  add(arrowSignTexture('rgba(214,178,52,0.9)'), -25.94, 3.3, 27.5, 1.0, 1.0, Math.PI / 2, Math.PI)   // tunnels: north (above the sign)
+  add(arrowSignTexture('rgba(214,178,52,0.9)'), 15.94, 3.0, -33, 1.0, 1.0, -Math.PI / 2)             // CT ramp south jamb: east (to A)
   return out
 }

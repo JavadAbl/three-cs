@@ -114,7 +114,7 @@ export function Hud({ s, cb, settings, open }: {
         </div>
       </div>
       <div className="absolute top-12 left-1/2 z-20 -translate-x-1/2 text-[10px] tracking-widest text-white/50">
-        ROUND {s.round} · FIRST TO {s.winTarget}
+        {s.mapName} · ROUND {s.round} · FIRST TO {s.winTarget}
       </div>
 
       {/* bomb planted indicator */}

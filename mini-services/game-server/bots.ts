@@ -1,6 +1,7 @@
 import { WEAPONS } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
-import { WAYPOINTS, WAYPOINT_EDGES, SITES } from './dust2'
+import { MAPS } from './mapdata'
+import type { MapDef, WP } from './mapdata'
 import type { PlayerState, Match, BotBrain } from './types'
 
 export const BOT_NAMES = [
@@ -18,29 +19,87 @@ const DIFFS: Record<string, Diff> = {
 // context injected by index.ts to avoid circular imports
 interface BotCtx {
   applyDamage?: (m: Match, victim: PlayerState, attacker: PlayerState | null, weapon: WeaponId, part: HitPart, dist: number, hs: boolean) => void
-  hasLOS?: (ax: number, ay: number, az: number, bx: number, by: number, bz: number) => boolean
+  hasLOS?: (m: Match, ax: number, ay: number, az: number, bx: number, by: number, bz: number) => boolean
 }
 export const botCtx: BotCtx = {}
 export function setBotContext(c: BotCtx) { Object.assign(botCtx, c) }
 
-// ---------------- waypoint graph ----------------
-const nodeById = new Map(WAYPOINTS.map(w => [w.id, w]))
-const adj = new Map<string, string[]>()
-for (const [a, b] of WAYPOINT_EDGES) {
-  if (!adj.has(a)) adj.set(a, [])
-  if (!adj.has(b)) adj.set(b, [])
-  adj.get(a)!.push(b)
-  adj.get(b)!.push(a)
+// ---------------- per-map waypoint graphs ----------------
+interface MapGraph {
+  def: MapDef
+  nodeById: Map<string, WP>
+  adj: Map<string, string[]>
+  aHold: string[]
+  bHold: string[]
+  midHold: string[]
+  aRoutes: Array<[string, string]>
+  bRoutes: Array<[string, string]>
+  tHoldA: string
+  tHoldB: string
+  plantA: string
+  plantB: string
+  watch: Record<string, [number, number]> // node id -> face this point while holding
 }
 
-function bfs(from: string, to: string): string[] {
+function buildGraph(def: MapDef, cfg: Omit<MapGraph, 'def' | 'nodeById' | 'adj'>): MapGraph {
+  const nodeById = new Map(def.waypoints.map(w => [w.id, w]))
+  const adj = new Map<string, string[]>()
+  for (const [a, b] of def.waypointEdges) {
+    if (!adj.has(a)) adj.set(a, [])
+    if (!adj.has(b)) adj.set(b, [])
+    adj.get(a)!.push(b)
+    adj.get(b)!.push(a)
+  }
+  return { def, nodeById, adj, ...cfg }
+}
+
+const GRAPHS: Record<string, MapGraph> = {
+  dust: buildGraph(MAPS.dust, {
+    aHold: ['aDefault', 'aRampTop', 'aPit'],
+    bHold: ['bDoors', 'bPlat', 'bSite'],
+    midHold: ['doorsGap', 'ctMid'],
+    aRoutes: [['longDoors', 'aDefault'], ['catGap', 'aDefault']],
+    bRoutes: [['tunN', 'bSite']],
+    tHoldA: 'aShort',
+    tHoldB: 'bCar',
+    plantA: 'aDefault',
+    plantB: 'bSite',
+    watch: {
+      aDefault: [39, -24], aRampTop: [6, -31], bDoors: [-32, -30], bPlat: [-30, -16],
+      doorsGap: [1, 10], ctMid: [1, 10], aPit: [36, -10],
+    },
+  }),
+  dust2: buildGraph(MAPS.dust2, {
+    aHold: ['aDefault', 'aGoose', 'aNE', 'aCar'],
+    bHold: ['bSite', 'bPlatTop', 'bNW', 'bDoorsW'],
+    midHold: ['midDoors', 'ctMid', 'xboxE'],
+    aRoutes: [['longDoorsN', 'aDefault'], ['catBase', 'aDefault']],
+    bRoutes: [['tunMid', 'bSite'], ['lowTunMid', 'bSite']],
+    tHoldA: 'aSW',
+    tHoldB: 'bSE',
+    plantA: 'aDefault',
+    plantB: 'bSite',
+    watch: {
+      aDefault: [39, -12], aGoose: [30, -32], aNE: [28, -36], aCar: [26, -32],
+      bSite: [-24, -33], bPlatTop: [-30, -34], bNW: [-30, -34], bDoorsW: [-11, -33],
+      midDoors: [4, 10], ctMid: [4, 10], xboxE: [4, 22], bSE: [-20, -24],
+      aSW: [23, -34],
+    },
+  }),
+}
+
+function graphFor(m: Match): MapGraph {
+  return GRAPHS[m.mapId] ?? GRAPHS.dust
+}
+
+function bfs(from: string, to: string, g: MapGraph): string[] {
   if (from === to) return [to]
   const prev = new Map<string, string>()
   const q = [from]
   const seen = new Set([from])
   while (q.length) {
     const cur = q.shift()!
-    for (const nx of adj.get(cur) ?? []) {
+    for (const nx of g.adj.get(cur) ?? []) {
       if (seen.has(nx)) continue
       seen.add(nx)
       prev.set(nx, cur)
@@ -57,20 +116,14 @@ function bfs(from: string, to: string): string[] {
   return []
 }
 
-function nearestNode(x: number, z: number): string {
-  let best = WAYPOINTS[0].id, bd = Infinity
-  for (const w of WAYPOINTS) {
+function nearestNode(x: number, z: number, g: MapGraph): string {
+  let best = g.def.waypoints[0].id, bd = Infinity
+  for (const w of g.def.waypoints) {
     const d = Math.hypot(w.x - x, w.z - z)
     if (d < bd) { bd = d; best = w.id }
   }
   return best
 }
-
-const A_HOLD = ['aDefault', 'aRampTop', 'aPit']
-const B_HOLD = ['bDoors', 'bPlat', 'bSite']
-const MID_HOLD = ['doorsGap', 'ctMid']
-const A_ROUTES = [['longDoors', 'aDefault'], ['catGap', 'aDefault']]
-const B_ROUTES = [['tunN', 'bSite']]
 
 export function defaultBrain(): BotBrain {
   return {
@@ -93,12 +146,13 @@ export function resetBotForRound(m: Match, p: PlayerState) {
     ai.site = site
     ai.role = Math.random() < 0.75 ? 'rush' : 'hold'
   } else {
-    const pools = [A_HOLD, A_HOLD, B_HOLD, B_HOLD, MID_HOLD]
+    const g = graphFor(m)
+    const pools = [g.aHold, g.aHold, g.bHold, g.bHold, g.midHold]
     const idx = [...m.players.values()].filter(q => q.bot && q.team === 'CT').indexOf(p)
     const spot = pools[idx % pools.length]
-    ai.site = spot === A_HOLD ? 'A' : spot === B_HOLD ? 'B' : 'MID'
+    ai.site = spot === g.aHold ? 'A' : spot === g.bHold ? 'B' : 'MID'
     ai.goal = spot[Math.floor(Math.random() * spot.length)]
-    if (spot === MID_HOLD) ai.role = 'hold'
+    if (spot === g.midHold) ai.role = 'hold'
     else ai.role = Math.random() < 0.3 ? 'hold' : 'rush'
   }
 }
@@ -175,7 +229,7 @@ function updateBot(m: Match, p: PlayerState, t: number) {
     const yawTo = Math.atan2(-dx, -dz)
     const fovLimit = ai.engageTarget === e.id ? 2.4 : 1.05
     if (Math.abs(angleDiff(p.yaw, yawTo)) > fovLimit && d > 3) continue
-    if (!botCtx.hasLOS?.(p.x, eyeY(p), p.z, e.x, e.y + 1.3, e.z)) continue
+    if (!botCtx.hasLOS?.(m, p.x, eyeY(p), p.z, e.x, e.y + 1.3, e.z)) continue
     if (d < bestD) { bestD = d; best = e }
   }
 
@@ -269,18 +323,20 @@ function hash(s: string): number {
 
 function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number) {
   const bomb = m.bomb
+  const g = graphFor(m)
+  const sites = g.def.sites
 
   // objective goals
   if (p.team === 'T') {
     if (bomb.planted && !bomb.exploded) {
       // defend near bomb
       if (!ai.path.length && !ai.goal.startsWith('def')) {
-        const siteNodes = ai.site === 'A' ? A_HOLD : B_HOLD
+        const siteNodes = ai.site === 'A' ? g.aHold : g.bHold
         ai.goal = 'def' + siteNodes[Math.floor(Math.random() * siteNodes.length)]
-        ai.path = bfs(nearestNode(p.x, p.z), ai.goal.slice(3))
+        ai.path = bfs(nearestNode(p.x, p.z, g), ai.goal.slice(3), g)
       }
     } else if (p.hasBomb) {
-      const sitePos = ai.site === 'A' ? SITES.A : SITES.B
+      const sitePos = ai.site === 'A' ? sites.A : sites.B
       const inSite = Math.hypot(p.x - sitePos.x, p.z - sitePos.z) < sitePos.r - 1
       if (inSite) {
         // plant!
@@ -288,21 +344,21 @@ function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number) {
         if (p.plantingSince === 0) p.plantingSince = t
         return
       }
-      const goalNode = ai.site === 'A' ? 'aDefault' : 'bSite'
+      const goalNode = ai.site === 'A' ? g.plantA : g.plantB
       if (ai.goal !== goalNode) {
         ai.goal = goalNode
-        ai.path = bfs(nearestNode(p.x, p.z), goalNode)
+        ai.path = bfs(nearestNode(p.x, p.z, g), goalNode, g)
       }
     } else {
       // escort to site
-      const goalNode = ai.site === 'A' ? (ai.role === 'hold' ? 'aShort' : 'aDefault') : (ai.role === 'hold' ? 'bCar' : 'bSite')
+      const goalNode = ai.site === 'A' ? (ai.role === 'hold' ? g.tHoldA : g.plantA) : (ai.role === 'hold' ? g.tHoldB : g.plantB)
       if (ai.goal !== goalNode) {
         ai.goal = goalNode
         const via = ai.site === 'A'
-          ? A_ROUTES[Math.floor(Math.random() * A_ROUTES.length)]
-          : B_ROUTES[Math.floor(Math.random() * B_ROUTES.length)]
-        const from = nearestNode(p.x, p.z)
-        ai.path = [...bfs(from, via[0]), ...bfs(via[0], via[1])]
+          ? g.aRoutes[Math.floor(Math.random() * g.aRoutes.length)]
+          : g.bRoutes[Math.floor(Math.random() * g.bRoutes.length)]
+        const from = nearestNode(p.x, p.z, g)
+        ai.path = [...bfs(from, via[0], g), ...bfs(via[0], via[1], g)]
       }
     }
   } else {
@@ -314,15 +370,15 @@ function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number) {
         if (p.defusingSince === 0) p.defusingSince = t
         return
       }
-      const goalNode = nearestNode(bomb.x, bomb.z)
+      const goalNode = nearestNode(bomb.x, bomb.z, g)
       if (ai.goal !== 'bomb:' + goalNode) {
         ai.goal = 'bomb:' + goalNode
-        ai.path = bfs(nearestNode(p.x, p.z), goalNode)
+        ai.path = bfs(nearestNode(p.x, p.z, g), goalNode, g)
       }
     } else if (!ai.goal || ai.goal.startsWith('bomb:') || ai.goal.startsWith('def')) {
-      const pools = ai.site === 'A' ? A_HOLD : ai.site === 'B' ? B_HOLD : MID_HOLD
+      const pools = ai.site === 'A' ? g.aHold : ai.site === 'B' ? g.bHold : g.midHold
       ai.goal = pools[Math.floor(Math.random() * pools.length)]
-      ai.path = bfs(nearestNode(p.x, p.z), ai.goal)
+      ai.path = bfs(nearestNode(p.x, p.z, g), ai.goal, g)
     }
   }
 
@@ -330,14 +386,11 @@ function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number) {
   if (!ai.path.length) {
     // at goal: hold & scan
     p.moving = false
-    const hold = nodeById.get(ai.goal.replace(/^def/, '').replace(/^bomb:/, ''))
+    const hold = g.nodeById.get(ai.goal.replace(/^def/, '').replace(/^bomb:/, ''))
     if (hold) {
       let watchX = 0, watchZ = p.team === 'CT' ? 40 : -40
-      if (p.team === 'CT' && (ai.goal === 'aDefault' || ai.goal.startsWith('def'))) { watchX = 39; watchZ = -24 }
-      if (ai.goal === 'aRampTop') { watchX = 6; watchZ = -31 }
-      if (ai.goal === 'bDoors') { watchX = -32; watchZ = -30 }
-      if (ai.goal === 'bPlat') { watchX = -30; watchZ = -16 }
-      if (ai.goal === 'doorsGap' || ai.goal === 'ctMid') { watchX = 1; watchZ = 10 }
+      const w = g.watch[ai.goal.replace(/^def/, '').replace(/^bomb:/, '')]
+      if (w) { watchX = w[0]; watchZ = w[1] }
       const dx = watchX - p.x, dz = watchZ - p.z
       if (Math.hypot(dx, dz) > 1) p.yaw = Math.atan2(-dx, -dz)
     }
@@ -345,7 +398,7 @@ function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number) {
     return
   }
 
-  const next = nodeById.get(ai.path[0])
+  const next = g.nodeById.get(ai.path[0])
   if (!next) { ai.path.shift(); return }
   const dx = next.x - p.x, dz = next.z - p.z
   const d = Math.hypot(dx, dz)
@@ -370,7 +423,7 @@ function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number) {
   if (Math.hypot(p.x - ai.lastX, p.z - ai.lastZ) < 0.15) {
     if (ai.stuckAt === 0) ai.stuckAt = t
     if (t - ai.stuckAt > 2200) {
-      const n = nodeById.get(nearestNode(p.x, p.z))
+      const n = g.nodeById.get(nearestNode(p.x, p.z, g))
       if (n) { p.x = n.x; p.z = n.z; p.y = n.y }
       ai.path = []
       ai.goal = ''

@@ -3,7 +3,8 @@ import * as THREE from 'three'
 import { io } from 'socket.io-client'
 import { WEAPONS, ECONOMY, ROUND } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
-import { MAP_VERSION, SITES } from './dust2'
+import { MAPS } from './mapdata'
+import type { MapDef, MapId } from './mapdata'
 import { buildMap } from './mapview'
 import { buildDetails } from './mapdetails'
 import type { MapBuild } from './mapview'
@@ -19,6 +20,7 @@ export interface HudState {
   connected: boolean
   joined: boolean
   phase: string
+  mapName: string
   timer: number
   round: number
   scores: { CT: number; T: number }
@@ -65,6 +67,7 @@ export interface EngineOpts {
   name: string
   team: 'CT' | 'T' | 'auto'
   room: string
+  map?: MapId
   botFill: boolean
   botDifficulty: 'easy' | 'normal' | 'hard'
   winTarget: number
@@ -94,6 +97,7 @@ export class Engine {
   private scene!: THREE.Scene
   private camera!: THREE.PerspectiveCamera
   private map!: MapBuild
+  private mapDef!: MapDef
   private fx!: Effects
   private pm!: PlayerManager
   private raycaster = new THREE.Raycaster()
@@ -245,9 +249,11 @@ export class Engine {
     this.scene.add(sun)
     this.scene.add(sun.target)
 
-    this.map = buildMap(this.scene)
+    this.mapDef = MAPS[this.opts.map ?? 'dust2'] ?? MAPS.dust2
+    this.map = buildMap(this.scene, this.mapDef)
     // visual detail layer (props, no gameplay colliders)
-    const details = buildDetails()
+    const details = buildDetails(this.mapDef)
+    details.group.userData.isDetails = true
     this.scene.add(details.group)
     this.map.raycastMeshes.push(...details.raycastMeshes)
     this.fx = new Effects(this.scene)
@@ -260,7 +266,7 @@ export class Engine {
           this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.eyeY = y
           if (typeof yaw === 'number') { this.yaw = yaw; this.pitch = 0 }
         },
-        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, mapv: MAP_VERSION, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen }),
+        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, map: this.mapDef.id, mapv: this.mapDef.version, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen }),
         ammo: () => ({ weapon: this.inventory[this.wIdx], ammo: this.ammo[this.inventory[this.wIdx]], all: { ...this.ammo }, reloadEndsIn: Math.max(0, this.reloadEndsAt - performance.now()) }),
         reload: () => this.tryReload(),
         sock: () => this.socket,
@@ -420,6 +426,7 @@ export class Engine {
         name: this.opts.name,
         room: this.opts.room,
         team: this.opts.team,
+        map: this.mapDef.id,
         botFill: this.opts.botFill,
         botDifficulty: this.opts.botDifficulty,
         winTarget: this.opts.winTarget,
@@ -432,8 +439,10 @@ export class Engine {
 
     socket.on('init', (d: {
       youId: string; team: TeamId; money: number; inventory: WeaponId[]
-      mapVersion: number; players: Array<Record<string, unknown>>; match: Record<string, unknown>
+      mapId?: string; mapVersion: number; players: Array<Record<string, unknown>>; match: Record<string, unknown>
     }) => {
+      // server is authoritative about the room's map — rebuild if we guessed wrong
+      if ((d.mapId === 'dust' || d.mapId === 'dust2') && d.mapId !== this.mapDef.id) this.rebuildMap(d.mapId)
       this.myId = d.youId
       this.myTeam = d.team
       this.pm.setMyTeam(d.team)
@@ -1271,6 +1280,7 @@ export class Engine {
       connected: !!this.socket?.connected,
       joined: !!this.myId,
       phase: this.phase,
+      mapName: this.mapDef.name,
       timer: this.bombPlanted && this.phase === 'live' ? bombLeft : timerLeft,
       round: this.round,
       scores: this.scores,
@@ -1320,7 +1330,7 @@ export class Engine {
   }
 
   private inSiteNow(): boolean {
-    for (const s of [SITES.A, SITES.B]) {
+    for (const s of [this.mapDef.sites.A, this.mapDef.sites.B]) {
       if (Math.hypot(this.pos.x - s.x, this.pos.z - s.z) < s.r && Math.abs(this.pos.y - s.y) < 2.5) return true
     }
     return false
@@ -1342,5 +1352,26 @@ export class Engine {
     if (!this.scoped) { this.camera.fov = v; this.camera.updateProjectionMatrix() }
   }
 
-  getMapVersion() { return MAP_VERSION }
+  getMapVersion() { return this.mapDef.version }
+  getMapId(): MapId { return this.mapDef.id }
+  getMapName(): string { return this.mapDef.name }
+
+  /** Swap the whole map scene (used when the server's room map differs from our guess). */
+  private rebuildMap(mapId: MapId) {
+    const def = MAPS[mapId]
+    if (!def || def.id === this.mapDef?.id) return
+    // remove old map + details + sky
+    this.scene.remove(this.map.group)
+    this.scene.remove(this.map.sky)
+    // old detail group is a child of scene — remove by tag
+    for (const child of [...this.scene.children]) {
+      if ((child as THREE.Group).userData?.isDetails) this.scene.remove(child)
+    }
+    this.mapDef = def
+    this.map = buildMap(this.scene, def)
+    const details = buildDetails(def)
+    details.group.userData.isDetails = true
+    this.scene.add(details.group)
+    this.map.raycastMeshes.push(...details.raycastMeshes)
+  }
 }

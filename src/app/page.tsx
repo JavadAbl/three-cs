@@ -1,10 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { io, type Socket } from 'socket.io-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Hud } from '@/game/hud'
 import type { HudState, Engine } from '@/game/engine'
+import type { MapId } from '@/game/mapdata'
+import { MAP_LIST } from '@/game/mapdata'
 
 const LS_KEY = 'cs2web-settings-v1'
 
@@ -19,6 +22,22 @@ function loadSettings(): Settings {
   return { sens: 1, vol: 0.8, fov: 75 }
 }
 
+interface ServerEntry {
+  id: string
+  name: string
+  map: string
+  mapName: string
+  players: number
+  humans: number
+  max: number
+  phase: string
+  round: number
+}
+
+const phaseLabel: Record<string, string> = {
+  warmup: 'WARMUP', freeze: 'FREEZE', live: 'LIVE', post: 'ROUND END', over: 'MATCH OVER',
+}
+
 export default function Home() {
   const [screen, setScreen] = useState<'lobby' | 'game'>('lobby')
   const [hud, setHud] = useState<HudState | null>(null)
@@ -26,19 +45,39 @@ export default function Home() {
   const [settings, setSettings] = useState<Settings>({ sens: 1, vol: 0.8, fov: 75 })
 
   // lobby form
+  const [tab, setTab] = useState<'quick' | 'servers'>('quick')
   const [name, setName] = useState('Player')
   const [team, setTeam] = useState<'auto' | 'CT' | 'T'>('auto')
-  const [room, setRoom] = useState('dust2')
+  const [map, setMap] = useState<MapId>('dust2')
+  const [room, setRoom] = useState('')
   const [botFill, setBotFill] = useState(true)
   const [botDifficulty, setBotDifficulty] = useState<'easy' | 'normal' | 'hard'>('normal')
   const [winTarget, setWinTarget] = useState(8)
 
+  // server browser
+  const [servers, setServers] = useState<ServerEntry[]>([])
+  const [srvName, setSrvName] = useState('')
+  const [srvMap, setSrvMap] = useState<MapId>('dust2')
+  const [joining, setJoining] = useState(false)
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
   const openRef = useRef(open)
+  const watchSockRef = useRef<Socket | null>(null)
+  const engineOptsRef = useRef<{ room: string; map: MapId } | null>(null)
 
   useEffect(() => { setSettings(loadSettings()) }, [])
   useEffect(() => { openRef.current = open }, [open])
+
+  // server browser live list (lobby only)
+  useEffect(() => {
+    if (screen !== 'lobby') return
+    const s = io('/?XTransformPort=3003', { path: '/' })
+    watchSockRef.current = s
+    s.on('connect', () => s.emit('watchServers'))
+    s.on('serverList', (d: { servers: ServerEntry[] }) => setServers(d.servers ?? []))
+    return () => { s.disconnect(); watchSockRef.current = null }
+  }, [screen])
 
   // persist settings
   const applySettings = useCallback((s: Settings) => {
@@ -55,11 +94,12 @@ export default function Home() {
     let cancelled = false
     ;(async () => {
       const mod = await import('@/game/engine')
-      if (cancelled || !canvasRef.current) return
+      if (cancelled || !canvasRef.current || !engineOptsRef.current) return
       const engine = new mod.Engine(canvasRef.current, {
         name: name.slice(0, 16) || 'Player',
         team,
-        room: room.trim().slice(0, 24) || 'dust2',
+        room: engineOptsRef.current.room,
+        map: engineOptsRef.current.map,
         botFill,
         botDifficulty,
         winTarget,
@@ -76,7 +116,7 @@ export default function Home() {
       engineRef.current = null
       setHud(null)
     }
-  }, [screen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [screen])
 
   // global keys for buy / chat
   useEffect(() => {
@@ -110,26 +150,117 @@ export default function Home() {
     setScreen('lobby')
   }, [])
 
+  const enterGame = useCallback((roomId: string, mapId: MapId) => {
+    engineOptsRef.current = { room: roomId, map: mapId }
+    setJoining(false)
+    setScreen('game')
+  }, [])
+
+  const createServer = useCallback(() => {
+    const s = watchSockRef.current
+    if (!s || !s.connected) return
+    setJoining(true)
+    s.emit('createServer', {
+      name: srvName.trim().slice(0, 32) || `${name.trim() || 'Player'}'s server`,
+      map: srvMap,
+      botFill,
+      botDifficulty,
+      winTarget,
+      team,
+    }, (r: { ok?: boolean; roomId?: string; mapId?: MapId }) => {
+      if (r?.ok && r.roomId) {
+        s.disconnect()
+        watchSockRef.current = null
+        enterGame(r.roomId, (r.mapId ?? srvMap) as MapId)
+      } else {
+        setJoining(false)
+      }
+    })
+  }, [srvName, srvMap, botFill, botDifficulty, winTarget, team, name, enterGame])
+
+  const joinServer = useCallback((srv: ServerEntry) => {
+    const s = watchSockRef.current
+    if (s) { s.disconnect(); watchSockRef.current = null }
+    enterGame(srv.id, srv.map as MapId)
+  }, [enterGame])
+
   // ---------------------------------------------------------------- lobby
   if (screen === 'lobby') {
+    const mapButtons = (selected: MapId, onSelect: (m: MapId) => void, compact = false) => (
+      <div className={`grid gap-1.5 ${compact ? 'grid-cols-2' : 'grid-cols-2'}`}>
+        {MAP_LIST.map(m => (
+          <button key={m.id} onClick={() => onSelect(m.id)}
+            className={`rounded-md py-2.5 text-left transition ${selected === m.id
+              ? 'bg-orange-600 text-white ring-1 ring-orange-400'
+              : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
+            <span className="block font-mono text-xs font-bold tracking-wider">{m.name.toUpperCase()}</span>
+            {!compact && <span className="mt-0.5 block text-[10px] leading-tight text-zinc-400">{m.desc}</span>}
+          </button>
+        ))}
+      </div>
+    )
+
+    const matchSettings = (
+      <>
+        <div className="mb-3">
+          <span className="mb-1.5 block text-xs text-zinc-400">Bots</span>
+          <div className="flex gap-1.5">
+            <button onClick={() => setBotFill(!botFill)}
+              className={`flex-1 rounded-md py-2 font-mono text-xs font-bold tracking-wider transition ${botFill ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+              {botFill ? 'FILL 5v5' : 'HUMANS ONLY'}
+            </button>
+            <select value={botDifficulty} onChange={e => setBotDifficulty(e.target.value as 'easy' | 'normal' | 'hard')}
+              disabled={!botFill}
+              className="flex-1 rounded-md border-0 bg-zinc-800 px-2 py-2 font-mono text-xs text-zinc-300 outline-none disabled:opacity-40">
+              <option value="easy">EASY</option>
+              <option value="normal">NORMAL</option>
+              <option value="hard">HARD</option>
+            </select>
+          </div>
+        </div>
+        <div className="mb-3">
+          <span className="mb-1.5 block text-xs text-zinc-400">Match format (rounds to win)</span>
+          <div className="grid grid-cols-4 gap-1.5">
+            {[4, 8, 13, 16].map(n => (
+              <button key={n} onClick={() => setWinTarget(n)}
+                className={`rounded-md py-2 font-mono text-xs font-bold transition ${winTarget === n ? 'bg-orange-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                {n === 16 ? '16' : n === 13 ? '13' : `first ${n}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </>
+    )
+
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         <div className="pointer-events-none fixed inset-0 opacity-[0.06]" style={{
           backgroundImage: 'radial-gradient(circle at 25% 25%, #eec37a 0, transparent 40%), radial-gradient(circle at 75% 75%, #7ab0e8 0, transparent 40%)',
         }} />
-        <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center gap-8 px-4 py-10">
+        <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center gap-6 px-4 py-10">
           <div className="text-center">
             <div className="mb-2 flex items-center justify-center gap-3">
               <span className="h-1 w-10 bg-orange-500/70" />
-              <h1 className="text-4xl font-black tracking-[0.3em] text-orange-400 sm:text-5xl">DUST2</h1>
+              <h1 className="text-4xl font-black tracking-[0.3em] text-orange-400 sm:text-5xl">DUST</h1>
+              <span className="text-4xl font-black tracking-[0.1em] text-zinc-600 sm:text-5xl">/</span>
+              <h1 className="text-4xl font-black tracking-[0.3em] text-zinc-100 sm:text-5xl">DUST&nbsp;2</h1>
               <span className="h-1 w-10 bg-orange-500/70" />
             </div>
             <p className="font-mono text-sm tracking-widest text-zinc-400">
-              CS2-STYLE WEB FPS · BOMB DEFUSAL · MULTIPLAYER
+              CS-STYLE WEB FPS · BOMB DEFUSAL · SERVER BROWSER · MULTIPLAYER
             </p>
-            <p className="mt-1 font-mono text-xs text-zinc-500">
-              headshots hit hard · bots fill the server · bring friends with a room code
-            </p>
+          </div>
+
+          {/* tabs */}
+          <div className="flex w-full max-w-3xl gap-1.5">
+            {(['quick', 'servers'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`flex-1 rounded-lg py-2.5 font-mono text-xs font-bold tracking-widest transition ${tab === t
+                  ? 'bg-zinc-100 text-zinc-900'
+                  : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}>
+                {t === 'quick' ? '▶ QUICK PLAY' : '🌐 FIND SERVERS'}
+              </button>
+            ))}
           </div>
 
           <div className="grid w-full max-w-3xl gap-4 md:grid-cols-2">
@@ -156,43 +287,6 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-              <label className="mb-1 block">
-                <span className="mb-1 block text-xs text-zinc-400">Room code <span className="text-zinc-600">(share with friends — everyone with the same code plays together)</span></span>
-                <Input value={room} onChange={e => setRoom(e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24))}
-                  className="border-zinc-700 bg-zinc-950 font-mono uppercase" placeholder="dust2" />
-              </label>
-            </div>
-
-            {/* right: match setup */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-5">
-              <h2 className="mb-4 text-xs font-bold tracking-widest text-zinc-400">MATCH</h2>
-              <div className="mb-3">
-                <span className="mb-1.5 block text-xs text-zinc-400">Bots</span>
-                <div className="flex gap-1.5">
-                  <button onClick={() => setBotFill(!botFill)}
-                    className={`flex-1 rounded-md py-2 font-mono text-xs font-bold tracking-wider transition ${botFill ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
-                    {botFill ? 'FILL 5v5' : 'HUMANS ONLY'}
-                  </button>
-                  <select value={botDifficulty} onChange={e => setBotDifficulty(e.target.value as 'easy' | 'normal' | 'hard')}
-                    disabled={!botFill}
-                    className="flex-1 rounded-md border-0 bg-zinc-800 px-2 py-2 font-mono text-xs text-zinc-300 outline-none disabled:opacity-40">
-                    <option value="easy">EASY</option>
-                    <option value="normal">NORMAL</option>
-                    <option value="hard">HARD</option>
-                  </select>
-                </div>
-              </div>
-              <div className="mb-3">
-                <span className="mb-1.5 block text-xs text-zinc-400">Match format (rounds to win)</span>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {[4, 8, 13, 16].map(n => (
-                    <button key={n} onClick={() => setWinTarget(n)}
-                      className={`rounded-md py-2 font-mono text-xs font-bold transition ${winTarget === n ? 'bg-orange-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
-                      {n === 16 ? '16 (MR30)' : n === 13 ? '13 (MR24)' : `first ${n}`}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <div className="rounded-lg bg-zinc-950/60 p-3">
                 <span className="mb-2 block text-xs text-zinc-400">Quick settings</span>
                 <label className="mb-2 block text-xs">
@@ -215,12 +309,69 @@ export default function Home() {
                 </label>
               </div>
             </div>
-          </div>
 
-          <Button onClick={() => setScreen('game')} size="lg"
-            className="h-14 w-full max-w-md rounded-xl bg-orange-600 font-mono text-lg font-black tracking-[0.3em] text-white shadow-lg shadow-orange-900/50 transition hover:bg-orange-500">
-            ▶ PLAY
-          </Button>
+            {/* right: quick play or server browser */}
+            {tab === 'quick' ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-5">
+                <h2 className="mb-4 text-xs font-bold tracking-widest text-zinc-400">MATCH</h2>
+                <div className="mb-3">
+                  <span className="mb-1.5 block text-xs text-zinc-400">Map</span>
+                  {mapButtons(map, setMap)}
+                </div>
+                {matchSettings}
+                <label className="mb-4 block">
+                  <span className="mb-1 block text-xs text-zinc-400">Room code <span className="text-zinc-600">(optional — friends with the same code play together)</span></span>
+                  <Input value={room} onChange={e => setRoom(e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24))}
+                    className="border-zinc-700 bg-zinc-950 font-mono uppercase" placeholder="random" />
+                </label>
+                <Button onClick={() => enterGame(room.trim() || `play-${Math.random().toString(36).slice(2, 8)}`, map)} size="lg"
+                  className="h-12 w-full rounded-xl bg-orange-600 font-mono text-base font-black tracking-[0.2em] text-white shadow-lg shadow-orange-900/50 transition hover:bg-orange-500">
+                  ▶ PLAY
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-900/80 p-5">
+                <h2 className="mb-4 text-xs font-bold tracking-widest text-zinc-400">SERVER BROWSER</h2>
+                {/* server list */}
+                <div className="mb-4 min-h-[130px] max-h-72 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/70">
+                  {servers.length === 0 ? (
+                    <div className="flex h-[130px] items-center justify-center px-4 text-center font-mono text-xs text-zinc-500">
+                      No servers yet — start one below and share it with friends
+                    </div>
+                  ) : servers.map(srv => (
+                    <div key={srv.id} className="flex items-center gap-3 border-b border-zinc-800/60 px-3 py-2.5 last:border-0 hover:bg-zinc-900/60">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-mono text-sm font-bold text-zinc-100">{srv.name}</div>
+                        <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-zinc-500">
+                          <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-300">{srv.mapName}</span>
+                          <span>{srv.players}/{srv.max} players</span>
+                          <span className={srv.phase === 'live' ? 'text-orange-400' : 'text-zinc-500'}>
+                            {phaseLabel[srv.phase] ?? srv.phase}{srv.round > 0 ? ` · R${srv.round}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                      <Button onClick={() => joinServer(srv)}
+                        className="h-8 rounded-md bg-orange-600 px-4 font-mono text-xs font-bold tracking-wider text-white hover:bg-orange-500">
+                        JOIN
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                {/* create server */}
+                <div className="mb-3">
+                  <span className="mb-1.5 block text-xs text-zinc-400">Start your own server</span>
+                  <Input value={srvName} onChange={e => setSrvName(e.target.value.slice(0, 32))}
+                    className="mb-2 border-zinc-700 bg-zinc-950 font-mono" placeholder={`${name.trim() || 'Player'}'s server`} />
+                  {mapButtons(srvMap, setSrvMap, true)}
+                </div>
+                {matchSettings}
+                <Button onClick={createServer} disabled={joining} size="lg"
+                  className="h-12 w-full rounded-xl bg-zinc-100 font-mono text-base font-black tracking-[0.2em] text-zinc-900 shadow-lg transition hover:bg-white disabled:opacity-50">
+                  {joining ? 'STARTING…' : '⬆ START SERVER'}
+                </Button>
+              </div>
+            )}
+          </div>
 
           <div className="max-w-3xl rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 font-mono text-xs leading-relaxed text-zinc-400">
             <b className="text-zinc-200">HOW TO PLAY</b> — click the game to lock your mouse. <b>WASD</b> move ·
@@ -267,7 +418,7 @@ export default function Home() {
         <div className="absolute inset-0 flex items-center justify-center bg-black">
           <div className="text-center">
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-zinc-700 border-t-orange-500" />
-            <p className="font-mono text-sm tracking-widest text-zinc-400">LOADING DUST2…</p>
+            <p className="font-mono text-sm tracking-widest text-zinc-400">CONNECTING…</p>
           </div>
         </div>
       )}

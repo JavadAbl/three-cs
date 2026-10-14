@@ -2,7 +2,8 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import { WEAPONS, ECONOMY, ROUND, computeDamage, BUY_ITEMS } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
-import { LOS_BOXES, SPAWNS, SITES, MAP_VERSION, rayHitsBox } from './dust2'
+import { MAPS, MAP_LIST, rayHitsAABB } from './mapdata'
+import type { MapDef, MapId, Box } from './mapdata'
 import type { PlayerState, Match, Phase } from './types'
 import { updateBots, botBuy, BOT_NAMES, setBotContext, resetBotForRound, defaultBrain } from './bots'
 
@@ -24,7 +25,11 @@ const dist2d = (a: { x: number; z: number }, b: { x: number; z: number }) =>
   Math.hypot(a.x - b.x, a.z - b.z)
 
 // ---------------------------------------------------------------- match utils
-function getMatch(roomId: string): Match {
+function mapOf(m: Match): MapDef {
+  return MAPS[m.mapId] ?? MAPS.dust
+}
+
+function getMatch(roomId: string, opts?: { mapId?: MapId; serverName?: string; listed?: boolean; ownerId?: string }): Match {
   let m = matches.get(roomId)
   if (!m) {
     m = {
@@ -34,8 +39,14 @@ function getMatch(roomId: string): Match {
       winTarget: 8, botFill: true, botDifficulty: 'normal',
       roundWinner: null, winReason: '', mvp: null, started: false,
       lastHumanAt: now(), roundKills: new Map(),
+      mapId: (opts?.mapId && MAPS[opts.mapId] ? opts.mapId : 'dust'),
+      serverName: opts?.serverName ?? null,
+      listed: !!opts?.listed,
+      ownerId: opts?.ownerId ?? null,
+      createdAt: now(),
     }
     matches.set(roomId, m)
+    if (m.listed) serverListDirty = true
   }
   return m
 }
@@ -69,6 +80,7 @@ function matchState(m: Match) {
   return {
     phase: m.phase, endsIn: Math.max(0, m.phaseEndsAt - now()),
     round: m.round, scores: m.scores, winTarget: m.winTarget,
+    mapId: m.mapId, mapName: mapOf(m).name,
     bombPlanted: m.bomb.planted, bombPos: m.bomb.planted ? [m.bomb.x, m.bomb.y, m.bomb.z] : null,
     bombDefuse: m.bomb.defuseProgress,
     roundWinner: m.roundWinner, winReason: m.winReason, mvp: m.mvp,
@@ -76,14 +88,42 @@ function matchState(m: Match) {
   }
 }
 
+// ---------------------------------------------------------------- server browser
+let serverListDirty = true
+function serverListEntries() {
+  const out: Array<Record<string, unknown>> = []
+  for (const m of matches.values()) {
+    if (!m.listed) continue
+    const ps = [...m.players.values()]
+    out.push({
+      id: m.roomId, name: m.serverName ?? 'Server', map: m.mapId, mapName: mapOf(m).name,
+      players: ps.length, humans: ps.filter(p => !p.bot).length, max: 10,
+      phase: m.phase, round: m.round, scores: m.scores,
+    })
+  }
+  return out.sort((a, b) => (b.humans as number) - (a.humans as number))
+}
+const serverWatchers = new Set<string>() // socket ids
+function broadcastServerList() {
+  if (!serverListDirty && serverWatchers.size === 0) return
+  const list = serverListEntries()
+  for (const sid of serverWatchers) {
+    const s = io.sockets.sockets.get(sid)
+    if (s) s.emit('serverList', { servers: list })
+  }
+  serverListDirty = false
+}
+setInterval(broadcastServerList, 1500)
+
 // ---------------------------------------------------------------- LOS
-function hasLOS(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+function hasLOS(m: Match, ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
   const dx = bx - ax, dy = by - ay, dz = bz - az
   const len = Math.hypot(dx, dy, dz)
   if (len < 0.01) return true
   const nx = dx / len, ny = dy / len, nz = dz / len
-  for (const b of LOS_BOXES) {
-    if (rayHitsBox(ax, ay, az, nx, ny, nz, b, len)) return false
+  const los: readonly Box[] = mapOf(m).losBoxes
+  for (const b of los) {
+    if (rayHitsAABB(ax, ay, az, nx, ny, nz, b, len)) return false
   }
   return true
 }
@@ -160,7 +200,7 @@ function startRound(m: Match) {
     p.plantingSince = 0; p.defusingSince = 0
     p.reloadEndsAt = 0; p.lastShotAt = 0
     p.hasBomb = false
-    const spawns = SPAWNS[p.team]
+    const spawns = mapOf(m).spawns[p.team]
     const sp = spawns[(m.round + hashId(p.id)) % spawns.length]
     p.x = sp.x; p.y = sp.y; p.z = sp.z
     p.yaw = p.team === 'T' ? 0 : Math.PI
@@ -300,8 +340,9 @@ function applyDamage(m: Match, victim: PlayerState, attacker: PlayerState | null
 
 // ---------------------------------------------------------------- bomb logic
 function inSite(m: Match, p: PlayerState): 'A' | 'B' | null {
-  if (dist2d(p, { x: SITES.A.x, z: SITES.A.z }) < SITES.A.r && Math.abs(p.y - SITES.A.y) < 2.5) return 'A'
-  if (dist2d(p, { x: SITES.B.x, z: SITES.B.z }) < SITES.B.r && Math.abs(p.y - SITES.B.y) < 2.5) return 'B'
+  const s = mapOf(m).sites
+  if (dist2d(p, { x: s.A.x, z: s.A.z }) < s.A.r && Math.abs(p.y - s.A.y) < 2.5) return 'A'
+  if (dist2d(p, { x: s.B.x, z: s.B.z }) < s.B.r && Math.abs(p.y - s.B.y) < 2.5) return 'B'
   return null
 }
 
@@ -352,7 +393,7 @@ function updateBomb(m: Match) {
       for (const p of aliveOf(m, 'CT')) {
         const d = dist2d(p, b)
         if (d < 14) {
-          const blocked = !hasLOS(b.x, b.y + 0.5, b.z, p.x, eyeY(p), p.z)
+          const blocked = !hasLOS(m, b.x, b.y + 0.5, b.z, p.x, eyeY(p), p.z)
           const dmg = Math.round((1 - d / 14) * 500 * (blocked ? 0.4 : 1))
           p.hp = Math.max(0, p.hp - dmg)
           if (p.hp <= 0) {
@@ -526,10 +567,11 @@ io.on('connection', (socket) => {
   let joinedRoom: string | null = null
   let playerId: string | null = null
 
-  socket.on('join', (data: { name?: string; room?: string; team?: string; botFill?: boolean; botDifficulty?: string; winTarget?: number }) => {
+  socket.on('join', (data: { name?: string; room?: string; team?: string; botFill?: boolean; botDifficulty?: string; winTarget?: number; map?: string }) => {
     const name = String(data.name || 'Player').slice(0, 16)
     const roomId = String(data.room || 'dust2').slice(0, 24).replace(/[^a-zA-Z0-9_-]/g, '') || 'dust2'
-    const m = getMatch(roomId)
+    const reqMap = (data.map === 'dust' || data.map === 'dust2') ? data.map : 'dust2'
+    const m = getMatch(roomId, { mapId: reqMap })
     if (humans(m).length >= 10) { socket.emit('joinError', { msg: 'Room is full' }); return }
 
     let team: TeamId | 'auto' = (data.team === 'CT' || data.team === 'T') ? data.team : 'auto'
@@ -549,6 +591,7 @@ io.on('connection', (socket) => {
     joinedRoom = roomId
     playerId = p.id
     socket.join(roomId)
+    if (m.listed) serverListDirty = true
 
     balanceTeams(m)
 
@@ -556,24 +599,54 @@ io.on('connection', (socket) => {
     if (m.phase === 'warmup') {
       // will start on next logic tick
     } else if (m.phase === 'freeze') {
-      const spawns = SPAWNS[team]
+      const spawns = mapOf(m).spawns[team]
       const sp = spawns[hashId(p.id) % spawns.length]
       p.x = sp.x; p.y = sp.y; p.z = sp.z
       p.alive = true
     } else {
       p.alive = false
-      const spawns = SPAWNS[team]
+      const spawns = mapOf(m).spawns[team]
       const sp = spawns[hashId(p.id) % spawns.length]
       p.x = sp.x; p.y = sp.y; p.z = sp.z
     }
 
     socket.emit('init', {
       youId: p.id, name: p.name, team: p.team, money: p.money,
-      inventory: p.inventory, mapVersion: MAP_VERSION,
+      inventory: p.inventory, mapId: m.mapId, mapVersion: mapOf(m).version,
       players: [...m.players.values()].map(publicPlayer),
       match: matchState(m),
     })
     socket.to(roomId).emit('playerJoined', publicPlayer(p))
+  })
+
+  // ---- server browser ----
+  socket.on('listMaps', () => {
+    socket.emit('maps', { maps: MAP_LIST })
+  })
+
+  socket.on('watchServers', () => {
+    serverWatchers.add(socket.id)
+    serverListDirty = true
+    socket.emit('serverList', { servers: serverListEntries() })
+  })
+
+  socket.on('unwatchServers', () => {
+    serverWatchers.delete(socket.id)
+  })
+
+  socket.on('createServer', (data: { name?: string; map?: string; botFill?: boolean; botDifficulty?: string; winTarget?: number; team?: string }, cb?: (r: unknown) => void) => {
+    const srvName = String(data.name || 'Server').slice(0, 32)
+    const mapId = (data.map === 'dust' || data.map === 'dust2') ? data.map : 'dust2'
+    let roomId = ''
+    do {
+      roomId = 'srv-' + Math.random().toString(36).slice(2, 8)
+    } while (matches.has(roomId))
+    const m = getMatch(roomId, { mapId, serverName: srvName, listed: true, ownerId: socket.id })
+    m.botFill = data.botFill !== false
+    if (data.botDifficulty === 'easy' || data.botDifficulty === 'normal' || data.botDifficulty === 'hard') m.botDifficulty = data.botDifficulty
+    if (data.winTarget && [4, 8, 13, 16].includes(data.winTarget)) m.winTarget = data.winTarget
+    serverListDirty = true
+    if (typeof cb === 'function') cb({ ok: true, roomId, mapId })
   })
 
   socket.on('state', (data: { x?: number; y?: number; z?: number; yaw?: number; pitch?: number; crouch?: boolean; moving?: boolean; walking?: boolean; wIdx?: number }) => {
@@ -584,9 +657,10 @@ io.on('connection', (socket) => {
     // basic speed sanity (anti-teleport): max 12m per 50ms tick
     const maxMove = 12
     const dx = Math.abs(data.x - p.x), dz = Math.abs(data.z - p.z)
+    const bd = mapOf(m).bounds
     if (dx < maxMove && dz < maxMove) {
-      p.x = clamp(data.x, -60, 60)
-      p.z = clamp(data.z, -60, 60)
+      p.x = clamp(data.x, bd.minX, bd.maxX)
+      p.z = clamp(data.z, bd.minZ, bd.maxZ)
     }
     p.y = clamp(data.y ?? p.y, -5, 30)
     p.yaw = typeof data.yaw === 'number' && Number.isFinite(data.yaw) ? data.yaw : p.yaw
@@ -631,7 +705,7 @@ io.on('connection', (socket) => {
     const part = (data.part === 'head' || data.part === 'body' || data.part === 'legs') ? data.part as HitPart : 'body'
     const dist = clamp(Number(data.dist) || 5, 0, 120)
     // LOS validation (cheat deterrence)
-    const losOK = hasLOS(attacker.x, eyeY(attacker), attacker.z, victim.x, eyeY(victim), victim.z)
+    const losOK = hasLOS(m, attacker.x, eyeY(attacker), attacker.z, victim.x, eyeY(victim), victim.z)
     if (!losOK && dist > 3) return
     applyDamage(m, victim, attacker, w.id, part, dist, part === 'head')
   })
@@ -754,6 +828,7 @@ io.on('connection', (socket) => {
   })
 
   socket.on('disconnect', () => {
+    serverWatchers.delete(socket.id)
     if (!joinedRoom) return
     const m = matches.get(joinedRoom)
     const p = m?.players.get(playerId ?? '')
@@ -770,6 +845,7 @@ io.on('connection', (socket) => {
         }
       }
       if (humans(m).length === 0) m.lastHumanAt = now()
+      if (m.listed) serverListDirty = true
       balanceTeams(m)
       checkElimination(m)
     }

@@ -71,6 +71,11 @@ export interface BombState {
 
 export interface Match {
   roomId: string
+  mapId: string                     // MapId ('dust' | 'dust2')
+  serverName: string | null         // non-null + listed = shows in server browser
+  listed: boolean
+  ownerId: string | null            // creator's socket id
+  createdAt: number
   players: Map<string, PlayerState>
   phase: Phase
   phaseEndsAt: number

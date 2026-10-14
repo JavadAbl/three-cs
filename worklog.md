@@ -141,3 +141,28 @@ Stage Summary:
 - Reload fully functional: R → mag out → mag in → slide rack sounds + animated gun dip, ammo counter refills from server-authoritative state
 - Files touched: mini-services/game-server/index.ts, src/game/engine.ts, src/game/audio.ts (+ scripts/test-reload.ts probe)
 - Services live: web :3000, game-server :3003 (reload fix), caddy :81
+
+---
+Task ID: 5
+Agent: Super Z (main agent)
+Task: rename current map to Dust, build real Dust II, add map selection + CS 1.6-style server browser
+
+Work Log:
+- Restructured shared map data: new mapdata.ts (client + server copies) with MapDef/MapId/MAPS/MAP_LIST registry; old dust2.ts deleted; current map renamed to 'Dust' (v5 geometry unchanged)
+- Built Dust II (157 boxes, v1) — faithful layout: T spawn (south) -> long doors/long A (east), top mid/mid/xbox/mid doors (center), upper tunnels (west); CT spawn (north) -> A ramp, CT-mid, B doors; rotations: catwalk (CT-mid -> A short, y2.8 with step-down), window room (CT-mid -> B crouch vault), lower tunnels (mid -> B), pit (sunken -1.4 below long with exit steps), A site plateau (y2, car/goose/default crates), B site (back plat, double stack, new box, entrance car); 45 waypoints / 58 edges, 5+5 spawns, sites A(30,-30) B(-32,-27)
+- Server (index.ts): Match gets mapId/serverName/listed/ownerId; per-map spawns/LOS/sites/bounds; join accepts map param (server-authoritative if room exists); server browser: createServer (listed match, srv-XXXXXX ids), watchServers/unwatchServers, serverList broadcast every 1.5s (name/map/players/humans/phase/round), disconnect cleanup; bots.ts: per-map waypoint graphs + hold/route/watch tables for both maps
+- Client: mapview.buildMap(scene, map), mapdetails.buildDetails(map) dispatch (dust detail pass unchanged; new dust2 layer: parapets, 5 arches, 19 windows via shared mountWindow, barrels/sand/pallets, wires+poles, lamps+bulbs, dirt strips, signs+arrows, skyline+minarets); engine opts.map + rebuildMap on init mapId mismatch; HUD top bar shows map name; page.tsx lobby: QUICK PLAY / FIND SERVERS tabs, map selector (Dust / Dust II), live server list + JOIN + START SERVER
+- Validation loop (the v5 tooling caught 100+ real bugs in the first Dust2 draft):
+  - validate_map.ts multi-map: 5 iterations — props moved off bot lines, waypoints onto stair surfaces — ALL MAPS PASSED (39/39 + 45/45 reachable, spawns clear, vaults passable)
+  - check-overlaps.ts multi-map: 4 iterations — fixed overlapping masses (cat neck, north mass vs window fill, pit mass vs suicide mass), missing suicide-mass-west box, perimeter corner overlap (E/W walls butt at +/-47.55), swapped window face/along params, window faces on real box planes, arch spans narrowed + offset into doorways, parapets clear of perimeter, ring blocks outside walls, strip y 2.11 vs decal 2.08 — ALL MAPS CLEAN (0 clip/buried/floating)
+- Live tests:
+  - Bot sim (scripts/test-map-live.ts, replaces test-map-v4): dust2 95s — 2 rounds, 12 kills, 2 plants, 0 in-solid, 0 stuck, lanes: mid 5 / long 2 / tunnels 4 / cat 1, 6 bots reach sites — PASSED; dust 65s — bDoors 3 CTs, 7 bots reach sites — PASSED
+  - Server browser probe (test-serverlist.ts): created server listed with name/map/players/phase; join by id returns mapId dust2 (server-authoritative) — 3/3 PASS
+  - Browser E2E via :81: lobby tabs + map selector render; START SERVER on Dust II -> game boots map 'dust2'; 8 location screenshots VLM-verified coherent (T spawn, long doors, A site, mid, cat, B site, tunnels); HUD shows 'Dust II · ROUND 3'; quick-play Dust boots map 'dust' and renders clean; 0 console errors; tsc + eslint clean
+- Ops: game server restarted (daemonized) on :3003 with multi-map + server browser; web :3000; gateway :81
+
+Stage Summary:
+- Two maps: Dust (renamed original) + Dust II (new, faithful, machine-verified)
+- Lobby: map selection + server browser (start your own listed server, see live servers, join) + room-code quick play kept
+- Server per-match maps: spawns/LOS/sites/bounds/bot nav all map-aware
+- Files: src/game/mapdata.ts + server copy (replaces dust2.ts), mapview.ts, mapdetails.ts, engine.ts, page.tsx, server index.ts, bots.ts, scripts/{validate_map,check-overlaps,test-map-live,test-serverlist}.ts

@@ -1,7 +1,7 @@
-// Builds the Dust2 scene in Three.js from shared map data
+// Builds the map scene in Three.js from shared map data
 import * as THREE from 'three'
-import { MAP_BOXES, SITES } from './dust2'
-import type { Box } from './dust2'
+import { MAPS } from './mapdata'
+import type { MapDef, Box } from './mapdata'
 import { skyMesh, siteDecal, surfaceMaterial } from './textures'
 
 export interface MapBuild {
@@ -34,14 +34,14 @@ function boxToGeo(b: Box): THREE.BufferGeometry {
   return g
 }
 
-export function buildMap(scene: THREE.Scene): MapBuild {
+export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild {
   const group = new THREE.Group()
   const colliders: MapBuild['colliders'] = []
   const raycastMeshes: THREE.Object3D[] = []
 
   // merge static boxes by material for performance
   const geosByTex = new Map<Box['tex'], THREE.BufferGeometry[]>()
-  for (const b of MAP_BOXES) {
+  for (const b of map.boxes) {
     const g = boxToGeo(b)
     if (!geosByTex.has(b.tex)) geosByTex.set(b.tex, [])
     geosByTex.get(b.tex)!.push(g)
@@ -70,10 +70,10 @@ export function buildMap(scene: THREE.Scene): MapBuild {
 
   // bomb site decals — must clear the thin sand top layers (A platform 2.05, B slab 0.06)
   const decalA = siteDecal('A')
-  decalA.position.set(SITES.A.x, SITES.A.y + 0.08, SITES.A.z)
+  decalA.position.set(map.sites.A.x, map.sites.A.y + 0.08, map.sites.A.z)
   group.add(decalA)
   const decalB = siteDecal('B')
-  decalB.position.set(SITES.B.x, SITES.B.y + 0.13, SITES.B.z)
+  decalB.position.set(map.sites.B.x, map.sites.B.y + 0.13, map.sites.B.z)
   group.add(decalB)
 
   scene.add(group)
