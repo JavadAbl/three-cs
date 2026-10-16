@@ -1,5 +1,6 @@
 // CS2-clone game engine (client)
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { io } from 'socket.io-client'
 import { WEAPONS, ECONOMY, ROUND } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
@@ -9,7 +10,9 @@ import { buildMap } from './mapview'
 import { buildDetails } from './mapdetails'
 import type { MapBuild } from './mapview'
 import { PlayerManager } from './players'
-import { Effects, buildViewModel, buildBombMesh } from './fx'
+import { Effects, buildBombMesh } from './fx'
+import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
+import type { ViewModel } from './weaponmodels'
 import { audio } from './audio'
 
 export interface KillFeedItem { killer: string; victim: string; weapon: string; hs: boolean; killerTeam: string; victimTeam: string; t: number }
@@ -134,7 +137,13 @@ export class Engine {
   private recoil = 0
   private scoped = false
   private vmGroup: THREE.Group | null = null
-  private vmCache = new Map<WeaponId, { group: THREE.Group; tip: THREE.Vector3 }>()
+  private vmCache = new Map<string, ViewModel>()
+  private vm: ViewModel | null = null
+  private vmBasePos = new THREE.Vector3(0.26, -0.24, -0.45)
+  // viewmodel part animations
+  private slideKickAt = -1e9
+  private boltCycleAt = -1e9
+  private slashAt = -1e9
   private vmKick = 0
   private bobPhase = 0
   private lastW = 0
@@ -225,6 +234,15 @@ export class Engine {
     this.scene = new THREE.Scene()
     this.scene.fog = new THREE.Fog(0xd9cfb4, 55, 240)
 
+    // image-based lighting: PBR metal weapon materials need environment
+    // reflections, otherwise high-metalness surfaces render near-black
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer)
+      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.06).texture
+      this.scene.environmentIntensity = 0.55
+      pmrem.dispose()
+    } catch { /* env map is cosmetic — ignore failures */ }
+
     this.camera = new THREE.PerspectiveCamera(this.opts.fov, window.innerWidth / window.innerHeight, 0.05, 700)
     this.scene.add(this.camera)
 
@@ -258,6 +276,8 @@ export class Engine {
     this.map.raycastMeshes.push(...details.raycastMeshes)
     this.fx = new Effects(this.scene)
     this.pm = new PlayerManager(this.scene, this.myTeam)
+    // start weapon PBR texture downloads early so viewmodels never pop in mid-round
+    preloadWeaponTextures()
 
     // debug/testing hook (harmless in production)
     if (typeof window !== 'undefined') {
@@ -269,6 +289,12 @@ export class Engine {
         state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, map: this.mapDef.id, mapv: this.mapDef.version, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen }),
         ammo: () => ({ weapon: this.inventory[this.wIdx], ammo: this.ammo[this.inventory[this.wIdx]], all: { ...this.ammo }, reloadEndsIn: Math.max(0, this.reloadEndsAt - performance.now()) }),
         reload: () => this.tryReload(),
+        fire: () => this.tryFire(),
+        players: () => [...this.pm.players.values()].map(p => ({
+          id: p.id.slice(0, 6), team: p.team, w: p.weapon, alive: p.alive,
+          pos: p.root.position.toArray().map((v: number) => Math.round(v)),
+          gunParts: p.gunStub.children.length,
+        })),
         sock: () => this.socket,
         setAmmo: (mag: number, reserve: number) => {
           const w = this.inventory[this.wIdx]
@@ -276,6 +302,28 @@ export class Engine {
           return this.ammo[w]
         },
         vm: () => this.vmGroup ? { visible: this.vmGroup.visible, parts: this.vmGroup.children.length, parent: this.vmGroup.parent?.type ?? null, w: this.inventory[this.wIdx] } : null,
+        vmState: () => {
+          const vm = this.vm
+          if (!vm) return null
+          return {
+            w: this.inventory[this.wIdx],
+            rot: this.vmGroup ? [this.vmGroup.rotation.x.toFixed(3), this.vmGroup.rotation.y.toFixed(3), this.vmGroup.rotation.z.toFixed(3)] : null,
+            slide: vm.slide ? Number(vm.slide.position.z.toFixed(4)) : null,
+            bolt: vm.bolt ? { z: Number(vm.bolt.position.z.toFixed(4)), rz: Number(vm.bolt.rotation.z.toFixed(3)) } : null,
+            magVisible: vm.mag ? vm.mag.visible : null,
+            magY: vm.mag ? Number(vm.mag.position.y.toFixed(4)) : null,
+          }
+        },
+        mats: () => {
+          const out: Array<Record<string, unknown>> = []
+          this.vmGroup?.traverse(o => {
+            const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined
+            if (m && (m as { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial) {
+              out.push({ tex: !!m.map, nrm: !!m.normalMap, rgh: !!m.roughnessMap, color: '#' + m.color.getHexString(), met: m.metalness.toFixed(2), rou: m.roughness.toFixed(2) })
+            }
+          })
+          return { total: out.length, textured: out.filter(x => x.tex).length, flat: out.filter(x => !x.tex).length, sample: out.slice(0, 8) }
+        },
         fxdemo: () => {
           const p = this.camera.position.clone()
           const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion)
@@ -510,7 +558,7 @@ export class Engine {
         rp.kills = row[18] as number
         rp.deaths = row[19] as number
         rp.money = row[20] as number
-        rp.weapon = row[14] as string
+        this.pm.setGun(id, row[14] as string)
         const wasAlive = rp.alive
         rp.alive = row[12] === 1
         rp.hp = row[10] as number
@@ -787,14 +835,21 @@ export class Engine {
       this.vmGroup = null
     }
     const w = this.inventory[this.wIdx] ?? 'knife'
-    let vm = this.vmCache.get(w)
+    const key = `${w}:${this.myTeam}`
+    let vm = this.vmCache.get(key)
     if (!vm) {
-      vm = buildViewModel(w)
-      this.vmCache.set(w, vm)
+      vm = buildViewModel(w, this.myTeam)
+      this.vmCache.set(key, vm)
     }
+    this.vm = vm
+    this.vmBasePos.copy(vmBase(w))
     const g = vm.group
-    g.position.set(0.26, -0.24, -0.45)
+    g.position.copy(this.vmBasePos)
     g.rotation.set(0, 0.06, 0)
+    // remember part home transforms for the animation envelopes
+    if (vm.slide) vm.slide.userData.homeZ = vm.slide.position.z
+    if (vm.bolt) vm.bolt.userData.homeZ = vm.bolt.position.z
+    if (vm.mag) vm.mag.userData.homeY = vm.mag.position.y
     this.camera.add(g)
     this.vmGroup = g
   }
@@ -806,6 +861,12 @@ export class Engine {
     if (!am || am.mag >= w.mag || am.reserve <= 0 || this.reloadEndsAt > performance.now()) return
     this.socket?.emit('reload', { weapon: w.id })
     this.reloadEndsAt = performance.now() + w.reloadMs
+    // spawn a falling magazine copy in the world
+    if (this.vm?.mag) {
+      const wp = new THREE.Vector3()
+      this.vm.mag.getWorldPosition(wp)
+      this.fx.dropMag(wp)
+    }
     // staged reload audio: mag out now, mag in ~70%, slide rack at the end
     audio.reloadClick()
     this.cancelReloadSfx()
@@ -874,7 +935,6 @@ export class Engine {
 
     const muzzle = this.muzzleWorld()
     let end = this.camera.position.clone().addScaledVector(dir, 200)
-
     if (hit) {
       end = hit.point
       const ud = hit.object.userData as { pid?: string; part?: HitPart }
@@ -908,7 +968,12 @@ export class Engine {
 
     this.fx.tracer(muzzle, end)
     this.fx.muzzleFlash(muzzle)
-    this.fx.shell(muzzle, right)
+    // eject the casing from the actual ejection port, not the muzzle
+    if (this.vmGroup && this.vm?.eject) {
+      this.fx.shell(this.vmGroup.localToWorld(this.vm.eject.clone()), right)
+    } else {
+      this.fx.shell(muzzle, right)
+    }
 
     // recoil
     this.recoil = Math.min(this.recoil + 1, 18)
@@ -916,6 +981,9 @@ export class Engine {
     this.pitch += kick
     this.yaw += (Math.random() - 0.5) * kick * 0.6 + Math.sin(this.recoil * 2.1) * 0.00035
     this.vmKick = 1
+    // part animations: pistol slide blowback / AWP bolt cycle
+    if (this.vm?.slide) this.slideKickAt = now
+    if (this.vm?.bolt) this.boltCycleAt = now
     if (w.scope && this.scoped) { this.setScoped(false); this.wantScope = false }
 
     this.socket?.emit('shoot', {
@@ -947,17 +1015,20 @@ export class Engine {
       }
     }
     this.vmKick = 0.6
+    this.slashAt = performance.now()
     this.socket?.emit('shoot', { weapon: 'knife', origin: [this.camera.position.x, this.camera.position.y, this.camera.position.z], dir: [dir.x, dir.y, dir.z] })
   }
 
   private muzzleWorld(): THREE.Vector3 {
     const w = this.currentWeapon()
-    let vm = this.vmCache.get(this.inventory[this.wIdx] ?? 'knife')
+    const key = `${w.id}:${this.myTeam}`
+    let vm = this.vmCache.get(key)
     if (!vm) {
-      vm = buildViewModel(w.id)
-      this.vmCache.set(w.id, vm)
+      vm = buildViewModel(w.id, this.myTeam)
+      this.vmCache.set(key, vm)
     }
-    return this.camera.localToWorld(new THREE.Vector3(0.26, -0.2, -0.45 + vm.tip.z))
+    return this.camera.localToWorld(new THREE.Vector3(
+      this.vmBasePos.x, this.vmBasePos.y + 0.04, this.vmBasePos.z + vm.tip.z))
   }
 
   // ---------------------------------------------------------------- movement
@@ -1200,15 +1271,63 @@ export class Engine {
         rl = Math.min(inT, outT)
       }
       this.vmGroup.position.set(
-        0.26 + Math.cos(this.bobPhase) * 0.008 * bobA - this.swayX * 0.5,
-        -0.24 + Math.abs(Math.sin(this.bobPhase)) * 0.01 * bobA - this.crouchAmt * 0.02 - this.swayY * 0.5 - dip - rl * 0.14,
-        -0.45 + this.vmKick * 0.07 + rl * 0.07,
+        this.vmBasePos.x + Math.cos(this.bobPhase) * 0.008 * bobA - this.swayX * 0.5,
+        this.vmBasePos.y + Math.abs(Math.sin(this.bobPhase)) * 0.01 * bobA - this.crouchAmt * 0.02 - this.swayY * 0.5 - dip - rl * 0.14,
+        this.vmBasePos.z + this.vmKick * 0.07 + rl * 0.07,
       )
+      // knife slash arc (diagonal chop)
+      let slashRoll = 0, slashPitch = 0
+      const st = (now - this.slashAt) / 240
+      if (st >= 0 && st < 1) {
+        const e = Math.sin(Math.PI * st)
+        slashRoll = -0.85 * e
+        slashPitch = 0.22 * e
+      }
       this.vmGroup.rotation.set(
-        this.vmKick * 0.16 + this.swayY * 1.6 + rl * 0.62,
+        this.vmKick * 0.16 + this.swayY * 1.6 + rl * 0.62 + slashPitch,
         0.06 + this.swayX * 1.8 + rl * 0.25,
-        Math.sin(this.bobPhase) * 0.006 * bobA - this.swayX * 0.8 + rl * 0.42,
+        Math.sin(this.bobPhase) * 0.006 * bobA - this.swayX * 0.8 + rl * 0.42 + slashRoll,
       )
+
+      // ---- animated weapon parts (slide blowback / AWP bolt / mag swap / C4 LED)
+      const vm = this.vm
+      if (vm) {
+        if (vm.slide) {
+          const k = Math.max(0, 1 - (now - this.slideKickAt) / 120)
+          vm.slide.position.z = (vm.slide.userData.homeZ as number) + k * 0.034
+        }
+        if (vm.bolt) {
+          const t = (now - this.boltCycleAt) / 1050
+          const homeZ = vm.bolt.userData.homeZ as number
+          if (t >= 0 && t < 1) {
+            // 0-0.15 handle lift, 0.15-0.45 pull back, 0.45-0.8 push forward, 0.8-1 drop
+            if (t < 0.15) { vm.bolt.rotation.z = -0.95 * (t / 0.15); vm.bolt.position.z = homeZ }
+            else if (t < 0.45) { vm.bolt.rotation.z = -0.95; vm.bolt.position.z = homeZ + 0.068 * ((t - 0.15) / 0.3) }
+            else if (t < 0.8) { vm.bolt.rotation.z = -0.95; vm.bolt.position.z = homeZ + 0.068 * (1 - (t - 0.45) / 0.35) }
+            else { vm.bolt.position.z = homeZ; vm.bolt.rotation.z = -0.95 * (1 - (t - 0.8) / 0.2) }
+          } else {
+            vm.bolt.position.z = homeZ
+            vm.bolt.rotation.z = 0
+          }
+        }
+        if (vm.mag) {
+          const homeY = vm.mag.userData.homeY as number
+          if (this.reloadEndsAt > now) {
+            const w = this.currentWeapon()
+            const rp = 1 - (this.reloadEndsAt - now) / Math.max(1, w.reloadMs)
+            vm.mag.visible = !(rp > 0.18 && rp < 0.72)
+            // fresh mag slides up into the well during 0.72-0.86
+            vm.mag.position.y = (rp > 0.72 && rp < 0.86) ? homeY - 0.05 * (1 - (rp - 0.72) / 0.14) : homeY
+          } else {
+            vm.mag.visible = true
+            vm.mag.position.y = homeY
+          }
+        }
+        if (vm.led) {
+          const on = Math.floor(now / 620) % 2 === 0
+          ;(vm.led.material as THREE.MeshBasicMaterial).color.setHex(on ? 0xff2828 : 0x2a0606)
+        }
+      }
     }
 
     // bomb beep + LED blink

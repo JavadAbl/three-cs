@@ -1,7 +1,7 @@
 // Remote player rendering: model + hitboxes + snapshot interpolation
 import * as THREE from 'three'
 import { bodyTexture } from './textures'
-import { buildGunStub } from './fx'
+import { buildRemoteGun } from './weaponmodels'
 import type { TeamId } from './weapons'
 
 export interface RemotePlayer {
@@ -33,6 +33,15 @@ export interface RemotePlayer {
 }
 
 const HEAD_R = 0.16
+const GUN_POS = { x: 0.17, y: 1.3, z: -0.3 }
+
+function newGun(weapon: string): THREE.Group {
+  const g = buildRemoteGun(weapon)
+  g.position.set(GUN_POS.x, GUN_POS.y, GUN_POS.z)
+  g.rotation.set(0.06, 0.14, 0)
+  g.userData.baseY = GUN_POS.y
+  return g
+}
 
 function nameSpriteTex(name: string, team: TeamId): THREE.Texture {
   const c = document.createElement('canvas')
@@ -72,7 +81,7 @@ export class PlayerManager {
     legs.position.y = 0.4
     const head = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R, 12, 10), new THREE.MeshLambertMaterial({ color: 0xd8b590 }))
     head.position.y = 1.62
-    const gunStub = buildGunStub()
+    const gunStub = newGun('knife')
     body.castShadow = true
     legs.castShadow = true
     head.castShadow = true
@@ -122,6 +131,17 @@ export class PlayerManager {
     this.players.delete(id)
   }
 
+  /** swap the visible gun when a player switches weapons */
+  setGun(id: string, weapon: string) {
+    const p = this.players.get(id)
+    if (!p || p.weapon === weapon) return
+    p.weapon = weapon
+    p.root.remove(p.gunStub)
+    p.gunStub = newGun(weapon)
+    p.gunStub.position.y = GUN_POS.y + (p.bodyMesh.position.y < 1 ? -0.35 : 0)
+    p.root.add(p.gunStub)
+  }
+
   pushSnapshot(id: string, t: number, x: number, y: number, z: number, yaw: number, pitch: number, crouch: boolean) {
     const p = this.players.get(id)
     if (!p) return
@@ -160,7 +180,7 @@ export class PlayerManager {
       p.hbHead.position.y = 1.62 * scale
       p.hbBody.position.y = 1.15 * scale
       p.hbLegs.position.y = 0.4
-      p.gunStub.position.y = crouch ? -0.35 : 0
+      p.gunStub.position.y = (crouch ? -0.35 : 0) + (p.gunStub.userData.baseY as number ?? GUN_POS.y)
       // dead: fall over
       if (!p.alive) {
         const since = (performance.now() - p.deathAt) / 1000

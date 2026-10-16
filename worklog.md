@@ -166,3 +166,42 @@ Stage Summary:
 - Lobby: map selection + server browser (start your own listed server, see live servers, join) + room-code quick play kept
 - Server per-match maps: spawns/LOS/sites/bounds/bot nav all map-aware
 - Files: src/game/mapdata.ts + server copy (replaces dust2.ts), mapview.ts, mapdetails.ts, engine.ts, page.tsx, server index.ts, bots.ts, scripts/{validate_map,check-overlaps,test-map-live,test-serverlist}.ts
+
+---
+Task ID: 10
+Agent: Super Z (main agent)
+Task: weapon texture pass — attach REAL image textures to the weapons (user request "can we attach textures to weapons too?" → "yes"); rebuild of the detailed weapon models lost in the sandbox re-provision
+
+NOTE: the sandbox was re-provisioned from the last commit (921ae49, post-Task-5). Uncommitted work from Tasks 6-9b (sound pack, detailed weapon models, $16k economy) was lost from disk; worklog entries for those tasks went with it. This task rebuilds the weapon-model layer (Task-9 equivalent) with the new real-texture feature, and restores startMoney 16000.
+
+Work Log:
+- Generated 7 real PBR texture sets via z-ai image gen (scripts/texgen/gen.sh): steel_blued, polymer_black, wood_laminate, enamel_od, metal_dark, glove_fabric, pcb_green
+- Post-processed with scripts/texgen/process.py: 2x2 mirror-quad → perfectly tileable 1024s, sobel normal maps (per-material strength), baked absolute roughness maps → public/assets/textures/weapons/*.jpg (21 files, 5.6MB, lazy-loaded)
+- New src/game/weaponmodels.ts (647 lines):
+  - TextureLoader base-texture registry + material cache (clones share one GPU source), per-part auto texture-repeat from geometry size (uniform texel density), flat-color fallback before/instead of load (graceful degradation), preloadWeaponTextures()
+  - 9 detailed viewmodels + gloves (team cuffs T tan / CT navy): AK-47 (laminate wood, curved mag, slant brake), M4A4 (rail slots, birdcage, front sight tower), AWP (scope tube+bell+lens+turrets, OD enamel chassis, bolt group), MP5-SD (suppressor+vent rings, hooded sight), Deagle (slide+rib+serrations), Glock/USP-S (suppressor on USP, white-dot sights), bayonet knife (bright ground blade + fuller), C4 (PCB panel, canvas keypad, blinking LED, wires, straps)
+  - buildRemoteGun(weaponId) low-poly textured third-person guns; vmBase(weapon) per-weapon pose
+- engine.ts integration:
+  - vmCache keyed `${weapon}:${team}`, vm parts (mag/slide/bolt/eject/led) + home transforms
+  - animations: pistol slide blowback (120ms envelope), AWP bolt cycle (lift/pull/push/drop over 1050ms), reload mag-out (18-72% of reload) + fresh-mag slide-in, knife slash arc, C4 LED blink
+  - shell casings eject from the real ejection port (vm.eject world pos), dropped-mag world spawn on reload (fx.dropMag, textured tumbling debris)
+  - scene.environment = PMREM(RoomEnvironment), environmentIntensity 0.55 — IBL fixes black-looking metals (high metalness without env = near-black); map Lambert materials unaffected
+  - debug hooks: mats() (texture application audit), vmState() (anim part state), fire(), players()
+- fx.ts: dead old viewmodel builders removed (box import now shared from weaponmodels); dropMag added
+- players.ts: per-weapon remote guns — newGun() + PlayerManager.setGun(id, weapon) swaps gun on snapshot weapon change; gun at (0.17, 1.3, -0.3) with crouch offset via userData.baseY
+- Economy restore: startMoney 800 → 16000 in src/game/weapons.ts + mini-services/game-server/weapons.ts (hot-reloaded server, probe scripts/test-money.ts PASS: init money = 16000)
+- Verification (agent-browser via :81):
+  - 21 texture fetches on engine init; mats() audit: 23-37/37 viewmodel materials fully textured (map+normal+roughness, white base color)
+  - VLM checks: AK laminate wood grain + curved mag + blued receiver + two gloves ✓, AWP scope+lens+OD enamel+metal sheen+bolt ✓, M4/Deagle/Glock/USP/MP5 textures + gloves ✓, C4 PCB+keypad+red LED+wires+left hand ✓, knife ok (blade reflectivity boosted)
+  - slide blowback: z -0.08 → -0.052 (50ms) → -0.08 (350ms) ✓; reload: magVisible=false + rotx 0.620 full tilt, cancelled correctly on round reset ✓; server 'ammo' refill after reload ✓
+  - remote guns: setGun swap verified (knife 2 parts → m4 5 parts after bots bought), positions interpolate
+  - tsc --noEmit: 0 src errors; no console/page errors on cold load; game-server :3003 healthy (socket.io 200), web :3000, caddy :81
+- KNOWN LIMIT: headless agent-browser rAF throttles to ~3fps (page occlusion) — intermediate animation frames can't be screenshot-captured there; all anims are performance.now()-based envelopes (frame-rate independent) and the observable ones sampled correctly. The AWP bolt / knife slash envelopes share the exact pattern verified for slide+mag.
+
+Stage Summary:
+- Weapons now use REAL AI-generated PBR image textures (albedo+normal+roughness) with IBL lighting, geometry caches, and graceful fallback — user request fulfilled
+- 9 detailed weapon viewmodels + gloves rebuilt (replacing the lost Task-9 models), remote players carry per-weapon textured guns
+- Animations: slide blowback, AWP bolt cycle, mag-out/reload pose, knife slash, eject-port shells, dropped mags, C4 LED
+- startMoney restored to 16000; all 9 weapons cost ≈ $12,750 — buyable in one round
+- Files: src/game/weaponmodels.ts (new), src/game/{engine,fx,players,weapons}.ts, mini-services/game-server/weapons.ts, public/assets/textures/weapons/ (21 jpg), scripts/texgen/{gen.sh,process.py}, scripts/test-money.ts
+- NOT restored from the lost session: the CS:GO OGG sound pack (Task 8) — audio still uses the WebAudio synth; ask user if they want a sound pack re-integrated

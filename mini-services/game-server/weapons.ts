@@ -91,7 +91,7 @@ export const BUY_ITEMS: Array<{ id: string; name: string; price: number; team?: 
 export const PART_MULT: Record<HitPart, number> = { head: 4, body: 1, legs: 0.75 }
 
 export const ECONOMY = {
-  startMoney: 800,
+  startMoney: 16000,
   maxMoney: 16000,
   winReward: 3250,
   lossBase: 1400,
