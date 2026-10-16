@@ -240,3 +240,19 @@ Work Log:
 
 Stage Summary:
 - Full progress history (Tasks 1-11) with assets (weapon textures, sound pack) lives on GitHub at JavadAbl/three-cs — sandbox loss can no longer wipe the project
+
+---
+Task ID: 13
+Agent: Super Z (main agent)
+Task: fix 3 gameplay bugs reported by user (weapons persist after death / scoreboard not updating after kills / no money added after rounds)
+
+Work Log:
+- Root-caused all three: (1) server startRound only stripped c4 — dead players kept bought weapons+armor; (2) client engine never read own kills/deaths from server snapshots (rows 18/19); (3) server DID award round money in endRound, but client this.money only updated on init/buyOk — round rewards never displayed
+- server/index.ts startRound: dead players (p.alive===false at reset) now get inventory=[team pistol,knife], armor=0, helmet=false, ammo={}, then sendInvSync() pushes the reset to their client
+- src/game/engine.ts snapshot myId branch: now reads kills/deaths/money (rows 18/19/20) every snapshot (20Hz) + clears helmet flag when armor hits 0
+- engine invSync/buyOk handlers: rebuild viewmodel + play draw sfx when held weapon changes (viewmodel no longer lags behind server loadout changes)
+- Restarted game-server daemonized (setsid -f, PPID=1 — plain & gets reaped between tool calls)
+- Wrote scripts/test-bugfixes.ts: E2E regression — buy m4, kill VictimA, die to fall damage, assert round-2 inventory/ money delta / self-kills in snapshot
+
+Stage Summary:
+- ALL 3 bugs fixed and E2E-verified: weapons-stripped PASS ([usp,knife] after death), money-added PASS (+1400 loss bonus at next freeze), scoreboard-kills PASS (self kills visible in snapshot). Committed as task 13 + pushed to GitHub backup

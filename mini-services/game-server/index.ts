@@ -195,6 +195,14 @@ function startRound(m: Match) {
   else if (ts.length) bombCarrier = ts[Math.floor(Math.random() * ts.length)]
 
   for (const p of m.players.values()) {
+    // CS rules: weapons and armor are lost on death — only survivors keep their loadout
+    const survived = p.alive
+    if (!survived) {
+      p.inventory = p.team === 'T' ? ['glock', 'knife'] : ['usp', 'knife']
+      p.armor = 0
+      p.helmet = false
+      p.ammo = {}
+    }
     p.alive = true
     p.hp = 100
     p.plantingSince = 0; p.defusingSince = 0
@@ -214,6 +222,8 @@ function startRound(m: Match) {
       botBuy(m, p)
     }
     refillAmmo(p)
+    // push the reset loadout to human clients (their local bag must match)
+    if (!survived && !p.bot) sendInvSync(p)
   }
   if (bombCarrier) {
     bombCarrier.hasBomb = true

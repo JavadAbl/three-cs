@@ -533,8 +533,13 @@ export class Engine {
         if (id === this.myId) {
           this.hp = row[10] as number
           this.armor = row[11] as number
+          if (this.armor <= 0) this.helmet = false
           const alive = row[12] === 1
           this.hasBomb = row[13] === 1
+          // authoritative score/economy sync (kills, deaths, money — incl. round rewards)
+          this.kills = row[18] as number
+          this.deaths = row[19] as number
+          this.money = row[20] as number
           // respawn / round-start position sync (server owns spawn placement)
           {
             const sx = row[1] as number, sy = row[2] as number, sz = row[3] as number
@@ -716,9 +721,16 @@ export class Engine {
     })
 
     socket.on('invSync', (d: { inventory: WeaponId[]; wIdx: number }) => {
+      const prevW = this.inventory[this.wIdx]
       this.inventory = d.inventory
       if (typeof d.wIdx === 'number' && d.wIdx < this.inventory.length) this.wIdx = d.wIdx
       this.syncAmmo()
+      // loadout changed server-side (round reset stripped weapons) — swap viewmodel
+      const newW = this.inventory[this.wIdx]
+      if (newW !== prevW) {
+        this.rebuildViewmodel()
+        audio.draw(newW ?? 'knife')
+      }
     })
 
     socket.on('chat', (d: { id: string; name: string; team: string; text: string }) => {
@@ -729,12 +741,15 @@ export class Engine {
     socket.on('toast', (d: { msg: string }) => this.pushToast(d.msg))
 
     socket.on('buyOk', (d: { money: number; armor: number; helmet: boolean; inventory: WeaponId[]; wIdx: number }) => {
+      const prevW = this.inventory[this.wIdx]
       this.money = d.money
       this.armor = d.armor
       this.helmet = d.helmet
       this.inventory = d.inventory
       this.wIdx = d.wIdx ?? 0
       this.syncAmmo()
+      const newW = this.inventory[this.wIdx]
+      if (newW !== prevW) this.rebuildViewmodel()
       audio.buy()
     })
 
