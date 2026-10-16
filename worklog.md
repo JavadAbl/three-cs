@@ -205,3 +205,24 @@ Stage Summary:
 - startMoney restored to 16000; all 9 weapons cost ≈ $12,750 — buyable in one round
 - Files: src/game/weaponmodels.ts (new), src/game/{engine,fx,players,weapons}.ts, mini-services/game-server/weapons.ts, public/assets/textures/weapons/ (21 jpg), scripts/texgen/{gen.sh,process.py}, scripts/test-money.ts
 - NOT restored from the lost session: the CS:GO OGG sound pack (Task 8) — audio still uses the WebAudio synth; ask user if they want a sound pack re-integrated
+
+---
+Task ID: 11
+Agent: Super Z (main agent)
+Task: re-integrate the weapon sound pack (user request) — replaces the Task-8 pack lost in the sandbox re-provision
+
+Work Log:
+- Sourced real CS:GO sounds: partial clone (--filter=blob:none --no-checkout) of github.com/sourcesounds/csgo, sparse-checked-out exactly 85 files (script scripts/sfx/extract.sh, manifest inside)
+- Converted to OGG Vorbis q3 44.1kHz: leading-silence strip on all sfx (kills shot latency), music stingers capped at 3.5s + fade → public/assets/sounds/ (85 files, 1.3MB): per-weapon fire + distant variants (ak47/m4/awp/deagle/mp5/glock/usp), per-weapon clipout/clipin/bolt-or-slide + draw, knife slash/hit/wall/stab, C4 (beeps/click/initiate/plant/explode/disarmstart/disarmfinish/key), empty-mag clicks (pistol/rifle), THE dink (bhit_helmet), headshot/hurt, 8 footsteps (dirt+conc), 4 bullet impacts, money cha-ching + cant-buy + ui click, AWP zoom, default-kit round stingers (start/win/lose)
+- audio.ts rewritten: fetch+decodeAudioData pack loader (loadPack, fire-and-forget, per-file error capture), sample player with gain/StereoPanner/rate-variance, spatial() distance gain + stereo pan from listener facing (setListener updated every frame from camera forward), near/distant gunshot swap beyond 30m, AWP bolt rechamber sound after nearby AWP shots (700ms rate limit), synth code kept as full fallback for every sound
+- engine.ts wired: loadPack on init; per-frame listener orientation; staged per-weapon reload sounds (out at 0 / in at 68% / rack at end); per-weapon draw on switch (slots + Q); dryFire by weapon class; AWP scope zoom sound; bullet impact sounds on local map hits; remote reloads keyed to the reloader's weapon; plantProgress staged C4 (initiate at start, keypad ticks at 30%/60%, disarmstart) with debounce; client-side insufficient-funds guard plays cant-buy; __eng.sfx() audit hook
+- Verification (agent-browser via :81, live 5v5 bot match):
+  - sfx(): 85/85 loaded, errors [] , ctxState running; 0 page errors, 0 console warnings
+  - fire → +2 plays (gunshot+impact); staged reload → 3 samples at 0/68%/100%; buy deagle → cha-ching; remote bot gunfire streams constantly with positional panning (plays 4→102 over ~3 min incl. round stingers, footsteps, knife, plants)
+  - scripts/test-reload.ts 6/6 PASS (server reload flow untouched and healthy; a setAmmo-hook desync during testing was client-only, not a regression)
+  - tsc --noEmit: 0 errors in src/ + mini-services/
+- Ops: game-server :3003 untouched, web :3000 (hot), caddy :81
+
+Stage Summary:
+- Real CS:GO weapon sound pack re-integrated: 85 OGG samples, positional stereo panning, distance-attenuated distant variants, per-weapon reload/draw/empty sounds, dink, C4 voice, music stingers — with total synth fallback
+- Files: public/assets/sounds/ (85 ogg), src/game/audio.ts (rewrite), src/game/engine.ts, scripts/sfx/extract.sh (+ scripts/csgo-snd 18MB partial clone as reusable cache, untracked)

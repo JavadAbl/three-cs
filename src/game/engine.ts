@@ -126,6 +126,8 @@ export class Engine {
   private keys = new Set<string>()
   private firing = false
   private wantScope = false
+  private lastC4StageSfx = 0 // debounce for plant/defuse start sounds
+  private sndFwd = new THREE.Vector3()
 
   // weapons
   private inventory: WeaponId[] = ['usp', 'knife']
@@ -296,6 +298,7 @@ export class Engine {
           gunParts: p.gunStub.children.length,
         })),
         sock: () => this.socket,
+        sfx: () => audio.info(),
         setAmmo: (mag: number, reserve: number) => {
           const w = this.inventory[this.wIdx]
           if (w && this.ammo[w]) this.ammo[w] = { mag, reserve }
@@ -346,6 +349,7 @@ export class Engine {
 
     audio.init()
     audio.setVolume(this.opts.volume)
+    audio.loadPack() // real CS:GO samples; synth fallback covers until decoded
 
     this.bindEvents()
     this.connect()
@@ -432,6 +436,7 @@ export class Engine {
       if (w.scope && this.alive) {
         this.wantScope = !this.wantScope
         this.setScoped(this.wantScope)
+        audio.zoom()
       }
     }
   }
@@ -651,7 +656,10 @@ export class Engine {
       audio.gunshot(d.weapon, d.origin as [number, number, number], [myEye.x, myEye.y, myEye.z])
     })
 
-    socket.on('reloadFx', () => audio.reloadClick())
+    socket.on('reloadFx', (d: { id: string }) => {
+      const rp = this.pm.getById(d.id)
+      audio.reloadStage(rp?.weapon ?? 'rifle', 'out')
+    })
 
     // server refilled our mag after a reload — update local copy (drives HUD + fire gate)
     socket.on('ammo', (d: { weapon?: string; mag?: number; reserve?: number }) => {
@@ -690,10 +698,15 @@ export class Engine {
     })
 
     socket.on('plantProgress', (d: { id: string; action: string; progress: number }) => {
+      const t = performance.now()
       if (d.action === 'plant') {
         this.plantBar = d.id === this.myId ? (d.progress > 0 ? d.progress : null) : null
+        if (d.progress < 0.05 && t - this.lastC4StageSfx > 800) { this.lastC4StageSfx = t; audio.c4Initiate() }
+        else if (d.progress > 0.3 && d.progress < 0.4 && t - this.lastC4StageSfx > 300) { this.lastC4StageSfx = t; audio.plantTick() }
+        else if (d.progress > 0.6 && d.progress < 0.7 && t - this.lastC4StageSfx > 300) { this.lastC4StageSfx = t; audio.plantTick() }
       } else if (d.action === 'defuse') {
         this.defuseBar = d.id === this.myId ? (d.progress > 0 ? d.progress : null) : null
+        if (d.progress < 0.05 && t - this.lastC4StageSfx > 800) { this.lastC4StageSfx = t; audio.c4DisarmStart() }
       }
     })
 
@@ -805,7 +818,7 @@ export class Engine {
       this.wantScope = false
       this.rebuildViewmodel()
       this.socket?.emit('switch', { wIdx: this.wIdx })
-      audio.switchWeapon()
+      audio.draw(this.inventory[this.wIdx])
     }
   }
 
@@ -818,7 +831,7 @@ export class Engine {
       this.cancelReloadSfx()
       this.rebuildViewmodel()
       this.socket?.emit('switch', { wIdx: this.wIdx })
-      audio.switchWeapon()
+      audio.draw(this.inventory[this.wIdx])
     }
   }
 
@@ -867,12 +880,12 @@ export class Engine {
       this.vm.mag.getWorldPosition(wp)
       this.fx.dropMag(wp)
     }
-    // staged reload audio: mag out now, mag in ~70%, slide rack at the end
-    audio.reloadClick()
+    // staged reload audio: real per-weapon samples — mag out now, mag in ~68%, slide/bolt rack at the end
+    audio.reloadStage(w.id, 'out')
     this.cancelReloadSfx()
     this.reloadSfxTimers.push(
-      setTimeout(() => audio.reloadMagIn(), Math.max(150, w.reloadMs * 0.68)),
-      setTimeout(() => audio.reloadSlide(), Math.max(250, w.reloadMs - 170)),
+      setTimeout(() => audio.reloadStage(w.id, 'in'), Math.max(150, w.reloadMs * 0.68)),
+      setTimeout(() => audio.reloadStage(w.id, 'rack'), Math.max(250, w.reloadMs - 170)),
     )
   }
 
@@ -908,7 +921,7 @@ export class Engine {
       return
     }
     if (!am || am.mag <= 0) {
-      audio.dryFire()
+      audio.dryFire(w.id)
       this.lastShotAt = now
       if (am && am.reserve > 0) this.tryReload()
       return
@@ -960,6 +973,7 @@ export class Engine {
         const surf = (hit.object.userData as { surf?: string }).surf
         const nrm = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : undefined
         this.fx.impact(hit.point, nrm, surf)
+        audio.impact()
         audio.gunshot(w.id)
       }
     } else {
@@ -1189,6 +1203,10 @@ export class Engine {
     let dt = (now - this.lastT) / 1000
     this.lastT = now
     if (dt > 0.1) dt = 0.1
+
+    // sound listener orientation for stereo panning of positional sfx
+    this.camera.getWorldDirection(this.sndFwd)
+    audio.setListener([this.sndFwd.x, this.sndFwd.y, this.sndFwd.z])
 
     // fps
     this.fpsCounter++
@@ -1457,6 +1475,8 @@ export class Engine {
 
   // ---------------------------------------------------------------- public api
   buy(item: string) {
+    const def = WEAPONS[item as WeaponId]
+    if (def && this.money < def.price) { audio.cantBuy(); return }
     this.socket?.emit('buy', { item })
   }
 
