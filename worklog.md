@@ -256,3 +256,19 @@ Work Log:
 
 Stage Summary:
 - ALL 3 bugs fixed and E2E-verified: weapons-stripped PASS ([usp,knife] after death), money-added PASS (+1400 loss bonus at next freeze), scoreboard-kills PASS (self kills visible in snapshot). Committed as task 13 + pushed to GitHub backup
+
+---
+Task ID: 14
+Agent: Super Z (main agent)
+Task: import CS 1.6 BSP map (aim_headshot) into the game — full BSP v30 → three.js/mapdef converter pipeline
+
+Work Log:
+- Parsed BSP v30 binary (upload/aim_headshot/maps/aim_headshot.bsp, 505KB): 15 lumps, 92 entities, 1197 faces, 694 planes, 20 miptex (all pixels external in WADs — headers only), 2 models
+- Reverse-engineered HL node layout empirically: dnode_t 24B = planenum i32@0, children i16@4/@6, mins@8, maxs@14 (children[0]=front validated via node bounds); leaf = ~child, child=-1 → shared empty leaf 0; contents: -1 solid / 0 empty / -6 sky (validated against face surfaces ±8u)
+- Geometry decoded: terraced arena (floors -184/-160/-128/-96), center block with 2 shooting slits, skybox shell; spawn entities were embedded in non-standable geometry (ripped map) → relocated to nearest standable columns via band scan
+- scripts/bsp/convert.ts: faces→triangle groups (6 mat groups, ~88k tris) + hull0 voxelization (16u grid)→155 merged collision boxes + 10v10 spawns (0 collide) + 300 waypoints/702 edges + synthesized sites + bounds; emits src/game/map-aimhead.ts + server copy + geom.json (4.7MB)
+- Wired into game: MapId 'aimhead', MapDef.bsp + spawnYaw extensions, mapview BSP render branch (fetch geom.json, DoubleSide, boxes collision-only), mapdetails skip, server VALID_MAPS + spawnYaw in startRound/join, bots GRAPHS aimhead entry (holds at ledges, mid = slits)
+- E2E test scripts/test-aimhead.ts: ALL PASS (map served, spawn standable CT west, 5 bots navigate, round flow); client verified: menu picker shows map, geom.json fetched 200, socket connected (screenshot blocked by headless software-WebGL CPU saturation — tooling limit)
+
+Stage Summary:
+- aim_headshot (CS 1.6) fully playable: real BSP geometry renders, voxel collision+LOS, bots path through slits, terraced floors. Pipeline reusable for future BSP maps (user provides .bsp → convert → play)

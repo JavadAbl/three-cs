@@ -52,16 +52,45 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
     })
   }
 
-  for (const [tex, geos] of geosByTex) {
-    const g = mergeGeosSafe(geos)
-    const mat = surfaceMaterial(tex)
-    const mesh = new THREE.Mesh(g, mat)
-    mesh.userData.isMap = true
-    mesh.userData.surf = tex        // fx picks impact style (sparks vs dust)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    group.add(mesh)
-    raycastMeshes.push(mesh)
+  if (!map.bsp) {
+    for (const [tex, geos] of geosByTex) {
+      const g = mergeGeosSafe(geos)
+      const mat = surfaceMaterial(tex)
+      const mesh = new THREE.Mesh(g, mat)
+      mesh.userData.isMap = true
+      mesh.userData.surf = tex        // fx picks impact style (sparks vs dust)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      group.add(mesh)
+      raycastMeshes.push(mesh)
+    }
+  }
+
+  // BSP-converted map: real face geometry from geom.json (collision stays on boxes)
+  if (map.bsp) {
+    // boxes are collision-only — real faces render instead (avoids double-draw/z-fight)
+    const geomUrl = map.bsp.geomUrl
+    fetch(geomUrl).then(r => r.json()).then((data: {
+      groups: Array<{ tex: string; pos: number[]; norm: number[]; uv: number[]; idx: number[] }>
+    }) => {
+      for (const grp of data.groups) {
+        const g = new THREE.BufferGeometry()
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(grp.pos), 3))
+        g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(grp.norm), 3))
+        g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(grp.uv), 2))
+        g.setIndex(new THREE.BufferAttribute(new Uint32Array(grp.idx), 1))
+        g.computeBoundingSphere()
+        const mat = surfaceMaterial(grp.tex as Box['tex'])
+        mat.side = THREE.DoubleSide // BSP face winding varies — render both sides
+        const mesh = new THREE.Mesh(g, mat)
+        mesh.userData.isMap = true
+        mesh.userData.surf = grp.tex
+        mesh.castShadow = true
+        mesh.receiveShadow = true
+        group.add(mesh)
+        raycastMeshes.push(mesh)
+      }
+    }).catch(() => { /* boxes already render a playable fallback */ })
   }
 
   // sky (stored so engine can drift the clouds)

@@ -18,6 +18,7 @@ const io = new Server(httpServer, {
 const PORT = 3003
 const matches = new Map<string, Match>()
 const BOT_TEAM_SIZE = 5
+const VALID_MAPS = ['dust', 'dust2', 'aimhead'] as const
 
 const now = () => Date.now()
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
@@ -132,7 +133,7 @@ function hasLOS(m: Match, ax: number, ay: number, az: number, bx: number, by: nu
 function makePlayer(id: string, name: string, team: TeamId, bot: boolean): PlayerState {
   const p: PlayerState = {
     id, name, team, bot, socketId: null,
-    x: 0, y: 0, z: 0, yaw: team === 'T' ? 0 : Math.PI, pitch: 0,
+    x: 0, y: 0, z: 0, yaw: 0, pitch: 0,
     crouch: false, moving: false, walking: false,
     hp: 100, armor: 0, helmet: false, money: ECONOMY.startMoney,
     kills: 0, deaths: 0, alive: false,
@@ -211,7 +212,7 @@ function startRound(m: Match) {
     const spawns = mapOf(m).spawns[p.team]
     const sp = spawns[(m.round + hashId(p.id)) % spawns.length]
     p.x = sp.x; p.y = sp.y; p.z = sp.z
-    p.yaw = p.team === 'T' ? 0 : Math.PI
+    p.yaw = mapOf(m).spawnYaw?.[p.team] ?? (p.team === 'T' ? 0 : Math.PI)
     p.pitch = 0
     p.wIdx = 0
     // strip c4 if no longer carrier
@@ -580,7 +581,7 @@ io.on('connection', (socket) => {
   socket.on('join', (data: { name?: string; room?: string; team?: string; botFill?: boolean; botDifficulty?: string; winTarget?: number; map?: string }) => {
     const name = String(data.name || 'Player').slice(0, 16)
     const roomId = String(data.room || 'dust2').slice(0, 24).replace(/[^a-zA-Z0-9_-]/g, '') || 'dust2'
-    const reqMap = (data.map === 'dust' || data.map === 'dust2') ? data.map : 'dust2'
+    const reqMap = (VALID_MAPS as readonly string[]).includes(String(data.map)) ? data.map as MapId : 'dust2'
     const m = getMatch(roomId, { mapId: reqMap })
     if (humans(m).length >= 10) { socket.emit('joinError', { msg: 'Room is full' }); return }
 
@@ -612,6 +613,7 @@ io.on('connection', (socket) => {
       const spawns = mapOf(m).spawns[team]
       const sp = spawns[hashId(p.id) % spawns.length]
       p.x = sp.x; p.y = sp.y; p.z = sp.z
+      p.yaw = mapOf(m).spawnYaw?.[team] ?? (team === 'T' ? 0 : Math.PI)
       p.alive = true
     } else {
       p.alive = false
@@ -646,7 +648,7 @@ io.on('connection', (socket) => {
 
   socket.on('createServer', (data: { name?: string; map?: string; botFill?: boolean; botDifficulty?: string; winTarget?: number; team?: string }, cb?: (r: unknown) => void) => {
     const srvName = String(data.name || 'Server').slice(0, 32)
-    const mapId = (data.map === 'dust' || data.map === 'dust2') ? data.map : 'dust2'
+    const mapId = (VALID_MAPS as readonly string[]).includes(String(data.map)) ? data.map as MapId : 'dust2'
     let roomId = ''
     do {
       roomId = 'srv-' + Math.random().toString(36).slice(2, 8)

@@ -495,7 +495,7 @@ export class Engine {
       mapId?: string; mapVersion: number; players: Array<Record<string, unknown>>; match: Record<string, unknown>
     }) => {
       // server is authoritative about the room's map — rebuild if we guessed wrong
-      if ((d.mapId === 'dust' || d.mapId === 'dust2') && d.mapId !== this.mapDef.id) this.rebuildMap(d.mapId)
+      if (d.mapId && d.mapId !== this.mapDef.id && (d.mapId === 'dust' || d.mapId === 'dust2' || d.mapId === 'aimhead')) this.rebuildMap(d.mapId as MapId)
       this.myId = d.youId
       this.myTeam = d.team
       this.pm.setMyTeam(d.team)

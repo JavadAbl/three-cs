@@ -124,6 +124,11 @@ export function buildDetails(map: MapDef = MAPS.dust): DetailBuild {
   const raycastMeshes: THREE.Object3D[] = []
   batches.clear()
 
+  if (map.id === 'aimhead') {
+    // BSP-converted map: real face geometry provides all visuals — no procedural props
+    return { group, raycastMeshes }
+  }
+
   if (map.id === 'dust2') {
     buildDust2Parapets()
     buildDust2Arches()

@@ -9,7 +9,7 @@
 //           mid doors + xbox, window room (mid -> B), upper/lower tunnels, B site
 // ============================================================
 
-export type MapId = 'dust' | 'dust2'
+export type MapId = 'dust' | 'dust2' | 'aimhead'
 
 export interface Box {
   x: number; y: number; z: number   // center
@@ -29,10 +29,12 @@ export interface MapDef {
   boxes: Box[]
   losBoxes: Box[]                   // collision/LOS boxes (decor excluded)
   spawns: { CT: Vec3[]; T: Vec3[] }
+  spawnYaw?: { CT: number; T: number } // team facing at spawn (default: T 0 / CT π)
   sites: { A: SiteDef; B: SiteDef }
   waypoints: WP[]
   waypointEdges: Array<[string, string]>
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number }
+  bsp?: { geomUrl: string }         // BSP-converted render geometry (fetched at runtime)
 }
 
 // ---------------- builder helpers ----------------
@@ -603,12 +605,16 @@ function buildDust2(): MapDef {
 // ============================================================
 // registry
 // ============================================================
+import { AIMHEAD } from './map-aimhead'
+
 export const MAPS: Record<MapId, MapDef> = {
   dust: buildDust(),
   dust2: buildDust2(),
+  aimhead: AIMHEAD,
 }
 
 export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
   { id: 'dust', name: 'Dust', desc: 'The original three-lane classic layout' },
   { id: 'dust2', name: 'Dust II', desc: 'Long, mid, tunnels · catwalk · pit · window room' },
+  { id: 'aimhead', name: 'Aim Headshot', desc: 'CS 1.6 BSP import · slit-wall aim arena' },
 ]

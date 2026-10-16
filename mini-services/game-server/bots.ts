@@ -86,6 +86,23 @@ const GRAPHS: Record<string, MapGraph> = {
       aSW: [23, -34],
     },
   }),
+  aimhead: buildGraph(MAPS.aimhead, {
+    // CT = west ledge (site A), T = east ledge (site B), mid = the shooting slits
+    aHold: ['w12_48_-100', 'w12_44_-100', 'w16_48_-132', 'w8_48_-100'],
+    bHold: ['w164_44_-132', 'w168_44_-132', 'w164_48_-132', 'w172_44_-132'],
+    midHold: ['w84_20_-164', 'w84_16_-164', 'w60_40_-132', 'w60_36_-132'],
+    aRoutes: [['w176_40_-100', 'w12_48_-100']],
+    bRoutes: [['w8_48_-100', 'w164_44_-132']],
+    tHoldA: 'w164_44_-132',
+    tHoldB: 'w12_48_-100',
+    plantA: 'w12_48_-100',
+    plantB: 'w164_44_-132',
+    watch: {
+      // CT holds face east (toward T), T holds face west
+      'w12_48_-100': [25, 0], 'w12_44_-100': [25, 0], 'w16_48_-132': [25, 0], 'w8_48_-100': [25, 0],
+      'w164_44_-132': [-25, 0], 'w168_44_-132': [-25, 0], 'w164_48_-132': [-25, 0], 'w172_44_-132': [-25, 0],
+    },
+  }),
 }
 
 function graphFor(m: Match): MapGraph {
