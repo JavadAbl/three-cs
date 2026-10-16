@@ -226,3 +226,17 @@ Work Log:
 Stage Summary:
 - Real CS:GO weapon sound pack re-integrated: 85 OGG samples, positional stereo panning, distance-attenuated distant variants, per-weapon reload/draw/empty sounds, dink, C4 voice, music stingers — with total synth fallback
 - Files: public/assets/sounds/ (85 ogg), src/game/audio.ts (rewrite), src/game/engine.ts, scripts/sfx/extract.sh (+ scripts/csgo-snd 18MB partial clone as reusable cache, untracked)
+
+---
+Task ID: 12
+Agent: Super Z (main agent)
+Task: push the project to the user's GitHub repo (JavadAbl/three-cs) as a progress backup, minus unused screenshots
+
+Work Log:
+- Cleaned the repo before push: removed 102 root-level VLM verification screenshots (40MB), download/ artifacts, and the scripts/csgo-snd nested-repo gitlink (clone hazard) — all now in .gitignore
+- History rewritten (filter-branch --index-filter --prune-empty) so the screenshot blobs are gone from every commit, not just HEAD; repo shrinks ~46MB -> ~6MB of real content
+- Dependencies preserved as spec files (package.json + bun.lock, mini-services/game-server/bun.lock + package.json) — node_modules is rebuilt with `bun install`, never pushed
+- Pushed main to https://github.com/JavadAbl/three-cs (empty fresh repo, fast-forward) using the user-provided fine-grained PAT in a one-off URL (token not stored in git config or commits)
+
+Stage Summary:
+- Full progress history (Tasks 1-11) with assets (weapon textures, sound pack) lives on GitHub at JavadAbl/three-cs — sandbox loss can no longer wipe the project
