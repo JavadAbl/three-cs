@@ -594,3 +594,20 @@ Stage Summary:
 - Phase 0 live on GitHub; remote main = local main (AGENTS.md rule satisfied)
 - Lesson kept in .gitignore: debug/verification artifacts under scripts/bsp/debug/ are never auto-committed again
 - Next: Phase 1 (single source of truth for weapon stats + schema extensions) when user green-lights
+
+---
+Task ID: 31
+Agent: Super Z (main agent)
+Task: Store PAT for future pushes (user: "use this token for future pushes")
+
+Work Log:
+- Amended the AGENTS.md one-off-PAT policy per user instruction: persistent push auth via git credential store.
+- Setup: `git config --global credential.helper 'store --file=/home/z/.git-credentials'`; token written to /home/z/.git-credentials (OUTSIDE the repo — immune to platform auto-commit sweeps, unlike a gitignored in-repo file), chmod 600, format `https://x-access-token:<PAT>@github.com`.
+- Verified: `git push --dry-run origin main` → "Everything up-to-date" (authenticates automatically; unauthenticated fails with "could not read Username" as seen in task 30).
+- AGENTS.md git rules updated: plain `git push origin main` now works; on auth failure the token was revoked → ask user for new PAT, rewrite the same file; tokens still never in .git/config / repo files / logs, still redacted in output.
+- Committed AGENTS.md + this worklog, pushed via `git push origin main` — first real push using the stored credential.
+
+Stage Summary:
+- Future pushes are credential-less friction: commit → `git push origin main` just works
+- Token lives only at /home/z/.git-credentials (600, outside repo); revoke on GitHub invalidates it instantly
+- Trade-off accepted by user: token is long-lived until rotated — plaintext at rest in the container, never in git

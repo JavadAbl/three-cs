@@ -29,11 +29,16 @@ sessions. When in doubt, ask the user — never assume an exception.
 
 - Never commit or push binaries (models/sounds/textures/map data) that the user
   has not explicitly accepted.
-- The user's GitHub PAT (when provided in chat) is used as a **one-off inline push
-  URL only** — never written to `.git/config`, files, or logs; redact it in any
-  output; expect the user to rotate it.
+- **Persistent push auth (user decision 2026-10-17)**: a PAT is stored in git's
+  credential store at `/home/z/.git-credentials` — OUTSIDE the repo, chmod 600,
+  never committed, never print/cat its contents. Plain `git push origin main`
+  authenticates automatically. If auth fails, the token was revoked/rotated:
+  ask the user for a new PAT and write it back in the same format
+  (`https://x-access-token:<PAT>@github.com`). Do NOT embed tokens in remote
+  URLs in `.git/config`, in repo files, or in logs; redact any token that
+  appears in command output.
 - Force-push only for a stated purpose (e.g. history purge) and never silently.
-- Keep remote `main` = local `main` when a PAT is available.
+- Keep remote `main` = local `main`: push when work is committed and verified.
 
 ## Runtime / ops
 
