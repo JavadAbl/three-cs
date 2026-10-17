@@ -12,6 +12,7 @@ import type { MapBuild } from './mapview'
 import { PlayerManager } from './players'
 import { Effects, buildBombMesh } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
+import { soldierState } from './glbmodels'
 import type { ViewModel } from './weaponmodels'
 import { audio } from './audio'
 
@@ -280,6 +281,8 @@ export class Engine {
     this.pm = new PlayerManager(this.scene, this.myTeam)
     // start weapon PBR texture downloads early so viewmodels never pop in mid-round
     preloadWeaponTextures()
+    // async GLB player models (procedural rig stays as fallback until ready)
+    this.pm.preloadModels()
 
     // debug/testing hook (harmless in production)
     if (typeof window !== 'undefined') {
@@ -298,8 +301,11 @@ export class Engine {
           rot: [Math.round(p.root.rotation.x * 100) / 100, Math.round(p.root.rotation.z * 100) / 100],
           vis: p.root.visible,
           gunParts: p.gunStub.children.length,
+          glb: !!p.glb, anim: p.glb ? p.glb.current : null,
         })),
         sock: () => this.socket,
+        glb: () => soldierState(),
+        upgrade: () => this.pm.upgradeAllNow(),
         meshWorld: (id: string) => {
           const p = this.pm.getById(id)
           if (!p) return null
@@ -313,6 +319,47 @@ export class Engine {
             }
           })
           return out
+        },
+        // live gun-in-hand offset tuning (GLB rig): __eng.gunTune(id, x,y,z, rx,ry,rz)
+        gunTune: (id: string, x?: number, y?: number, z?: number, rx?: number, ry?: number, rz?: number) => {
+          const p = this.pm.getById(id)
+          if (!p || !p.glb) return null
+          const rig = p.glb.gunRig
+          if (x !== undefined) rig.position.set(x, y ?? rig.position.y, z ?? rig.position.z)
+          if (rx !== undefined) rig.rotation.set(rx, ry ?? rig.rotation.y, rz ?? rig.rotation.z)
+          return { pos: rig.position.toArray(), rot: [rig.rotation.x, rig.rotation.y, rig.rotation.z] }
+        },
+        // world position + rotation of any named node under a player's root (GLB bones)
+        boneWorld: (id: string, name: string) => {
+          const p = this.pm.getById(id)
+          if (!p) return null
+          const node = p.root.getObjectByName(name) ?? p.root.getObjectByName(name.replace(/:/g, ''))
+          if (!node) return null
+          return {
+            pos: node.getWorldPosition(new THREE.Vector3()).toArray().map((v: number) => Math.round(v * 1000) / 1000),
+            rot: [node.rotation.x, node.rotation.y, node.rotation.z].map((v: number) => Math.round(v * 1000) / 1000),
+          }
+        },
+        // mixer internals: does time advance? what weights?
+        mixerInfo: (id: string) => {
+          const p = this.pm.getById(id)
+          if (!p || !p.glb) return null
+          const g = p.glb
+          return {
+            time: Math.round(g.mixer.time * 1000) / 1000,
+            current: g.current,
+            w: {
+              idle: Math.round(g.actions.idle.getEffectiveWeight() * 100) / 100,
+              walk: Math.round(g.actions.walk.getEffectiveWeight() * 100) / 100,
+              run: Math.round(g.actions.run.getEffectiveWeight() * 100) / 100,
+            },
+            playing: {
+              idle: g.actions.idle.isRunning(),
+              walk: g.actions.walk.isRunning(),
+              run: g.actions.run.isRunning(),
+            },
+            speed: Math.round(p.speed * 100) / 100,
+          }
         },
         sfx: () => audio.info(),
         setAmmo: (mag: number, reserve: number) => {

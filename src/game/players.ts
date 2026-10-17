@@ -1,8 +1,10 @@
-// Remote player rendering: articulated low-poly soldier + hitboxes + snapshot interpolation.
+// Remote player rendering: GLB Vanguard soldier (primary) + procedural fallback rig,
+// hitboxes + snapshot interpolation.
 // Model faces -Z at yaw 0 (same convention as the local camera).
 import * as THREE from 'three'
 import { soldierCamo, soldierVest, soldierFace } from './textures'
 import { buildRemoteGun } from './weaponmodels'
+import { preloadSoldier, soldierReady, createSoldier, type GlbInstance } from './glbmodels'
 import type { TeamId } from './weapons'
 
 export interface RemotePlayer {
@@ -28,8 +30,9 @@ export interface RemotePlayer {
   weapon: string
   hasBomb: boolean
   deathAt: number
-  // rig + animation state
-  rig: SoldierRig
+  // rig + animation state (GLB rig when loaded, procedural fallback otherwise)
+  rig: SoldierRig | null
+  glb: GlbInstance | null
   phase: number
   speed: number
   crouchT: number
@@ -109,8 +112,23 @@ function nameSpriteTex(name: string, team: TeamId): THREE.Texture {
   return t
 }
 
-/** Builds the articulated soldier. Feet at root origin, head center ~1.62 (matches hitboxes). */
-function buildSoldier(team: TeamId, id: string): { root: THREE.Group; rig: SoldierRig; hb: THREE.Mesh[] } {
+/** Invisible hitboxes (legacy dims: head sphere r .17 @1.62, body .62x.85x.42 @1.15, legs .5x.82x.36 @0.4). */
+function buildHitboxes(id: string): THREE.Mesh[] {
+  const hbMat = new THREE.MeshBasicMaterial({ visible: false })
+  const hbHead = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), hbMat)
+  hbHead.position.y = 1.62
+  hbHead.userData = { pid: id, part: 'head' }
+  const hbBody = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.85, 0.42), hbMat)
+  hbBody.position.y = 1.15
+  hbBody.userData = { pid: id, part: 'body' }
+  const hbLegs = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.82, 0.36), hbMat)
+  hbLegs.position.y = 0.4
+  hbLegs.userData = { pid: id, part: 'legs' }
+  return [hbHead, hbBody, hbLegs]
+}
+
+/** Builds the articulated procedural soldier rig (fallback). Feet at hips origin, head center ~1.62. */
+function buildSoldierRig(team: TeamId): SoldierRig {
   const camo = teamMat(`camo-${team}`, () => new THREE.MeshLambertMaterial({ map: soldierCamo(team) }))
   const vest = teamMat(`vest-${team}`, () => new THREE.MeshLambertMaterial({ map: soldierVest(team) }))
   const sideMats = [camo, camo, camo, camo, camo, vest] // +x,-x,+y,-y,+z(back),-z(FRONT)
@@ -139,10 +157,8 @@ function buildSoldier(team: TeamId, id: string): { root: THREE.Group; rig: Soldi
   }
   const bootMat = teamMat('boot', () => new THREE.MeshLambertMaterial({ color: 0x241d18 }))
 
-  const root = new THREE.Group()
   const hips = new THREE.Group()
   hips.position.y = HIPS_STAND
-  root.add(hips)
 
   // ---- torso
   const torso = new THREE.Group()
@@ -226,26 +242,13 @@ function buildSoldier(team: TeamId, id: string): { root: THREE.Group; rig: Soldi
 
   for (const m of [torsoMesh, vestMesh, headMesh, helmet, ...pouches, lR.thigh.children[0] as THREE.Mesh, lL.thigh.children[0] as THREE.Mesh, lR.calf.children[0] as THREE.Mesh, lL.calf.children[0] as THREE.Mesh]) m.castShadow = true
 
-  // ---- invisible hitboxes (legacy dims: head sphere r .17 @1.62, body .62x.85x.42 @1.15, legs .5x.82x.36 @0.4)
-  const hbMat = new THREE.MeshBasicMaterial({ visible: false })
-  const hbHead = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), hbMat)
-  hbHead.position.y = 1.62
-  hbHead.userData = { pid: id, part: 'head' }
-  const hbBody = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.85, 0.42), hbMat)
-  hbBody.position.y = 1.15
-  hbBody.userData = { pid: id, part: 'body' }
-  const hbLegs = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.82, 0.36), hbMat)
-  hbLegs.position.y = 0.4
-  hbLegs.userData = { pid: id, part: 'legs' }
-  root.add(hbHead, hbBody, hbLegs)
-
   const rig: SoldierRig = {
     hips, torso, head,
     armL: aL.upper, armR: aR.upper, foreL: aL.fore, foreR: aR.fore,
     thighL: lL.thigh, thighR: lR.thigh, calfL: lL.calf, calfR: lR.calf,
     bootL: lL.boot, bootR: lR.boot, gunRig, c4,
   }
-  return { root, rig, hb: [hbHead, hbBody, hbLegs] }
+  return rig
 }
 
 export class PlayerManager {
@@ -260,11 +263,59 @@ export class PlayerManager {
 
   setMyTeam(t: TeamId) { this.myTeam = t }
 
+  /** kick off the GLB asset load; upgrades existing procedural players once ready */
+  preloadModels(): void {
+    void preloadSoldier().then(() => {
+      if (!soldierReady()) return
+      for (const p of this.players.values()) {
+        if (!p.glb && p.rig) this.upgradeToGlb(p)
+      }
+    })
+  }
+
+  private upgradeToGlb(p: RemotePlayer) {
+    const rig = p.rig
+    if (!rig) return
+    const glb = createSoldier(p.team)
+    p.rig = null
+    p.glb = glb
+    p.root.remove(rig.hips)
+    rig.gunRig.remove(p.gunStub)
+    glb.gunRig.add(p.gunStub)
+    p.root.add(glb.model)
+  }
+
+  /** debug/E2E: force-upgrade all procedural players now; returns per-player errors */
+  upgradeAllNow(): Array<{ id: string; ok: boolean; err?: string }> {
+    const out: Array<{ id: string; ok: boolean; err?: string }> = []
+    for (const p of this.players.values()) {
+      if (p.glb || !p.rig) { out.push({ id: p.id, ok: true }); continue }
+      try {
+        this.upgradeToGlb(p)
+        out.push({ id: p.id, ok: !!p.glb })
+      } catch (e) {
+        out.push({ id: p.id, ok: false, err: String(e) })
+      }
+    }
+    return out
+  }
+
   getOrCreate(id: string, name: string, team: TeamId, bot: boolean): RemotePlayer {
     let p = this.players.get(id)
     if (p) return p
-    const built = buildSoldier(team, id)
-    const root = built.root
+    const root = new THREE.Group()
+    const hb = buildHitboxes(id)
+    root.add(hb[0], hb[1], hb[2])
+
+    let rig: SoldierRig | null = null
+    let glb: GlbInstance | null = null
+    if (soldierReady()) {
+      glb = createSoldier(team)
+      root.add(glb.model)
+    } else {
+      rig = buildSoldierRig(team)
+      root.add(rig.hips)
+    }
 
     // nametag only for teammates
     let sprite: THREE.Sprite | null = null
@@ -277,16 +328,16 @@ export class PlayerManager {
     }
 
     const gunStub = buildRemoteGun('knife')
-    built.rig.gunRig.add(gunStub)
+    ;(glb ? glb.gunRig : rig!.gunRig).add(gunStub)
 
     this.scene.add(root)
     p = {
       id, name, team, bot, alive: true, hp: 100,
       root, gunStub, nameSprite: sprite,
-      hbHead: built.hb[0], hbBody: built.hb[1], hbLegs: built.hb[2],
+      hbHead: hb[0], hbBody: hb[1], hbLegs: hb[2],
       buf: [], kills: 0, deaths: 0, money: 0, weapon: 'knife', hasBomb: false,
       deathAt: 0,
-      rig: built.rig,
+      rig, glb,
       phase: Math.random() * Math.PI * 2, speed: 0, crouchT: 0,
       lastX: 0, lastZ: 0, lastT: 0,
       fallAxis: Math.random() < 0.55 ? 'x' : 'z',
@@ -308,9 +359,10 @@ export class PlayerManager {
     const p = this.players.get(id)
     if (!p || p.weapon === weapon) return
     p.weapon = weapon
-    p.rig.gunRig.remove(p.gunStub)
+    const parent = p.glb ? p.glb.gunRig : p.rig!.gunRig
+    parent.remove(p.gunStub)
     p.gunStub = buildRemoteGun(weapon)
-    p.rig.gunRig.add(p.gunStub)
+    parent.add(p.gunStub)
   }
 
   pushSnapshot(id: string, t: number, x: number, y: number, z: number, yaw: number, pitch: number, crouch: boolean) {
@@ -347,7 +399,8 @@ export class PlayerManager {
 
       p.root.position.set(x, y, z)
       p.root.rotation.y = yaw
-      const r = p.rig
+      const r = p.rig      // procedural fallback rig (null once the GLB rig is in)
+      const g = p.glb      // GLB Vanguard rig (null until the asset loads)
 
       // dt + horizontal speed for the walk cycle
       const dt = Math.min(0.1, Math.max(0.001, (renderT - p.lastT) / 1000))
@@ -371,6 +424,9 @@ export class PlayerManager {
         p.root.rotation.x = 0
         p.root.rotation.z = 0
 
+        if (g) {
+          this.driveGlb(g, dt, p.speed, pitch, ct)
+        } else if (r) {
         // hips height + double-step bob
         r.hips.position.y = lerp(HIPS_STAND, HIPS_CROUCH, ct) + Math.sin(p.phase * 2) * 0.024 * wa
 
@@ -401,6 +457,7 @@ export class PlayerManager {
         r.head.rotation.y = Math.sin(now * 0.0011) * 0.03 * (1 - amp)
         r.gunRig.rotation.x = 0.02 + pitch - r.torso.rotation.x * 0.85
         r.gunRig.position.y = GUN_LOCAL.y - 0.30 * ct + Math.sin(p.phase * 2) * 0.006 * wa
+        }
 
         // hitboxes: legacy positions, crouch-scaled
         p.hbHead.position.y = lerp(1.62, 1.10, ct)
@@ -410,7 +467,8 @@ export class PlayerManager {
         p.hbBody.visible = true
         p.hbLegs.visible = true
 
-        r.c4.visible = p.hasBomb
+        const c4 = g ? g.c4 : r!.c4
+        c4.visible = p.hasBomb
         if (p.nameSprite) p.nameSprite.visible = true
       } else {
         // death: tip over around the feet, ease out over 0.55 s
@@ -419,6 +477,11 @@ export class PlayerManager {
         const rot = 1.52 * easeOutCubic(t) * p.fallSign
         if (p.fallAxis === 'x') { p.root.rotation.x = rot; p.root.rotation.z = 0 } else { p.root.rotation.z = rot; p.root.rotation.x = 0 }
         p.root.position.y = y + 0.04 * t
+        if (g) {
+          // GLB rig: freeze in the death-moment pose — do NOT stopAllAction()
+          // (stopping restores raw bind-state bone values that mismatch the skin and collapse the mesh)
+          g.wasAlive = false
+        } else if (r) {
         // limp limbs
         r.hips.position.y = lerp(HIPS_STAND, 0.72, t)
         r.torso.rotation.x = 0.10
@@ -432,11 +495,58 @@ export class PlayerManager {
         r.calfR.rotation.x = -0.35 * t
         r.calfL.rotation.x = -0.15 * t
         r.gunRig.rotation.x = 0.3 * t
+        }
         if (p.nameSprite) p.nameSprite.visible = false
         p.hbHead.visible = false
         p.hbBody.visible = false
         p.hbLegs.visible = false
       }
+    }
+  }
+
+  /** GLB rig: Idle/Walk/Run manual weight blending from live speed + post-mixer aim-pitch/crouch bone overrides. */
+  private driveGlb(g: GlbInstance, dt: number, speed: number, pitch: number, ct: number) {
+    if (!g.wasAlive) {
+      // respawned: just reset the blend (actions kept running, bones were frozen mid-pose while dead)
+      g.wasAlive = true
+      g.current = 'idle'
+      g.weights = { idle: 1, walk: 0, run: 0 }
+    }
+    g.mixer.update(dt)
+
+    // clip choice from live speed — with hysteresis so speed jitter never flaps the selection
+    let want: 'idle' | 'walk' | 'run'
+    if (g.current === 'idle') want = speed > 0.9 ? (speed > 4.3 ? 'run' : 'walk') : 'idle'
+    else if (g.current === 'walk') want = speed < 0.5 ? 'idle' : (speed > 4.3 ? 'run' : 'walk')
+    else want = speed < 3.4 ? (speed < 0.5 ? 'idle' : 'walk') : 'run'
+    g.current = want
+
+    // manual blend weights: exponential approach to the target (frame-rate independent, no mixer fades)
+    const k = Math.min(1, dt * 9)
+    g.weights.idle += ((want === 'idle' ? 1 : 0) - g.weights.idle) * k
+    g.weights.walk += ((want === 'walk' ? 1 : 0) - g.weights.walk) * k
+    g.weights.run += ((want === 'run' ? 1 : 0) - g.weights.run) * k
+    g.actions.idle.setEffectiveWeight(g.weights.idle)
+    g.actions.walk.setEffectiveWeight(g.weights.walk)
+    g.actions.run.setEffectiveWeight(g.weights.run)
+
+    // clip playback rate tracks the real speed (walk ~1.55 m/s, run ~4.2 m/s natural)
+    if (g.weights.walk > 0.01) g.actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 1.55, 0.65, 1.7))
+    if (g.weights.run > 0.01) g.actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 4.2, 0.7, 1.5))
+
+    // post-mixer additive overrides (mixer writes the clip pose first, these stack on top)
+    const b = g.bones
+    b.spine.rotation.x += pitch * 0.22
+    b.spine1.rotation.x += pitch * 0.22 + 0.2 * ct
+    b.spine2.rotation.x += pitch * 0.18
+    b.neck.rotation.x += pitch * 0.18
+    b.head.rotation.x += pitch * 0.2
+    if (ct > 0.01) {
+      b.hips.position.y -= 0.44 * ct
+      b.thighR.rotation.x += 1.0 * ct
+      b.thighL.rotation.x += 0.95 * ct
+      b.calfR.rotation.x -= 1.75 * ct
+      b.calfL.rotation.x -= 1.7 * ct
     }
   }
 
