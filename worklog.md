@@ -576,3 +576,21 @@ Stage Summary:
 - BUY_ENTRIES + GEAR + WeaponCategory now exist in BOTH tables (kept byte-identical; test-buymenu guards the sync until Phase 1 unifies)
 - Bots/server buy logic untouched (server still special-cases gear by id — Phase 1/8 will formalize); no gameplay/balance change
 - Ready for Phase 1 (single source of truth + schema extensions: fireMode/burst, pellets, scopeLevels, suppressed, throwable)
+
+---
+Task ID: 30
+Agent: Super Z (main agent)
+Task: Push Phase 0 commit to remote main (user: "push phase 0 commit")
+
+Work Log:
+- Found local main 9 commits ahead of origin/main, tree clean, Phase 0 = 884091b (already verified in task 29: 31/31 buymenu + 4/4 aimhead + 3/3 bugfixes + tsc clean).
+- Problem en route: a platform auto-commit (285e4f6, UUID message) had swept the 9 Phase-0 VLM debug screenshots (scripts/bsp/debug/buymenu-*.png, ~2.2MB) that task 29 deliberately left untracked — violates AGENTS.md "never push unreviewed binaries".
+- Fix: git reset --mixed 884091b (PNGs back to untracked, still on disk); added /scripts/bsp/debug/ to .gitignore so future platform sweeps skip debug output; committed as 1ae8695.
+- First push attempt hit the expected auth wall (fatal: could not read Username — no stored credentials by design); user supplied a fresh PAT in chat, used as a one-off inline push URL per AGENTS.md hygiene rules (never written to config/files/logs; user rotates after).
+- Pushed main → origin (github.com/JavadAbl/three-cs.git): all 10 queued commits incl. asset policy v3 (0046a46), AGENTS.md (a10fc2f), WEAPONS_PLAN.md (5e201ef), Phase 0 (884091b), .gitignore sweep-guard (1ae8695) and this worklog.
+- Post-push verified: remote main == local main, working tree clean, debug PNGs still on disk but ignored.
+
+Stage Summary:
+- Phase 0 live on GitHub; remote main = local main (AGENTS.md rule satisfied)
+- Lesson kept in .gitignore: debug/verification artifacts under scripts/bsp/debug/ are never auto-committed again
+- Next: Phase 1 (single source of truth for weapon stats + schema extensions) when user green-lights
