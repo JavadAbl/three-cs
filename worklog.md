@@ -541,3 +541,17 @@ Work Log:
 
 Stage Summary:
 - Rules now durable in AGENTS.md — any future session, tool, or contributor that reads repo root discovers the standing rules without depending on this worklog or chat context
+
+---
+Task ID: 28
+Agent: Super Z (main agent)
+Task: user ordered "long multi-phase plan for creating all weapons + CS 1.6 category-based buy menu"
+
+Work Log:
+- Grounded the plan in the actual architecture: inspected WeaponDef schema (slot/price/damage/fireDelay/mag/armorPen/falloff/auto/scope...), the DUPLICATED client/server stat tables (src/game/weapons.ts vs mini-services/game-server/weapons.ts), the flat BUY_ITEMS buy menu in hud.tsx, procedural per-weapon viewmodel builders (weaponmodels.ts buildX families), hardcoded bot buy ladder (bots.ts), audio.ts per-weapon name tables, and raw pack inventory (~1,100 files covering all CS:GO weapons).
+- Wrote WEAPONS_PLAN.md (repo root, committed+pushed): 10 phases — 0: CS 1.6 category buy menu (numbered 1-6 keyboard nav, team greys, affordability states, BUY_ITEMS dissolves into WEAPONS grouped by category; ammo-buy intentionally omitted per modern CS); 1: single source of truth for stats (shared module or generator — kills the duplication before 41 weapons make it drift) + schema extensions (fireMode/burst, pellets, scopeLevels, suppressed, throwable); 2: data-driven audio map + stage ALL new-weapon samples per policy v3; 3-7: weapons by class (pistols 8 → SMGs 6 → rifles 8 incl. burst-fire validation + scope levels + M4A1-S suppressed pairing → shotguns 4 incl. server multi-pellet N-ray ballistics → MGs 2); 8: grenades/equipment XL phase (server projectile entities w/ bounce physics, HE radial LOS damage, flash w/ bot blind timers, smoke volumes affecting server LOS + bot vision, molotov DoT, decoy stretch, defuse kit; splittable 8a/b/c); 9: balance/economy pass, per-class kill rewards, data-driven E2E loops, 1.6-style procedural weapon icons, final staged-asset acceptance sweep.
+- Cross-cutting rules section: policy v3 compliance, one-stat-source, server authority per mechanic, verification bar per phase, bots learn weapons same phase, source-only phase commits.
+
+Stage Summary:
+- WEAPONS_PLAN.md = the canonical roadmap for the full 41-weapon roster; phase 0 (buy menu) is the foundation and can start immediately; each phase independently shippable/verifiable; grenade phase is the big systems branch (entities + LOS interplay)
+- Nothing implemented yet — plan only, awaiting user's phase order/go-ahead
