@@ -509,3 +509,22 @@ Stage Summary:
 - Remote fully purged of the 7.6MB human.glb: remote main = af9f2ab (binary-free), blob unreachable on remote refs; local object store also GC'd (pack 10.17 MiB)
 - Token security: used once inline for push only, zero persistence anywhere; user advised to ROTATE/REVOKE it since it was pasted in plaintext chat
 - Open optional items: Soldier.glb history rewrite (2.1 MiB reclaim, needs git-filter-repo + force-push), dead-code removal commit, GitHub-side hard GC via support request
+
+---
+Task ID: 26
+Agent: Super Z (main agent)
+Task: user requested staging-based asset policy — "ignore staging folder instead, after submitted move them to assets" (public/assets = committed running assets)
+
+Work Log:
+- INSPECTED pending set: git status --ignored under public/assets → human.glb (LIVE, model in use), 48 .ogg sounds (STALE — naming convention ak47_magin/bomb_beep/dry_pistol matches NO name in audio.ts FILES list = leftovers of the abandoned pack variant), 5 skin files ak47/awp/deagle.png+skins.json (consumer weaponskins.ts = dead code, zero importers), debug-top dumps (separate rule, kept).
+- RESTRUCTURED to policy v3: created public/staging/{models,sounds,textures/weapons} (web-served, gitignored via /public/staging/); moved all pending binaries there; REMOVED all per-category ignore rules (models/*, sounds/*, textures/*, geom/*, maps/*/* + their !exceptions) so public/assets/ = normal tracked content; gitignore documents the v3 flow; /assets/ (raw packs), /upload/, tmp/ unchanged.
+- CODE: api/assets/human route now resolves STAGED path first (staging WINS while present = new-version evaluation always live; accepted fallback; module cache documented — touch route to re-read after replacing); audio.ts loadSound: /assets/sounds/ first, /staging/sounds/ retry, then synth (steady state = zero extra requests; loader rewritten from promise-chain to async loop); usermodel/weaponskins comments; test-user-glb.ts default path resolves staging→accepted; 404 hint text updated.
+- DOCS: models/README.md rewritten (lifecycle: pending → accept via mv+git add → revoke via rm --cached), textures/weapons/README.md updated + NOW COMMITTED (was ignored-untracked forever), DEPLOY.md tech notes updated.
+- VERIFIED: tsc clean (src + mini-services; pre-existing errors only in scripts/, untouched); POST /api/assets/human = 200 7593644B from STAGING (hot-reloaded route); /staging/sounds/x.ogg = 200, /assets/sounds/ak47_fire.ogg = 200, staging-miss = 404→fallback; E2E test-aimhead 4/4 + test-bugfixes 3/3 PASS; browser (:81): one POST /api/assets/human 200 in lobby, PLAY → model=READY players=9/9 onRig=9; VLM close-up (teleported next to live T): detailed humanoid, tactical gear, limbs attached, no glitches. NOTE: QUICK PLAY is just the tab — the deploy button is "▶ PLAY" (cost me 3 confused clicks).
+- ACCEPTANCE COMMAND (for future sessions, when user OKs an asset): mv public/staging/<x> public/assets/<x> && git add public/assets/<x> — NO -f flag, no ignore rules to fight.
+- Committed 0046a46, pushed via one-off PAT URL (token inline only, redacted in output/logs; never persisted). Remote main = 0046a46 = local.
+
+Stage Summary:
+- Asset-acceptance policy v3 live: public/assets/ = accepted committed running assets (normal git, no ignores); public/staging/ = gitignored web-served evaluation area; loaders fall back /assets→/staging (model route: staging wins for live evaluation); acceptance = plain mv + git add (no -f)
+- All pending binaries relocated to staging; the game runs the model from staging RIGHT NOW (verified end-to-end); revocation of the old ignore-rule system is complete
+- The 48 stale ogg + 5 dormant skin files sit in staging unreferenced — candidates for deletion on user's word (kept: policy = never delete user files unasked)
