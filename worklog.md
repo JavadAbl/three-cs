@@ -611,3 +611,19 @@ Stage Summary:
 - Future pushes are credential-less friction: commit → `git push origin main` just works
 - Token lives only at /home/z/.git-credentials (600, outside repo); revoke on GitHub invalidates it instantly
 - Trade-off accepted by user: token is long-lived until rotated — plaintext at rest in the container, never in git
+
+---
+Task ID: 32
+Agent: Super Z (main agent)
+Task: Align repo with user's push-content rule: "no screenshots, no downloaded/uploaded/staged contents, only production assets"
+
+Work Log:
+- Audited tracked binaries: 106 in public/assets (production, correct) + 11 legacy strays outside it — 4 debug PNGs in scripts/bsp/debug/ (floormap/x-sections, predates ignore rule; .gitignore doesn't untrack already-tracked files) + 7 AI-gen raw textures in scripts/texgen/raw/ (inputs to process.py; production outputs already committed as public/assets/textures/weapons/*.jpg; raws regenerable via gen.sh).
+- Fix: git rm --cached all 11 (files stay on disk for local re-runs); added /scripts/texgen/raw/ to .gitignore (bsp/debug already ignored in task 30).
+- Rule→mechanism mapping now airtight: screenshots → /shot-*.png + /scripts/bsp/debug/ ignored; downloaded → /download/ + /assets/ + /scripts/csgo-snd/ + /scripts/sfx/wav/ + /scripts/texgen/raw/ ignored; uploaded → /upload/ ignored; staged → /public/staging/ ignored; production → public/assets/ committed, entry requires explicit user acceptance (AGENTS.md policy v3).
+- Verified post-fix: tracked binaries exist ONLY under public/assets/; tree clean; pushed via stored credential.
+
+Stage Summary:
+- Remote now carries exactly: source + production assets — nothing else
+- Gotcha for future sessions: adding an ignore rule does NOT untrack already-tracked files; run git rm --cached for legacy strays
+- User's 3-line rule is the canonical summary of AGENTS.md asset policy v3

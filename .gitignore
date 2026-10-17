@@ -55,6 +55,8 @@ server.log
 # verification screenshots + local caches (not part of the project)
 /shot-*.png
 /scripts/bsp/debug/
+# AI-gen raw texture sources (downloaded/intermediate — production jpgs live in public/assets/textures; raws regenerable via texgen/gen.sh)
+/scripts/texgen/raw/
 /download/
 /scripts/csgo-snd/
 /scripts/sfx/wav/
