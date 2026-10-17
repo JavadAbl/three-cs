@@ -58,3 +58,8 @@ server.log
 /scripts/csgo-snd/
 /scripts/sfx/wav/
 tool-results/
+# raw user uploads + local-only artifacts (never push — repo carries only running assets)
+/upload/
+/tehran_game.json
+.zscripts/*.pid
+public/assets/maps/*/debug-top.*
