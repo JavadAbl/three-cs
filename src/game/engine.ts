@@ -293,11 +293,27 @@ export class Engine {
         reload: () => this.tryReload(),
         fire: () => this.tryFire(),
         players: () => [...this.pm.players.values()].map(p => ({
-          id: p.id.slice(0, 6), team: p.team, w: p.weapon, alive: p.alive,
-          pos: p.root.position.toArray().map((v: number) => Math.round(v)),
+          id: p.id, team: p.team, w: p.weapon, alive: p.alive,
+          pos: p.root.position.toArray().map((v: number) => Math.round(v * 100) / 100),
+          rot: [Math.round(p.root.rotation.x * 100) / 100, Math.round(p.root.rotation.z * 100) / 100],
+          vis: p.root.visible,
           gunParts: p.gunStub.children.length,
         })),
         sock: () => this.socket,
+        meshWorld: (id: string) => {
+          const p = this.pm.getById(id)
+          if (!p) return null
+          const out: Record<string, number[]> = { root: p.root.position.toArray().map((v: number) => Math.round(v * 100) / 100) }
+          let i = 0
+          p.root.traverse(o => {
+            const m = o as THREE.Mesh
+            if (m.isMesh && i < 10) {
+              out['m' + i + (m.visible === false ? '_HID' : '')] = m.getWorldPosition(new THREE.Vector3()).toArray().map((v: number) => Math.round(v * 100) / 100)
+              i++
+            }
+          })
+          return out
+        },
         sfx: () => audio.info(),
         setAmmo: (mag: number, reserve: number) => {
           const w = this.inventory[this.wIdx]

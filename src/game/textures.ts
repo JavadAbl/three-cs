@@ -763,19 +763,120 @@ export function siteDecal(letter: 'A' | 'B'): THREE.Mesh {
   return m
 }
 
-// remote player body texture with team color tint
-export function bodyTexture(team: 'CT' | 'T'): THREE.Texture {
-  const [c, ctx] = makeCanvas(128, 128)
-  const base = team === 'CT' ? '#5b7f9e' : '#b08d57'
-  ctx.fillStyle = base
+// ---------------- soldier (remote player) textures ----------------
+// Procedural CS-style operator skins: camo fabric, chest rig, face.
+
+const soldierTexCache = new Map<string, THREE.Texture>()
+
+const CAMO: Record<'CT' | 'T', { base: string; blobs: string[] }> = {
+  CT: { base: '#47535e', blobs: ['#333c44', '#5a6a77', '#2a3138'] },   // urban blue-grey
+  T: { base: '#8f7a4e', blobs: ['#75623c', '#a3905f', '#5f4f33'] },    // desert tan
+}
+
+function blob(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, rot: number, color: string) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot)
+  ctx.fillStyle = color
+  ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
+}
+
+function camoBase(ctx: CanvasRenderingContext2D, team: 'CT' | 'T', seed: number) {
+  const pal = CAMO[team]
+  ctx.fillStyle = pal.base
   ctx.fillRect(0, 0, 128, 128)
-  ctx.fillStyle = 'rgba(30,30,30,0.55)'
-  ctx.fillRect(0, 24, 128, 10)
-  ctx.fillRect(0, 84, 128, 10)
-  ctx.fillRect(54, 0, 12, 128)
-  grain(ctx, 128, 128, 5, 800, 0.1)
+  let s = seed
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647
+  for (let i = 0; i < 30; i++) {
+    blob(ctx, rnd() * 128, rnd() * 128, 6 + rnd() * 15, 4 + rnd() * 9, rnd() * Math.PI, pal.blobs[i % 3])
+  }
+  grain(ctx, 128, 128, 4, 400, 0.07)
+}
+
+/** camo fabric — torso sides/back, sleeves, thighs */
+export function soldierCamo(team: 'CT' | 'T'): THREE.Texture {
+  const key = `camo-${team}`
+  const hit = soldierTexCache.get(key)
+  if (hit) return hit
+  const [c, ctx] = makeCanvas(128, 128)
+  camoBase(ctx, team, team === 'CT' ? 7 : 13)
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
+  soldierTexCache.set(key, t)
+  return t
+}
+
+/** torso FRONT: camo + tactical vest, mag pouches, radio, belt */
+export function soldierVest(team: 'CT' | 'T'): THREE.Texture {
+  const key = `vest-${team}`
+  const hit = soldierTexCache.get(key)
+  if (hit) return hit
+  const [c, ctx] = makeCanvas(128, 128)
+  camoBase(ctx, team, team === 'CT' ? 23 : 41)
+  // shoulder straps
+  ctx.fillStyle = '#1f2225'
+  ctx.fillRect(10, 6, 26, 16); ctx.fillRect(92, 6, 26, 16)
+  // vest plate
+  ctx.fillStyle = '#26292d'
+  ctx.fillRect(14, 20, 100, 56)
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 2
+  ctx.strokeRect(15, 21, 98, 54)
+  // 3 mag pouches
+  for (let i = 0; i < 3; i++) {
+    const x = 24 + i * 28
+    ctx.fillStyle = '#3b4147'; ctx.fillRect(x, 42, 22, 26)
+    ctx.fillStyle = '#2c3136'; ctx.fillRect(x, 42, 22, 9)
+    ctx.fillStyle = '#151719'; ctx.fillRect(x + 9, 46, 4, 3)
+  }
+  // radio + antenna on right chest
+  ctx.fillStyle = '#202329'; ctx.fillRect(102, 28, 12, 18)
+  ctx.fillStyle = '#0d8a3d'; ctx.fillRect(106, 31, 2, 2)
+  ctx.strokeStyle = '#111'; ctx.beginPath(); ctx.moveTo(108, 28); ctx.lineTo(106, 14); ctx.stroke()
+  // admin pouch left
+  ctx.fillStyle = '#33383d'; ctx.fillRect(18, 42, 12, 16)
+  // belt
+  ctx.fillStyle = '#1b1e21'; ctx.fillRect(0, 82, 128, 14)
+  ctx.fillStyle = '#4a4f55'; ctx.fillRect(58, 84, 12, 10)
+  grain(ctx, 128, 128, 9, 350, 0.08)
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  soldierTexCache.set(key, t)
+  return t
+}
+
+/** face — balaclava with eye slit; CT navy, T sand */
+export function soldierFace(team: 'CT' | 'T'): THREE.Texture {
+  const key = `face-${team}`
+  const hit = soldierTexCache.get(key)
+  if (hit) return hit
+  const [c, ctx] = makeCanvas(64, 64)
+  const mask = team === 'CT' ? '#2c333d' : '#7d6a4a'
+  const skin = team === 'CT' ? '#c9a17c' : '#b58a63'
+  ctx.fillStyle = mask
+  ctx.fillRect(0, 0, 64, 64)
+  grain(ctx, 64, 64, 5, 260, 0.1)
+  // eye slit
+  ctx.fillStyle = skin
+  ctx.fillRect(10, 24, 44, 14)
+  // war paint stripes across the slit
+  ctx.fillStyle = 'rgba(30,25,20,0.45)'
+  ctx.fillRect(14, 24, 3, 14); ctx.fillRect(30, 24, 4, 14); ctx.fillRect(46, 24, 3, 14)
+  // brows
+  ctx.fillStyle = '#1a1613'
+  ctx.fillRect(12, 22, 16, 4); ctx.fillRect(36, 22, 16, 4)
+  // eyes
+  ctx.fillStyle = '#e8e4dc'
+  ctx.fillRect(16, 29, 10, 6); ctx.fillRect(38, 29, 10, 6)
+  ctx.fillStyle = '#20140a'
+  ctx.fillRect(20, 30, 4, 4); ctx.fillRect(42, 30, 4, 4)
+  // mouth hint (T mask has a breathing slit)
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'
+  ctx.fillRect(26, 48, 12, 3)
+  // helmet shadow at top
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'
+  ctx.fillRect(0, 0, 64, 8)
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  soldierTexCache.set(key, t)
   return t
 }
 
