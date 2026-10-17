@@ -87,20 +87,21 @@ const GRAPHS: Record<string, MapGraph> = {
     },
   }),
   aimhead: buildGraph(MAPS.aimhead, {
-    // CT = west ledge (site A), T = east ledge (site B), mid = the shooting slits
-    aHold: ['w12_48_-100', 'w12_44_-100', 'w16_48_-132', 'w8_48_-100'],
-    bHold: ['w164_44_-132', 'w168_44_-132', 'w164_48_-132', 'w172_44_-132'],
-    midHold: ['w84_20_-164', 'w84_16_-164', 'w60_40_-132', 'w60_36_-132'],
-    aRoutes: [['w176_40_-100', 'w12_48_-100']],
-    bRoutes: [['w8_48_-100', 'w164_44_-132']],
-    tHoldA: 'w164_44_-132',
-    tHoldB: 'w12_48_-100',
-    plantA: 'w12_48_-100',
-    plantB: 'w164_44_-132',
+    // v2 face-driven conversion: CT west terrace (site A), T east terrace (site B), mid = valley
+    aHold: ['ah111', 'ah927', 'ah926', 'ah112'],
+    bHold: ['ah854', 'ah444', 'ah443', 'ah850'],
+    midHold: ['ah323', 'ah1138', 'ah237', 'ah1100'],
+    aRoutes: [['ah854', 'ah111']],
+    bRoutes: [['ah111', 'ah854']],
+    tHoldA: 'ah854',
+    tHoldB: 'ah111',
+    plantA: 'ah111',
+    plantB: 'ah854',
     watch: {
       // CT holds face east (toward T), T holds face west
-      'w12_48_-100': [25, 0], 'w12_44_-100': [25, 0], 'w16_48_-132': [25, 0], 'w8_48_-100': [25, 0],
-      'w164_44_-132': [-25, 0], 'w168_44_-132': [-25, 0], 'w164_48_-132': [-25, 0], 'w172_44_-132': [-25, 0],
+      ah111: [25, 0], ah927: [25, 0], ah926: [25, 0], ah112: [25, 0],
+      ah854: [-25, 0], ah444: [-25, 0], ah443: [-25, 0], ah850: [-25, 0],
+      ah323: [25, 0], ah1138: [-25, 0], ah237: [25, 0], ah1100: [-25, 0],
     },
   }),
 }

@@ -1144,8 +1144,10 @@ export class Engine {
         }
       }
     }
-    if (this.pos.y < -6) { // failsafe
-      this.pos.set(0, 2, 40); this.vel.set(0, 0, 0); this.eyeY = 2
+    if (this.pos.y < -6) { // failsafe — recover to this map's CT spawn (never a foreign-map coord)
+      const s = this.mapDef?.spawns?.CT?.[0]
+      if (s) { this.pos.set(s.x, s.y + 0.1, s.z) } else { this.pos.set(0, 2, 0) }
+      this.vel.set(0, 0, 0); this.eyeY = this.pos.y + 1.6
     }
 
     // footsteps

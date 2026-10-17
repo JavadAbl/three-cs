@@ -272,3 +272,30 @@ Work Log:
 
 Stage Summary:
 - aim_headshot (CS 1.6) fully playable: real BSP geometry renders, voxel collision+LOS, bots path through slits, terraced floors. Pipeline reusable for future BSP maps (user provides .bsp → convert → play)
+
+---
+Task ID: 15
+Agent: Super Z (main agent)
+Task: fix "character falls out of the terrain" on aim_headshot (BSP-converted map)
+
+Work Log:
+- Reproduced with scripts/bsp/diagnose-fall.ts (client-physics sim at each spawn): 0/20 spawns landed, floor coverage 11.4%, main floor had NO collision boxes at all
+- ROOT CAUSES (3 compounding bugs in task-14's converter):
+  1. scripts/bsp/convert.ts read face numedges as getUint16(o, 8, true) instead of getUint16(o + 8, true) → numedges = planenum → every face triangulated as polygon soup (88k garbage tris; also tsc had flagged this 3-arg call)
+  2. collision was voxelized from the BSP node/leaf contents oracle; this ripped map's grid-aligned brush planes sit exactly at voxel sample points which resolve to the empty side → floor solidity striped/missing
+  3. spawns used the same broken oracle → placed on phantom floors ~5 m BELOW the visible terrain (players spawned inside the void and fell)
+- integrity audit proved the FACES are healthy (1197/1197 on-plane, ≤16 edges); model 1 = corrupt func_wall ring at z 384..448 (excluded)
+- scripts/bsp/convert2.ts — complete face-driven rewrite (no node oracle anywhere):
+  - fixed numedges parse; render = exact face fan triangulation (2253 tris, 6 tex groups)
+  - collision: per-face extrusion — floors exact-top extruded 32u down, ceilings up, walls 32u into solid, 31° ramps as 16u staircase strips (0.24 m steps ≤ STEP_UP), octagon corner-cut diagonals as small AABBs; band-chain merge → 348 boxes
+  - spawns: spiral over real floor polygons + headroom check (CT/T both on the -96 terraces, y 2.45)
+  - waypoints: 1298 sampled from floor polygons + surface-strip boxes (playable z ≤ 240), 8268 edges; CT→T reachable in 20 hops via valley (verified by BFS)
+  - bounds from floor-face extents (±48u); sites at spawn centroids
+- bots.ts GRAPHS.aimhead updated to new waypoint ids (ah111/ah854 holds etc.)
+- engine.ts fall failsafe: recover to this map's CT spawn instead of hardcoded dust coordinate (0,2,40)
+- game-server restarted daemonized (setsid -f)
+
+Stage Summary:
+- VERIFIED FIXED: 20/20 spawns land (sim), 100% walkable-column floor coverage (was 11.4%), 1298/1298 waypoints have floor support, CT↔T connected, E2E test-aimhead.ts ALL PASS (map served / spawn standable / bots move / round flow), client engine state onGround=true at y=2.4 with vel=0, geom.json 200, 0 page/console errors, VLM: geometry clean (no polygon soup), player standing on terrain
+- Files: scripts/bsp/convert2.ts (new), scripts/bsp/{diagnose-fall,verify-wps,verify-ct-t}.ts (new tests), scripts/bsp/convert.ts (deleted, buggy), src/game/map-aimhead.ts + mini-services/game-server/map-aimhead.ts (regenerated v2), src/game/engine.ts, mini-services/game-server/bots.ts, public/assets/maps/aimhead/geom.json (regenerated)
+- Pipeline lesson recorded: never trust node/leaf contents of ripped BSPs — derive collision/spawns/waypoints from face geometry
