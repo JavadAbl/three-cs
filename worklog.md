@@ -317,3 +317,27 @@ Stage Summary:
 - VERIFIED FIXED: 18/18 ramps 100% collision coverage, 6/6 walk-up sims CLIMBED OK with 0.00 m sink-into-ramp (incl. both 31° valley ramps, 2.2 m climb); regressions all green — 20/20 spawns land, 1350/1350 wps floor-supported, CT↔T reachable 20 hops, E2E test-aimhead.ts ALL PASS (map-served/spawn-standable/round-flow/bots-move)
 - Files: scripts/bsp/convert2.ts, scripts/bsp/diagnose-ramp.ts (new), src/game/map-aimhead.ts + mini-services/game-server/map-aimhead.ts (regenerated v3), mini-services/game-server/bots.ts
 - Pipeline lesson: slicing a polygon into bands requires CLIPPING, not vertex filtering — vertex-poor faces silently produce empty slices
+
+---
+Task ID: 17
+Agent: Super Z (main agent)
+Task: fix aim_headshot ramp issues — (1) left side of ramp has no texture (see terrain through it, invisible collision), (2) ramp start blocked ("something blocking to going up")
+
+Work Log:
+- Diagnosed Bug 1 (missing texture): the ramp side-wall faces (f843/f844 west-north, f357/f356/f189 east) carry anim textures "-1AzWll" (frame 1). The v3 fix (skip only frame>=1 removed) was already written in convert2.ts LAST session but the map was NEVER REGENERATED (geom.json mtime 05:45 < convert2.ts mtime 06:03). Regeneration alone restores the render.
+- Diagnosed Bug 2 (blocked start): ramp side skirts are TRIANGLES whose top edge follows the ramp hypotenuse; the converter emitted ONE full-AABB box per wall face. Box top = wall MAX z → invisible walls poking up to 3.05 m ABOVE the ramp surface (0.98 m at the very start > 0.55 step-up). Only a ~0.7 m center strip of each 3.2 m ramp was climbable; probe-ramp-approach confirmed BLOCKED at all edge offsets.
+- Fix 2a (converter): emitWall() — shoelace-area test detects non-rectangular walls (< 98% of AABB) and slices them into bands along the run axis (Sutherland-Hodgman clip) so each band's box top follows the ramp edge locally.
+- Fix 2b (converter): gridBands() — ALL band boundaries (staircase strips AND wall-skirt bands) snapped to the global 8u grid, so at any x their tops are EXACTLY equal (mm-level mismatches previously denied the engine's step-up headroom check by 1.7 mm).
+- Fix 2c (engine, src/game/engine.ts resolveHorizontal): boxes whose top is within 1 cm of the player's feet (rise <= 0.01) are no longer horizontal blockers (previously a staircase-seam box at feet level push-locked the player, x frozen forever). Also made the overlap test re-read live feet after in-loop step-ups (was a stale const).
+- Fix 2d (engine, vertical landing): land on the HIGHEST matching box top (was: last match in array order — order-dependent, snagged players DOWN onto lower strips, making the higher neighbor strips un-climbable walls). Head-bonk now uses the LOWEST ceiling; fall damage fires once.
+- Regenerated map (v4): render 2425 tris (+272 = the side walls), 718 collision boxes (394 wall-skirt band boxes from 120 non-rectangular walls), waypoints 1378, spawns CT=10 T=10. Updated mini-services/game-server/bots.ts GRAPHS.aimhead to the new waypoint ids (ah111/ah876/ah875/ah112 CT, ah1360/ah993/ah992/ah444 T, ah1169/ah1168/ah323/ah237 mid).
+- Synced the probe/diagnose sim physics with the engine fixes (probe-ramp-approach.ts, diagnose-ramp.ts) — sims now replicate engine v2 physics exactly.
+- Verification: probe-ramp-approach 26/26 walk offsets OK across the full width of both big ramps (was: only ~0.7 m center); diagnose-ramp ALL RAMPS COVERED + ALL WALK-UP SIMS PASS; diagnose-fall 20/20 spawns land, floor coverage 100% / 0 holes; verify-ct-t CT↔T reachable (20-hop path); E2E test-aimhead ALL PASS; tsc clean (src/ + mini-services/).
+- Restarted game server (:3003, bun --hot, fresh state) and re-verified in the browser via the :81 gateway: east-ramp south wall + west-ramp north wall now render textured and solid (VLM confirmed, no see-through holes); live solo-room walk test climbed the west ramp from base to top (y 2.6 → 6.8 smoothly) and crossed the east ramp the same way.
+- Screenshots: download/east-ramp-southwall.png, download/west-ramp-northwall.png, download/west-ramp-from-base.png
+- New diagnostics: scripts/bsp/{diagnose-rampsides,dump-geom-ramps,check-faces,trace-f849,trace-f191}.ts (face/model dumps, geom-vs-collision dumps, frame-by-frame physics traces)
+
+Stage Summary:
+- Bug 1 fixed: all anim-frame-1 faces (ramp side walls, top-landing strips) render — map regenerated with the previously-written-but-never-run v3 render fix.
+- Bug 2 fixed by 3 layers: wall-skirt band slicing (converter), global 8u grid band alignment (converter), and 2 engine physics fixes (level-top boxes no longer push-lock; landing picks the highest top).
+- Ramps are now climbable across their full width from the very base; bots pathing updated to new waypoint ids; server live on :3003 with map v4.

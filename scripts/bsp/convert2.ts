@@ -247,6 +247,21 @@ function clipAxis(poly: number[][], ax: number, bound: number, keepGreater: bool
   }
   return out
 }
+function gridBands(lo: number, hi: number): number[] {
+  // v4: band boundaries SNAPPED to the global 8u grid (first/last bands partial).
+  // Staircase strips AND wall-skirt bands share the same boundaries, so at any x
+  // their tops are EXACTLY equal (same edge line) — no mm-level mismatches to
+  // trip the engine's step-up headroom check.
+  const cuts = [lo]
+  let s = lo
+  while (s < hi - 0.05) {
+    const next = Math.min(hi, Math.floor(s / 8) * 8 + 8)
+    if (next <= s + 0.05) break
+    cuts.push(next)
+    s = next
+  }
+  return cuts
+}
 function emitStaircase(gf: GFace, up: boolean) {
   const [nx, ny, nz] = gf.n
   const ax = Math.abs(nx) >= Math.abs(ny) ? 0 : 1
@@ -257,11 +272,9 @@ function emitStaircase(gf: GFace, up: boolean) {
     boxes.push({ x0: gf.aabb[0], x1: gf.aabb[1], y0: gf.aabb[2], y1: gf.aabb[3], z0: gf.aabb[4], z1: gf.aabb[5], tex: 'wall' })
     return
   }
-  // cap each step's rise at 18u (0.45 m) — safely inside the engine's STEP_UP (0.55 m)
-  const tanT = Math.hypot(nx, ny) / Math.abs(nz)
-  const step = Math.min(STRIP, Math.max(8, Math.round(18 / Math.max(0.35, tanT))))
-  for (let s = lo; s < hi - 0.05; s += step) {
-    const e = Math.min(s + step, hi)
+  const cuts = gridBands(lo, hi)
+  for (let bi = 0; bi < cuts.length - 1; bi++) {
+    const s = cuts[bi], e = cuts[bi + 1]
     let strip = clipAxis(gf.vs, ax, s - 0.01, true)
     strip = clipAxis(strip, ax, e + 0.01, false)
     if (strip.length < 3) continue
@@ -275,7 +288,50 @@ function emitStaircase(gf: GFace, up: boolean) {
   stairFaces++
 }
 
-let nFloor = 0, nCeil = 0, nWall = 0, nSlope = 0, nSkip = 0, stairFaces = 0, stairStrips = 0
+let nFloor = 0, nCeil = 0, nWall = 0, nSlope = 0, nSkip = 0, stairFaces = 0, stairStrips = 0, wallSliced = 0, wallStrips = 0
+
+// v4: ramp side skirts. Wall faces whose top edge FOLLOWS a ramp hypotenuse
+// (triangles/trapezoids like the 31° ramp flanks) were emitted as ONE full-AABB
+// box: the box top = the wall's MAX z, which pokes up to 3 m ABOVE the ramp
+// surface near its low end (0.98 m at the very start — above the engine's
+// 0.55 m step-up). Result: invisible walls flanking every ramp; only a ~0.7 m
+// center strip was climbable. Fix: detect non-rectangular walls (shoelace area
+// < 98% of the AABB) and slice them into bands along the run axis with the same
+// Sutherland–Hodgman clipper — each band's box top follows the ramp edge
+// locally (≤ 16 u · slope ≈ 0.25 m rise, well inside step-up).
+function polyArea2(vs: number[][], axA: number, axB: number): number {
+  let a = 0
+  for (let i = 0; i < vs.length; i++) {
+    const p = vs[i], q = vs[(i + 1) % vs.length]
+    a += p[axA] * q[axB] - q[axA] * p[axB]
+  }
+  return Math.abs(a / 2)
+}
+function emitWall(gf: GFace, runAxis: 0 | 1, solidLo: number, solidHi: number) {
+  const a = gf.aabb
+  const aabbArea = (a[runAxis + 1] - a[runAxis]) * (a[5] - a[4])
+  const rectangular = aabbArea <= 1e-6 || polyArea2(gf.vs, runAxis, 2) >= 0.98 * aabbArea
+  if (rectangular) {
+    if (runAxis === 0) boxes.push({ x0: a[0], x1: a[1], y0: solidLo, y1: solidHi, z0: a[4], z1: a[5], tex: 'brick' })
+    else boxes.push({ x0: solidLo, x1: solidHi, y0: a[2], y1: a[3], z0: a[4], z1: a[5], tex: 'brick' })
+    return
+  }
+  wallSliced++
+  const lo = a[runAxis], hi = a[runAxis + 1]
+  const cuts = gridBands(lo, hi) // 8u global grid — matches the staircase strips exactly
+  for (let bi = 0; bi < cuts.length - 1; bi++) {
+    const s = cuts[bi], e = cuts[bi + 1]
+    let strip = clipAxis(gf.vs, runAxis, s - 0.01, true)
+    strip = clipAxis(strip, runAxis, e + 0.01, false)
+    if (strip.length < 3) continue
+    const xs = strip.map(v => v[0]), ys = strip.map(v => v[1]), zs = strip.map(v => v[2])
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+    const z0 = Math.min(...zs), z1 = Math.max(...zs)
+    if (runAxis === 0) boxes.push({ x0, x1, y0: solidLo, y1: solidHi, z0, z1, tex: 'brick' })
+    else boxes.push({ x0: solidLo, x1: solidHi, y0, y1, z0, z1, tex: 'brick' })
+    wallStrips++
+  }
+}
 for (const gf of gfaces) {
   const [nx, ny, nz] = gf.n
   const a = gf.aabb
@@ -288,10 +344,10 @@ for (const gf of gfaces) {
     boxes.push({ x0: a[0], x1: a[1], y0: a[2], y1: a[3], z0: a[5], z1: a[5] + THICK, tex: 'wall' })
   } else if (Math.abs(nx) >= 0.94 && Math.abs(ny) < 0.34) {   // WALL facing ±x
     nWall++
-    boxes.push({ x0: nx > 0 ? a[0] - THICK : a[1], x1: nx > 0 ? a[0] : a[1] + THICK, y0: a[2], y1: a[3], z0: a[4], z1: a[5], tex: 'brick' })
+    emitWall(gf, 1, nx > 0 ? a[0] - THICK : a[1], nx > 0 ? a[0] : a[1] + THICK)
   } else if (Math.abs(ny) >= 0.94 && Math.abs(nx) < 0.34) {   // WALL facing ±y
     nWall++
-    boxes.push({ x0: a[0], x1: a[1], y0: ny > 0 ? a[2] - THICK : a[3], y1: ny > 0 ? a[2] : a[3] + THICK, z0: a[4], z1: a[5], tex: 'brick' })
+    emitWall(gf, 0, ny > 0 ? a[2] - THICK : a[3], ny > 0 ? a[2] : a[3] + THICK)
   } else if (Math.abs(nz) >= 0.3) {                  // sloped ramp — staircase walkable
     nSlope++
     emitStaircase(gf, nz > 0)
@@ -304,6 +360,7 @@ for (const gf of gfaces) {
 }
 console.log(`collision source faces: floor=${nFloor} ceil=${nCeil} wall=${nWall} slope=${nSlope} shellSkip=${nSkip}`)
 console.log(`staircase: ${stairFaces} sloped faces → ${stairStrips} strip boxes (clipped, watertight)`)
+console.log(`wall slicing: ${wallSliced} non-rectangular walls → ${wallStrips} band boxes (tops follow ramp edges)`)
 console.log(`raw collision boxes: ${boxes.length}`)
 
 // merge: exact-dup removal + band merge (same z-band, edge-adjacent rectangles)

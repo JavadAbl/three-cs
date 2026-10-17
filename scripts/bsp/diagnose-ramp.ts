@@ -219,7 +219,8 @@ function resolveHorizontal(p: P, axis: 'x' | 'z') {
       p.y + STAND_H > c.min.y && p.y < c.max.y &&
       p.z + PLAYER_R > c.min.z && p.z - PLAYER_R < c.max.z) {
       const rise = c.max.y - p.y
-      if (rise > 0.01 && rise <= STEP_UP && p.vy <= 0.1) {
+      if (rise <= 0.01) continue // engine v2: feet level with box top — not a blocker
+      if (rise <= STEP_UP && p.vy <= 0.1) {
         if (!overlapsAt(p, p.x, c.max.y + 0.02, p.z)) {
           p.y = c.max.y + 0.02
           p.onGround = true
@@ -275,18 +276,18 @@ for (const r of ramps.slice(0, 6)) {
     const prevFeet = p.y
     p.y += p.vy * dt
     p.onGround = false
+    let landY: number | null = null
     for (const c of cols) {
       const feetNow = p.y
       if (p.x + PLAYER_R > c.min.x && p.x - PLAYER_R < c.max.x &&
         feetNow + STAND_H > c.min.y && feetNow < c.max.y + Math.max(0, prevFeet - feetNow) &&
         p.z + PLAYER_R > c.min.z && p.z - PLAYER_R < c.max.z) {
         if (p.vy <= 0.01 && (feetNow > c.max.y - 0.3 || prevFeet >= c.max.y - 0.001)) {
-          p.y = c.max.y
-          p.vy = 0
-          p.onGround = true
+          landY = landY === null ? c.max.y : Math.max(landY, c.max.y) // engine v2: highest top
         }
       }
     }
+    if (landY !== null) { p.y = landY; p.vy = 0; p.onGround = true }
     const s = surfAt(p.x, p.z)
     if (s !== null) {
       const pen = s - p.y

@@ -87,21 +87,21 @@ const GRAPHS: Record<string, MapGraph> = {
     },
   }),
   aimhead: buildGraph(MAPS.aimhead, {
-    // v3 face-driven conversion (ramp staircases fixed): CT west terrace (site A), T east terrace (site B), mid = valley
-    aHold: ['ah111', 'ah1050', 'ah1049', 'ah112'],
-    bHold: ['ah987', 'ah879', 'ah878', 'ah444'],
-    midHold: ['ah323', 'ah1205', 'ah237', 'ah1175'],
-    aRoutes: [['ah987', 'ah111']],
-    bRoutes: [['ah111', 'ah987']],
-    tHoldA: 'ah987',
+    // v4 face-driven conversion (ramp side skirts sliced — regen changed wp ids): CT west terrace (site A), T east terrace (site B), mid = valley
+    aHold: ['ah111', 'ah876', 'ah875', 'ah112'],
+    bHold: ['ah1360', 'ah993', 'ah992', 'ah444'],
+    midHold: ['ah1169', 'ah1168', 'ah323', 'ah237'],
+    aRoutes: [['ah1360', 'ah111']],
+    bRoutes: [['ah111', 'ah1360']],
+    tHoldA: 'ah1360',
     tHoldB: 'ah111',
     plantA: 'ah111',
-    plantB: 'ah987',
+    plantB: 'ah1360',
     watch: {
       // CT holds face east (toward T), T holds face west
-      ah111: [25, 0], ah1050: [25, 0], ah1049: [25, 0], ah112: [25, 0],
-      ah987: [-25, 0], ah879: [-25, 0], ah878: [-25, 0], ah444: [-25, 0],
-      ah323: [25, 0], ah1205: [-25, 0], ah237: [25, 0], ah1175: [-25, 0],
+      ah111: [25, 0], ah876: [25, 0], ah875: [25, 0], ah112: [25, 0],
+      ah1169: [-25, 0], ah993: [-25, 0], ah992: [-25, 0], ah444: [-25, 0],
+      ah1360: [-25, 0], ah1168: [-25, 0], ah323: [25, 0], ah237: [25, 0],
     },
   }),
 }

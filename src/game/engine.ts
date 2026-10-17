@@ -1126,23 +1126,33 @@ export class Engine {
     this.pos.y += this.vel.y * dt
     this.onGround = false
     const h = this.playerHeight()
+    // v2: land on the HIGHEST matching top (was: last match in array order —
+    // snagged players DOWN onto lower staircase strips, then the higher neighbor
+    // strips became un-climbable walls). Head-bonk uses the LOWEST ceiling.
+    let landY: number | null = null
+    let ceilY: number | null = null
     for (const c of this.map.colliders) {
       const feet = this.pos.y + this.tuck
       if (this.pos.x + PLAYER_R > c.min.x && this.pos.x - PLAYER_R < c.max.x &&
         feet + h > c.min.y && feet < c.max.y + Math.max(0, prevFeet - feet) &&
         this.pos.z + PLAYER_R > c.min.z && this.pos.z - PLAYER_R < c.max.z) {
         if (this.vel.y <= 0.01 && (feet > c.max.y - 0.3 || prevFeet >= c.max.y - 0.001)) {
-          this.pos.y = c.max.y
-          this.vel.y = 0
-          this.onGround = true
-          this.tuck = 0
-          if (fallV < -3) this.landDip = Math.min(0.24, (-fallV - 3) * 0.022) // camera dip on landing
-          if (fallV < -FALL_SAFE_V) this.fallDamage(fallV)
+          landY = landY === null ? c.max.y : Math.max(landY, c.max.y)
         } else if (this.vel.y > 0 && feet + h > c.min.y && prevFeet + h <= c.min.y + 0.001) {
-          this.pos.y = c.min.y - h - this.tuck - 0.001
-          this.vel.y = 0
+          ceilY = ceilY === null ? c.min.y : Math.min(ceilY, c.min.y)
         }
       }
+    }
+    if (landY !== null) {
+      this.pos.y = landY
+      this.vel.y = 0
+      this.onGround = true
+      this.tuck = 0
+      if (fallV < -3) this.landDip = Math.min(0.24, (-fallV - 3) * 0.022) // camera dip on landing
+      if (fallV < -FALL_SAFE_V) this.fallDamage(fallV)
+    } else if (ceilY !== null) {
+      this.pos.y = ceilY - h - this.tuck - 0.001
+      this.vel.y = 0
     }
     if (this.pos.y < -6) { // failsafe — recover to this map's CT spawn (never a foreign-map coord)
       const s = this.mapDef?.spawns?.CT?.[0]
@@ -1163,14 +1173,15 @@ export class Engine {
 
   private resolveHorizontal(axis: 'x' | 'z') {
     const h = this.playerHeight()
-    const feet = this.pos.y + this.tuck
     for (const c of this.map.colliders) {
+      const feet = this.pos.y + this.tuck // live — re-read after in-loop step-ups
       if (this.pos.x + PLAYER_R > c.min.x && this.pos.x - PLAYER_R < c.max.x &&
         feet + h > c.min.y && feet < c.max.y &&
         this.pos.z + PLAYER_R > c.min.z && this.pos.z - PLAYER_R < c.max.z) {
         // try step up (grounded climbing only - never while crouch-tucked in air)
         const rise = c.max.y - this.pos.y
-        if (this.tuck === 0 && rise > 0.01 && rise <= STEP_UP && this.vel.y <= 0.1) {
+        if (rise <= 0.01) continue // feet level with this top (staircase-seam float) — not a horizontal blocker
+        if (this.tuck === 0 && rise <= STEP_UP && this.vel.y <= 0.1) {
           if (!this.overlapsAt(this.pos.x, c.max.y + 0.02, this.pos.z)) {
             this.pos.y = c.max.y + 0.02
             this.onGround = true

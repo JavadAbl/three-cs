@@ -173,7 +173,8 @@ function resolveHorizontal(p: { x: number; y: number; z: number; vx: number; vy:
       p.y + STAND_H > c.min.y && p.y < c.max.y &&
       p.z + PLAYER_R > c.min.z && p.z - PLAYER_R < c.max.z) {
       const rise = c.max.y - p.y
-      if (rise > 0.01 && rise <= STEP_UP && p.vy <= 0.1) {
+      if (rise <= 0.01) continue // engine v2: feet level with box top — not a blocker
+      if (rise <= STEP_UP && p.vy <= 0.1) {
         if (!overlapsAt(p.x, c.max.y + 0.02, p.z)) { p.y = c.max.y + 0.02; continue }
       }
       if (axis === 'x') { p.x = p.x > (c.min.x + c.max.x) / 2 ? c.max.x + PLAYER_R + 0.001 : c.min.x - PLAYER_R - 0.001; p.vx = 0 }
@@ -237,24 +238,25 @@ for (const ramp of bigRamps) {
       resolveHorizontal(p, 'z')
       const prevFeet = p.y
       p.y += p.vy * dt
+      let landY: number | null = null
       for (const c of cols) {
         const feetNow = p.y
         if (p.x + PLAYER_R > c.min.x && p.x - PLAYER_R < c.max.x &&
           feetNow + STAND_H > c.min.y && feetNow < c.max.y + Math.max(0, prevFeet - feetNow) &&
           p.z + PLAYER_R > c.min.z && p.z - PLAYER_R < c.max.z) {
           if (p.vy <= 0.01 && (feetNow > c.max.y - 0.3 || prevFeet >= c.max.y - 0.001)) {
-            p.y = c.max.y
-            p.vy = 0
+            landY = landY === null ? c.max.y : Math.max(landY, c.max.y) // engine v2: highest top
           }
         }
       }
+      if (landY !== null) { p.y = landY; p.vy = 0 }
       if (p.y < -6) { fell = true; break }
       if (p.y > topY) topY = p.y
       const s = surfAt(p.x, p.z)
       if (s !== null && p.y < s - 0.45) { fell = true; break }
     }
     progress = Math.hypot(p.x - sx, p.z - sz)
-    const climb = p.y - startFeet
+    const climb = topY - startFeet // max height reached (final y can be a far-edge fall artifact)
     console.log(`  offset ${off >= 0 ? '+' : ''}${off.toFixed(2)}m: walked ${progress.toFixed(1)}m/${(run + 1).toFixed(1)}m climb ${climb.toFixed(2)}m/${(2.2).toFixed(2)}m ${fell ? 'FELL INTO' : progress < run * 0.8 ? 'BLOCKED' : climb < 1.8 ? 'STUCK-LOW' : 'OK'}`)
   }
   // dump boxes overlapping the approach corridor (bsp-coord report)
