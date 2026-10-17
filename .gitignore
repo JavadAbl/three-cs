@@ -54,6 +54,7 @@ server.log
 /skills/
 # verification screenshots + local caches (not part of the project)
 /shot-*.png
+/scripts/bsp/debug/
 /download/
 /scripts/csgo-snd/
 /scripts/sfx/wav/
