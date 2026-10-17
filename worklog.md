@@ -357,3 +357,23 @@ Work Log:
 Stage Summary:
 - All ramp bug fixes (task 14/15 + ramp collision + ramp texture/blocking) are now on GitHub at JavadAbl/three-cs, main @ 937b251
 - Project fully backed up; sandbox loss can no longer wipe progress
+
+---
+Task ID: 18
+Agent: Super Z (main agent)
+Task: replace cube players with real soldier models + textures (user request)
+
+Work Log:
+- Rewrote src/game/players.ts: articulated low-poly soldier rig — hips→torso→head hierarchy, 2-segment legs (thigh+calf+boot pivots), 2-segment arms, vest+pouches+helmet(CT)/beanie(T) 3D details, C4 back-rig visible on bomb carriers, gun rig at chest with aim pitch
+- New procedural textures in textures.ts (bodyTexture removed): soldierCamo (CT urban blue-grey / T desert tan), soldierVest (plate+3 mag pouches+radio+belt), soldierFace (balaclava w/ eye slit + war paint)
+- Animation: speed-driven walk cycle (phase from interp deltas, knee bends only backward, boot counter-rotation, hip bob, shoulder sway, gun bob), crouch blend (hips 0.92→0.46, torso lean, hitboxes follow legacy 0.68 crouch scale), aim pitch on head+gun, death fall (random axis/direction, easeOutCubic 0.55s, limp limbs)
+- Hitboxes preserved exactly (sphere r.17@1.62, body .62x.85x.42@1.15, legs@0.4) — headshot gameplay unchanged
+- Debug hook __eng extended: full player ids, rot/vis, meshWorld(id) — kept for future sessions
+- Verification gauntlet (via :81 gateway, 560x320 viewport to survive software-WebGL): VLM confirmed CT model (blue-grey camo/helmet/vest/balaclava/M4 held, no glitches), T model (tan camo/beanie/AK, no glitches), run animation (3-frame burst: legs alternate stride, arms counter-swing, torso lean); death fall proven numerically via meshWorld (meshes flat on floor, spread along ground, root rot ±1.52)
+- Browser automation lessons: pause overlay lives in same fixed.inset-0 wrapper as canvas (hide only the panel subtree without canvas); server locks spawn positions during freeze (client teleports reverted); dual browser sessions wedge software-WebGL (use small viewport)
+- Ops fixed en route: killed 3 duplicate game-server instances (stale state), restarted single daemon on :3003
+- tsc clean (src + mini-services); E2E regressions ALL PASS (test-aimhead 4/4, test-bugfixes 3/3)
+
+Stage Summary:
+- Players are now articulated camo soldiers with team-specific gear, walking/crouching/aiming/falling animations — cubes gone
+- Committed 0315808 and pushed to JavadAbl/three-cs (main @ 0315808)
