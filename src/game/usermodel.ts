@@ -1,4 +1,7 @@
-// Auto-rigged player model: the user-supplied character (public/assets/models/human.glb).
+// Auto-rigged player model: the user-supplied character. Pending copy lives at
+// public/staging/models/human.glb (gitignored, evaluation); accepted copy at
+// public/assets/models/human.glb (committed). The API route serves whichever
+// is present — staging wins while it exists.
 // The GLB is a STATIC, unrigged A-pose character (no skeleton, no real animation clips),
 // so at load time we:
 //   1. bake node transforms + normalization (1.79 m, grounded, centered, facing -Z) into the geometry,

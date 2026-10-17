@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, access } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 
@@ -10,13 +10,26 @@ import path from 'node:path'
 //   3. explicit `model/gltf-binary` Content-Type, never octet-stream/attachment
 // The binary itself stays untracked in git (see public/assets/models/README.md).
 
-const FILE = path.join(process.cwd(), 'public', 'assets', 'models', 'human.glb')
+// Asset-acceptance policy v3: accepted model = public/assets/models/human.glb
+// (committed). Pending model = public/staging/models/human.glb (gitignored,
+// evaluation copy). STAGING WINS if present — dropping a new version into
+// staging immediately overrides the accepted copy, so the user can evaluate
+// it live; acceptance is a plain `mv staging -> assets` + `git add`.
+const ACCEPTED = path.join(process.cwd(), 'public', 'assets', 'models', 'human.glb')
+const STAGED = path.join(process.cwd(), 'public', 'staging', 'models', 'human.glb')
 
+async function resolveFile(): Promise<string> {
+  try { await access(STAGED); return STAGED } catch { /* no staged copy */ }
+  return ACCEPTED
+}
+
+// The parsed buffer is cached in module memory; after replacing the model
+// file, touch this file (or restart dev) to drop the cache and re-read.
 let cache: { body: Buffer; etag: string } | null = null
 
 async function loadFile(): Promise<{ body: Buffer; etag: string }> {
   if (!cache) {
-    const body = await readFile(FILE)
+    const body = await readFile(await resolveFile())
     const etag = '"' + createHash('sha1').update(body).digest('hex').slice(0, 16) + '"'
     cache = { body, etag }
   }
@@ -46,7 +59,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     return fileResponse(req, await loadFile())
   } catch {
-    return new Response('model file not found (drop human.glb into public/assets/models/)', { status: 404 })
+    return new Response('model file not found (drop human.glb into public/staging/models/ to evaluate, or public/assets/models/ once accepted)', { status: 404 })
   }
 }
 

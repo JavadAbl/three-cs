@@ -1,4 +1,7 @@
-// CS:GO sample sound pack (public/assets/sounds/*.ogg) with WebAudio synth fallback.
+// CS:GO sample sound pack with WebAudio synth fallback.
+// Accepted sounds: public/assets/sounds/*.ogg (committed). Pending sounds:
+// public/staging/sounds/*.ogg (gitignored, still web-served). Loader tries
+// the accepted copy first (steady state = one request), then the staged copy.
 // Every public sound: real decoded sample if available -> procedural synth otherwise,
 // so the game still sounds right if the pack fails to load (offline / old Safari).
 export type Vec3 = [number, number, number]
@@ -37,6 +40,7 @@ const FILES = [
 ]
 
 const DIR = '/assets/sounds/'
+const STAGE_DIR = '/staging/sounds/'
 
 // per-weapon sample tables
 const FIRE: Record<string, string> = {
@@ -98,12 +102,23 @@ export class GameAudio {
     if (!this.ctx || this.packStarted) return
     this.packStarted = true
     for (const name of FILES) {
-      fetch(DIR + name + '.ogg')
-        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer() })
-        .then(ab => this.ctx!.decodeAudioData(ab))
-        .then(buf => { this.buffers.set(name, buf) })
-        .catch(() => { this.packErrors.push(name) })
+      this.loadSound(name)
     }
+  }
+
+  /** accepted copy first, pending staging copy as fallback (asset-acceptance policy v3) */
+  private async loadSound(name: string) {
+    for (const dir of [DIR, STAGE_DIR]) {
+      try {
+        const r = await fetch(dir + name + '.ogg')
+        if (!r.ok) continue
+        const ab = await r.arrayBuffer()
+        const buf = await this.ctx!.decodeAudioData(ab)
+        this.buffers.set(name, buf)
+        return
+      } catch { /* try the next directory */ }
+    }
+    this.packErrors.push(name)
   }
 
   setVolume(v: number) {

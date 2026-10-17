@@ -5,7 +5,11 @@ import * as THREE from 'three'
 import fs from 'node:fs'
 import '../scripts/domstub.js'
 
-const SRC = process.argv[2] ?? 'public/assets/models/human.glb'
+// staged (pending) copy wins, else the accepted copy — mirrors the api route
+const SRC = process.argv[2]
+  ?? (fs.existsSync('public/staging/models/human.glb')
+      ? 'public/staging/models/human.glb'
+      : 'public/assets/models/human.glb')
 
 const raw = fs.readFileSync(SRC)
 const ab = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)

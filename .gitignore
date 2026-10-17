@@ -64,21 +64,16 @@ tool-results/
 .zscripts/*.pid
 public/assets/maps/*/debug-top.*
 
-# player/model binaries stay OUT of git until the user explicitly accepts them
-# (big binaries bloat history; a fresh clone falls back to the procedural rig
-#  and just drops the accepted model files into public/assets/models/)
-public/assets/models/*
-!public/assets/models/README.md
-# ASSET-ACCEPTANCE POLICY (user rule): any NEW binary asset — sounds, textures,
-# models, geometry — stays out of git until the user explicitly OKs it.
-# Already-tracked files are unaffected (gitignore only holds back NEW files).
-public/assets/sounds/*
-public/assets/textures/*
-!public/assets/textures/weapons/README.md
-public/assets/geom/*
-public/assets/maps/*/*
-!public/assets/maps/*/geom.json
-# raw asset staging + platform/local junk
+# ASSET-ACCEPTANCE POLICY v3 (user rule): public/assets/ holds ONLY accepted,
+# committed running assets — normal git content with no ignore rules. New or
+# pending binaries land in public/staging/ (gitignored, still web-served, so
+# the game runs them for evaluation: loaders try /assets/... first, then
+# /staging/...). Acceptance is a plain file move:
+#   mv public/staging/<x> public/assets/<x> && git add public/assets/<x>
+# (no -f needed). Never drop a new binary directly into public/assets/ —
+# auto-commits would sweep it in unreviewed.
+/public/staging/
+# raw asset packs + platform/local junk
 /assets/
 tmp/
 .initial_snapshot.json

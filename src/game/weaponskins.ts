@@ -1,6 +1,7 @@
 // ============================================================
 // External weapon texture (skin) system.
-// Drop PNG files into public/assets/textures/weapons/:
+// Drop PNG files into public/staging/textures/weapons/ (pending, gitignored)
+// or public/assets/textures/weapons/ (accepted, committed):
 //   {weaponId}.png       — albedo / color skin (replaces the procedural map)
 //   {weaponId}_bump.png  — optional grayscale bump map
 //   skins.json           — optional manifest { "ak47": 1, ... } (skips 404 probing)
