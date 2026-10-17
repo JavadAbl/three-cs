@@ -184,9 +184,11 @@ const flat = (vs: number[][], axis: number, tol = 1.5) => {
 interface Group { tex: string; pos: number[]; norm: number[]; uv: number[]; idx: number[] }
 const groups = new Map<string, Group>()
 for (const gf of gfaces) {
+  // v3: render EVERY face — anim frames included. Skipping frame ≥1 left visual
+  // holes (ramp side walls, top-landing floor strips). All frames map to the
+  // frame-0 base texture.
   let texName = gf.tex
   const mAnim = texName.match(/^-([0-9])(.+)$/)
-  if (mAnim && mAnim[1] !== '0') continue
   if (mAnim) texName = mAnim[2]
   texName = ourTex(texName)
   const g = groups.get(texName) ?? { tex: texName, pos: [], norm: [], uv: [], idx: [] } as Group
