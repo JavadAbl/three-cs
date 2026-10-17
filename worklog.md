@@ -299,3 +299,21 @@ Stage Summary:
 - VERIFIED FIXED: 20/20 spawns land (sim), 100% walkable-column floor coverage (was 11.4%), 1298/1298 waypoints have floor support, CT↔T connected, E2E test-aimhead.ts ALL PASS (map served / spawn standable / bots move / round flow), client engine state onGround=true at y=2.4 with vel=0, geom.json 200, 0 page/console errors, VLM: geometry clean (no polygon soup), player standing on terrain
 - Files: scripts/bsp/convert2.ts (new), scripts/bsp/{diagnose-fall,verify-wps,verify-ct-t}.ts (new tests), scripts/bsp/convert.ts (deleted, buggy), src/game/map-aimhead.ts + mini-services/game-server/map-aimhead.ts (regenerated v2), src/game/engine.ts, mini-services/game-server/bots.ts, public/assets/maps/aimhead/geom.json (regenerated)
 - Pipeline lesson recorded: never trust node/leaf contents of ripped BSPs — derive collision/spawns/waypoints from face geometry
+
+---
+Task ID: 16
+Agent: Super Z (main agent)
+Task: fix "climbing the ramp makes you fall into the ramp" on aim_headshot
+
+Work Log:
+- Reproduced with new scripts/bsp/diagnose-ramp.ts (exact client-physics copy incl. step-up + swept-Y): 18 significant ramp faces, old emitStaircase emitted only 10/105 strips — both big 31° AzGrass valley ramps had 0% collision coverage; walk sim sank 2.16 m into the ramp
+- ROOT CAUSE in task-15's emitStaircase: it filtered the face's ORIGINAL vertices into each 16u band and required >=3 per band — a ramp quad only has vertices at its two ends, so every band was dropped → ramps had no/near-no collision
+- convert2.ts v3 fix: Sutherland–Hodgman convex clipping (clipAxis) of each face to its band → every band yields its true extent; steep (|nz|<0.55) slopes become one solid AABB blocker; step rise capped at 18u (< STEP_UP 0.55 m); STRIP 16u→8u (collision staircase floats <=0.12 m over the visual slope, never below it)
+- Regenerated: 207 watertight staircase strips (was ~10), 429 boxes total, render geom unchanged (2253 tris), spawns identical
+- bots.ts GRAPHS.aimhead updated to regenerated waypoint ids (ah927/ah926→ah1050/ah1049, ah854→ah987, ah1138/ah1100→ah1205/ah1175; all 12 ids verified present)
+- game-server restarted daemonized (setsid -f; old PID force-killed after SIGTERM ignored)
+
+Stage Summary:
+- VERIFIED FIXED: 18/18 ramps 100% collision coverage, 6/6 walk-up sims CLIMBED OK with 0.00 m sink-into-ramp (incl. both 31° valley ramps, 2.2 m climb); regressions all green — 20/20 spawns land, 1350/1350 wps floor-supported, CT↔T reachable 20 hops, E2E test-aimhead.ts ALL PASS (map-served/spawn-standable/round-flow/bots-move)
+- Files: scripts/bsp/convert2.ts, scripts/bsp/diagnose-ramp.ts (new), src/game/map-aimhead.ts + mini-services/game-server/map-aimhead.ts (regenerated v3), mini-services/game-server/bots.ts
+- Pipeline lesson: slicing a polygon into bands requires CLIPPING, not vertex filtering — vertex-poor faces silently produce empty slices

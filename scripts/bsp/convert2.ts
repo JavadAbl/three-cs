@@ -23,7 +23,7 @@ const OUT_DIR = '/home/z/my-project/public/assets/maps/aimhead'
 const SCALE = 0.025          // 1 bsp unit = 0.025 m (72u player = 1.8 m)
 const Z_REBASE = 192         // bsp z=-192 (map bottom) → our y 0
 const THICK = 32             // collision extrusion depth (bsp units)
-const STRIP = 16             // slope staircase strip width (bsp units)
+const STRIP = 8              // slope staircase strip width (bsp units) — 8u → ≤0.12 m float over visual slope
 const PLAYER_R_U = 16        // player radius (bsp units ≈ 0.4 m)
 const HEADROOM_U = 74        // player standing height + margin
 
@@ -224,29 +224,56 @@ const touchesShell = (aabb: number[]) =>
   aabb[2] <= worldMin[1] + 8 || aabb[3] >= worldMax[1] - 8
 
 // flat horizontal surface (floor-ish, incl. gentle slopes sliced as staircases)
+//
+// v3 lesson (the "fall into the ramp" bug): v2 filtered the face's ORIGINAL
+// vertices into each strip band — a ramp quad has vertices only at its two
+// ends, so every band held <3 vertices and was DROPPED → the big 31° ramps
+// got zero collision boxes and players fell through them. v3 CLIPS the
+// convex face polygon to each band (Sutherland–Hodgman) so every band
+// yields its true extent.
+function clipAxis(poly: number[][], ax: number, bound: number, keepGreater: boolean): number[][] {
+  const out: number[][] = []
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length]
+    const da = keepGreater ? a[ax] - bound : bound - a[ax]
+    const db = keepGreater ? b[ax] - bound : bound - b[ax]
+    if (da >= 0) out.push(a)
+    if ((da >= 0) !== (db >= 0)) {
+      const t = da / (da - db)
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t])
+    }
+  }
+  return out
+}
 function emitStaircase(gf: GFace, up: boolean) {
   const [nx, ny, nz] = gf.n
-  // dominant horizontal axis of the slope
   const ax = Math.abs(nx) >= Math.abs(ny) ? 0 : 1
-  const sign = (ax === 0 ? nx : ny) > 0 ? 1 : -1
-  const axisVal = (v: number[]) => v[ax]
-  let lo = gf.aabb[ax], hi = gf.aabb[ax + 1]
-  // walkable only if gentle enough (nz >= 0.55); steeper surfaces are solid blockers, AABB is fine
+  const lo = gf.aabb[ax], hi = gf.aabb[ax + 1]
+  // walkable only if gentle enough (|nz| >= 0.55); steeper surfaces are solid blockers — full AABB
   const gentle = Math.abs(nz) >= 0.55
-  const step = gentle ? STRIP : (hi - lo)
-  for (let s = lo; s < hi; s += step) {
+  if (!gentle) {
+    boxes.push({ x0: gf.aabb[0], x1: gf.aabb[1], y0: gf.aabb[2], y1: gf.aabb[3], z0: gf.aabb[4], z1: gf.aabb[5], tex: 'wall' })
+    return
+  }
+  // cap each step's rise at 18u (0.45 m) — safely inside the engine's STEP_UP (0.55 m)
+  const tanT = Math.hypot(nx, ny) / Math.abs(nz)
+  const step = Math.min(STRIP, Math.max(8, Math.round(18 / Math.max(0.35, tanT))))
+  for (let s = lo; s < hi - 0.05; s += step) {
     const e = Math.min(s + step, hi)
-    const strip = gf.vs.filter(v => axisVal(v) >= s - 0.01 && axisVal(v) < e + 0.01)
+    let strip = clipAxis(gf.vs, ax, s - 0.01, true)
+    strip = clipAxis(strip, ax, e + 0.01, false)
     if (strip.length < 3) continue
     const xs = strip.map(v => v[0]), ys = strip.map(v => v[1]), zs = strip.map(v => v[2])
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
     const z0 = Math.min(...zs), z1 = Math.max(...zs)
     if (up) boxes.push({ x0, x1, y0, y1, z0: z0 - THICK, z1, tex: 'sand' })
     else boxes.push({ x0, x1, y0, y1, z0, z1: z1 + THICK, tex: 'wall' })
+    stairStrips++
   }
+  stairFaces++
 }
 
-let nFloor = 0, nCeil = 0, nWall = 0, nSlope = 0, nSkip = 0
+let nFloor = 0, nCeil = 0, nWall = 0, nSlope = 0, nSkip = 0, stairFaces = 0, stairStrips = 0
 for (const gf of gfaces) {
   const [nx, ny, nz] = gf.n
   const a = gf.aabb
@@ -274,6 +301,7 @@ for (const gf of gfaces) {
   }
 }
 console.log(`collision source faces: floor=${nFloor} ceil=${nCeil} wall=${nWall} slope=${nSlope} shellSkip=${nSkip}`)
+console.log(`staircase: ${stairFaces} sloped faces → ${stairStrips} strip boxes (clipped, watertight)`)
 console.log(`raw collision boxes: ${boxes.length}`)
 
 // merge: exact-dup removal + band merge (same z-band, edge-adjacent rectangles)
