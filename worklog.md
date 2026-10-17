@@ -417,3 +417,60 @@ Work Log:
 
 Stage Summary:
 - Remote main now matches local HEAD (GLB player models task 19 + repo cleanup); repo = source + running assets only; raw uploads/screenshots/local caches all excluded going forward
+
+---
+Task ID: 21
+Agent: Super Z (main agent)
+Task: replace Mixamo Vanguard with the user's uploaded model (glb.rar) — auto-rig it for full animation
+
+Work Log:
+- Unpacked upload/glb.rar (unrar) → single glb.glb (7.6 MB, Blender export): 2 meshes/10 material groups, 30 PNG textures (all 1024x1024), ~16.8k tris — but STATIC: no skeleton, no morphs, "animations" are 2-frame node-transform noise
+- Previewed it in a scratch three.js page (public/vendor + importmap; needed three.core.js + ../utils/SkeletonUtils/BufferGeometryUtils for module resolution) — VLM: male tactical character (vest, camo cargo pants, boots, gloves), A-pose, complete, faces +Z
+- Island/connectivity analysis (preview + eval): legs/pelvis panels span both legs, arms are clean single islands, boots separate, head is its own child node → geometry NOT separable into rigid limbs → chose RUNTIME AUTO-RIG instead:
+- New src/game/usermodel.ts: loads human.glb, bakes node transforms + normalization (1.79 m, grounded, centered, rotY(π) to face -Z) into geometry, builds an 11-bone skeleton (hips/torso/head/armL/R/foreL/R/thighL/R/shinL/R — parent-relative locals), per-vertex skin weights from SPATIAL RULES with smooth blend bands (knee 0.48-0.62, hip 0.94-1.10, elbow 1.08-1.32, neck 1.50-1.62, shoulder x-threshold), converts all meshes to SkinnedMesh sharing one skeleton, per-team tinted material maps, HandR anchor + C4Back on torso; per-player via SkeletonUtils.clone
+- players.ts: GlbInstance→UserInstance, driveGlb→driveUser (procedural bone math from live speed/crouch/pitch: stride ±0.55 rad thighs, knee bend on trailing leg, hip bob, torso lean+breathing, weapon-ready arm pose, aim pitch on torso/head/arms, crouch fold, death = bone freeze + existing root fall)
+- engine.ts hooks: glb()→userModelState(), mixerInfo→rigInfo (bone rotations), new bonePose live probe
+- Removed: src/game/glbmodels.ts, public/assets/models/Soldier.glb, scripts/test-glb-anim.ts (old Mixamo path); copied upload → public/assets/models/human.glb (running asset; raw rar/extract stay in gitignored upload/)
+- BUGS found+fixed en route: (1) bones got WORLD positions as locals → shin at 1.40 m — fixed with parent-relative conversion; (2) preview OrbitControls change→draw→update recursion (stack overflow) masked as model error; (3) "white screen" was death-spectate fog + pause overlay hiding canvas, not a render failure
+- Ground-truth test scripts/test-user-rig.ts (bun + dev-server fetch + Request URL rewrite + ProgressEvent stub): CPU skinning verified — armR vertex moves 0.29 m with armR.rotation 1.4, head follows, torso stays; test-tint.ts: CT #9fb7d9 / T #d9bd92 material maps correct
+- Verification gauntlet (560x420 browser via :81): 9/9 players on user rig; VLM confirmed detailed tactical model (vest/camo/boots, no missing/twisted parts), weapon-ready pose with rifle between hands, CT cool blue-grey vs T warm tan (proper 5 m shots; earlier "swapped" reads were 52 m/1 m photography artifacts), running stride visibly changing between frames; numeric: thighs alternate ±0.44-0.49 with trailing-leg knee bend; death: root rot -1.52, skin meshes lying at ground level spread along fall, intact (no bind-pose collapse)
+- E2E: test-aimhead 4/4 PASS, test-bugfixes 3/3 PASS, tsc clean (src + mini-services); game-server restarted daemonized after stale-room wedge
+- Debug lessons recorded: players() has no speed field (rigInfo has it); bot "moving: 0" between movement bursts is normal (speed decays when bots stop to shoot)
+
+Stage Summary:
+- Players are now the USER'S model (high-detail tactical character) with full locomotion (walk/run stride, weapon pose, crouch, aim pitch, death fall) via a runtime auto-rig with smooth skin blending — GLB file stays byte-identical to the upload, only running assets in git
+- Hitboxes 100% untouched; procedural box-soldier rig remains the load-fallback if human.glb fails
+
+---
+Task ID: 22
+Agent: Super Z (main agent)
+Task: bug — "after i start a game, it download human.glb to browser" + user policy: never commit/push new model/assets until explicitly accepted
+
+Work Log:
+- Diagnosis: reproduced via agent-browser (:81, 560x420). Code has NO download triggers (no <a>, no createObjectURL/.click/window.open/location.href — verified by grep; :3000/:81 serve the GLB as model/gltf-binary, no Content-Disposition). Root cause = timing: preloadUserModel() fired only at game start (players.ts preloadModels), so the 7.6 MB human.glb transfer happened exactly when the user hit PLAY, visible/slow; Next dev serves public/ with max-age=0 so each new page session refetches. XHR/fetch cannot open a browser save-dialog — if user ever literally sees one, it's the preview proxy layer (ask for the URL).
+- Fix (src/app/page.tsx): new mount-effect in the lobby — `import('@/game/usermodel').then(m => m.preloadUserModel())`. Model now downloads during menu browsing; promise is module-cached so players.ts's safety-net call never double-fetches. PLAY no longer triggers any model download; players spawn directly on the user rig (no procedural-fallback flash).
+- Git policy applied: `git rm --cached public/assets/models/human.glb` + .gitignore `public/assets/models/*` (with `!README.md` exception) + tracked README explaining the drop-in/policy + amended the local-only model commit (b03dc4b → 760ca91) so the 7.6 MB blob is in NO commit (it was never pushed — no remote configured, Task 20's push used a one-off token URL and predates b03dc4b). File stays on disk as the running asset. NOTE: old Mixamo Soldier.glb (2.1 MB) still exists in ALREADY-PUSHED remote history (d54cd87, Task 20) — history rewrite offered if user wants that space back.
+- DEPLOY.md tech notes updated (was "zero asset downloads" — now documents the model drop-in + lobby preload).
+- Verification: network log shows exactly ONE human.glb (Fetch) fired while lobby: true, zero new requests after PLAY; __eng.glb() = ready, players() = 9/9 with glb: true, rigInfo bones live; VLM close-up (teleported next to a live T after respawn — earlier "boxes" read was map crates + spectate cam, known artifacts): "detailed humanoid with tactical gear (camo pants, boots, vest, headgear/balaclava)", all limbs attached; E2E test-aimhead 4/4 PASS, test-bugfixes 3/3 PASS; tsc clean (src + mini-services; pre-existing errors only in examples/ + scripts/bsp, untouched).
+- Browser lessons reconfirmed: must be ALIVE for teleport (spectate cam ignores it); pause overlay = div.z-50 (display:none, canvas untouched); VLM misreads distant boxy map crates as "characters" — always verify close-up while alive.
+
+Stage Summary:
+- human.glb now preloads during the lobby — starting a game never downloads the model again (one fetch per page session, before PLAY)
+- Model binaries are out of git entirely (untracked, gitignored, amended away from the only commit that carried them); future models/assets stay uncommitted until the user accepts them
+- Amended HEAD = 760ca91 (nothing pushed — no PAT stored; push when user provides it)
+
+---
+Task ID: 23
+Agent: Super Z (main agent)
+Task: user report — IDM extension auto-downloads human.glb on the menu at preview-chat-<chatid>.space-z.ai/assets/models/human.glb
+
+Work Log:
+- Diagnosis: user's browser has IDM (Internet Download Manager); its browser integration hooks GET requests that look like file downloads (URL extension matching and/or binary content-type) and hijacks them — the game's model fetch matched (URL ends .glb). Local curl of the public preview URL returns 403 from the sandbox (proxy is auth-gated, Aliyun FC layer), so proxy response headers can't be observed directly; fix must work regardless of what the proxy rewrites.
+- Fix (3 layers, any one defeats IDM): (1) NEW route src/app/api/assets/human/route.ts — extensionless path, reads public/assets/models/human.glb once into module memory, serves explicit Content-Type: model/gltf-binary + ETag (sha1 prefix) + 304 revalidation, 404 with hint if file missing; GET alias kept for curl tests only. (2) usermodel.ts: preloadUserModel now fetch(MODEL_URL, {method:'POST'}) → arrayBuffer → GLTFLoader.parse(buf) — download managers only hook GET, so a POST fetch is invisible to them. (3) the game never requests a .glb URL at all (static path unused).
+- scripts/test-user-rig.ts patched: bun's native fetch rejects relative URLs (ERR_INVALID_URL) — added globalThis.fetch wrapper rewriting root-relative URLs to :3000 (old Request-stub only covered the XHR path).
+- Verification: curl POST /api/assets/human on :3000 AND :81 → 200, model/gltf-binary, content-length 7593644, etag stable; test-user-rig.ts "SKINNING WORKS" (CPU skinning through the parse path, armR 0.29 m / head 0.16 m / torso 0); browser (:81, 560x420): lobby shows exactly one "POST /api/assets/human (Fetch) 200", performance resource entries with .glb = 0; after PLAY: canvas up, model state ready, 9/9 players on user rig; VLM close-up: detailed tactical gear (gloves/sleeves w/ fabric texture), no glitches; E2E test-aimhead 4/4, test-bugfixes 3/3, tsc clean (src + mini-services).
+- Docs updated: public/assets/models/README.md + DEPLOY.md now describe the /api/assets/human route + POST rationale. Docker path checked: runtime stage copies public/ → route works in standalone builds; next.config output=standalone.
+
+Stage Summary:
+- Model transfer is now invisible to download-manager extensions: extensionless URL + POST method + clean MIME — no more IDM auto-download dialogs, and IDM can no longer steal/cancel the model fetch (which would have silently dropped players to the procedural fallback)
+- Model binary stays untracked in git (policy); the serving route + loader code are the only committed changes

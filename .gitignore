@@ -63,3 +63,22 @@ tool-results/
 /tehran_game.json
 .zscripts/*.pid
 public/assets/maps/*/debug-top.*
+
+# player/model binaries stay OUT of git until the user explicitly accepts them
+# (big binaries bloat history; a fresh clone falls back to the procedural rig
+#  and just drops the accepted model files into public/assets/models/)
+public/assets/models/*
+!public/assets/models/README.md
+# ASSET-ACCEPTANCE POLICY (user rule): any NEW binary asset — sounds, textures,
+# models, geometry — stays out of git until the user explicitly OKs it.
+# Already-tracked files are unaffected (gitignore only holds back NEW files).
+public/assets/sounds/*
+public/assets/textures/*
+!public/assets/textures/weapons/README.md
+public/assets/geom/*
+public/assets/maps/*/*
+!public/assets/maps/*/geom.json
+# raw asset staging + platform/local junk
+/assets/
+tmp/
+.initial_snapshot.json

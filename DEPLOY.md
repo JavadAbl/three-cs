@@ -134,6 +134,12 @@ location / {
 
 ## Tech notes
 
-- Client: Next.js 16 + Three.js (WebGL), procedural textures — zero asset downloads
+- Client: Next.js 16 + Three.js (WebGL), procedural map textures; the character model
+  (`public/assets/models/human.glb`, ~7.6 MB) is **not stored in git** (see
+  `public/assets/models/README.md`) — copy it there manually when deploying from a
+  clone, or players get the built-in procedural soldier fallback. The game preloads
+  the model while the lobby menu is open (fetched via `POST /api/assets/human`, an
+  extensionless route, so download-manager extensions like IDM never intercept it),
+  so starting a match never triggers a model download.
 - Server: Socket.IO at 20 Hz snapshots, server-authoritative HP/economy/rounds, line-of-sight hit validation
 - Bots: waypoint pathfinding, LOS vision, difficulty-scaled reaction/accuracy, plant & defuse behavior

@@ -1,10 +1,10 @@
-// Remote player rendering: GLB Vanguard soldier (primary) + procedural fallback rig,
+// Remote player rendering: auto-rigged user character model (primary) + procedural fallback rig,
 // hitboxes + snapshot interpolation.
 // Model faces -Z at yaw 0 (same convention as the local camera).
 import * as THREE from 'three'
 import { soldierCamo, soldierVest, soldierFace } from './textures'
 import { buildRemoteGun } from './weaponmodels'
-import { preloadSoldier, soldierReady, createSoldier, type GlbInstance } from './glbmodels'
+import { preloadUserModel, userModelReady, createUserModel, type UserInstance } from './usermodel'
 import type { TeamId } from './weapons'
 
 export interface RemotePlayer {
@@ -30,9 +30,9 @@ export interface RemotePlayer {
   weapon: string
   hasBomb: boolean
   deathAt: number
-  // rig + animation state (GLB rig when loaded, procedural fallback otherwise)
+  // rig + animation state (user auto-rig when loaded, procedural fallback otherwise)
   rig: SoldierRig | null
-  glb: GlbInstance | null
+  glb: UserInstance | null
   phase: number
   speed: number
   crouchT: number
@@ -263,10 +263,10 @@ export class PlayerManager {
 
   setMyTeam(t: TeamId) { this.myTeam = t }
 
-  /** kick off the GLB asset load; upgrades existing procedural players once ready */
+  /** kick off the user-model asset load; upgrades existing procedural players once ready */
   preloadModels(): void {
-    void preloadSoldier().then(() => {
-      if (!soldierReady()) return
+    void preloadUserModel().then(() => {
+      if (!userModelReady()) return
       for (const p of this.players.values()) {
         if (!p.glb && p.rig) this.upgradeToGlb(p)
       }
@@ -276,7 +276,7 @@ export class PlayerManager {
   private upgradeToGlb(p: RemotePlayer) {
     const rig = p.rig
     if (!rig) return
-    const glb = createSoldier(p.team)
+    const glb = createUserModel(p.team)
     p.rig = null
     p.glb = glb
     p.root.remove(rig.hips)
@@ -308,9 +308,9 @@ export class PlayerManager {
     root.add(hb[0], hb[1], hb[2])
 
     let rig: SoldierRig | null = null
-    let glb: GlbInstance | null = null
-    if (soldierReady()) {
-      glb = createSoldier(team)
+    let glb: UserInstance | null = null
+    if (userModelReady()) {
+      glb = createUserModel(team)
       root.add(glb.model)
     } else {
       rig = buildSoldierRig(team)
@@ -425,7 +425,7 @@ export class PlayerManager {
         p.root.rotation.z = 0
 
         if (g) {
-          this.driveGlb(g, dt, p.speed, pitch, ct)
+          this.driveUser(g, p.speed, pitch, ct, p.phase, now, wa, amp)
         } else if (r) {
         // hips height + double-step bob
         r.hips.position.y = lerp(HIPS_STAND, HIPS_CROUCH, ct) + Math.sin(p.phase * 2) * 0.024 * wa
@@ -478,8 +478,8 @@ export class PlayerManager {
         if (p.fallAxis === 'x') { p.root.rotation.x = rot; p.root.rotation.z = 0 } else { p.root.rotation.z = rot; p.root.rotation.x = 0 }
         p.root.position.y = y + 0.04 * t
         if (g) {
-          // GLB rig: freeze in the death-moment pose — do NOT stopAllAction()
-          // (stopping restores raw bind-state bone values that mismatch the skin and collapse the mesh)
+          // user rig: bones were driven every frame while alive — freeze at the death-moment
+          // pose (do NOT touch the skeleton while dead; the root fall rotation does the rest)
           g.wasAlive = false
         } else if (r) {
         // limp limbs
@@ -504,50 +504,44 @@ export class PlayerManager {
     }
   }
 
-  /** GLB rig: Idle/Walk/Run manual weight blending from live speed + post-mixer aim-pitch/crouch bone overrides. */
-  private driveGlb(g: GlbInstance, dt: number, speed: number, pitch: number, ct: number) {
-    if (!g.wasAlive) {
-      // respawned: just reset the blend (actions kept running, bones were frozen mid-pose while dead)
-      g.wasAlive = true
-      g.current = 'idle'
-      g.weights = { idle: 1, walk: 0, run: 0 }
-    }
-    g.mixer.update(dt)
-
-    // clip choice from live speed — with hysteresis so speed jitter never flaps the selection
-    let want: 'idle' | 'walk' | 'run'
-    if (g.current === 'idle') want = speed > 0.9 ? (speed > 4.3 ? 'run' : 'walk') : 'idle'
-    else if (g.current === 'walk') want = speed < 0.5 ? 'idle' : (speed > 4.3 ? 'run' : 'walk')
-    else want = speed < 3.4 ? (speed < 0.5 ? 'idle' : 'walk') : 'run'
-    g.current = want
-
-    // manual blend weights: exponential approach to the target (frame-rate independent, no mixer fades)
-    const k = Math.min(1, dt * 9)
-    g.weights.idle += ((want === 'idle' ? 1 : 0) - g.weights.idle) * k
-    g.weights.walk += ((want === 'walk' ? 1 : 0) - g.weights.walk) * k
-    g.weights.run += ((want === 'run' ? 1 : 0) - g.weights.run) * k
-    g.actions.idle.setEffectiveWeight(g.weights.idle)
-    g.actions.walk.setEffectiveWeight(g.weights.walk)
-    g.actions.run.setEffectiveWeight(g.weights.run)
-
-    // clip playback rate tracks the real speed (walk ~1.55 m/s, run ~4.2 m/s natural)
-    if (g.weights.walk > 0.01) g.actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 1.55, 0.65, 1.7))
-    if (g.weights.run > 0.01) g.actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / 4.2, 0.7, 1.5))
-
-    // post-mixer additive overrides (mixer writes the clip pose first, these stack on top)
+  /** User auto-rig: procedural bone drive from live speed / crouch / aim.
+   *  Sign conventions: limbs extend -Y from their pivot → +rotation.x swings the tip FORWARD (-Z);
+   *  torso & head extend +Y → -rotation.x leans FORWARD, +pitch (looking up) tips them BACK. */
+  private driveUser(g: UserInstance, speed: number, pitch: number, ct: number, phase: number, now: number, wa: number, amp: number) {
     const b = g.bones
-    b.spine.rotation.x += pitch * 0.22
-    b.spine1.rotation.x += pitch * 0.22 + 0.2 * ct
-    b.spine2.rotation.x += pitch * 0.18
-    b.neck.rotation.x += pitch * 0.18
-    b.head.rotation.x += pitch * 0.2
-    if (ct > 0.01) {
-      b.hips.position.y -= 0.44 * ct
-      b.thighR.rotation.x += 1.0 * ct
-      b.thighL.rotation.x += 0.95 * ct
-      b.calfR.rotation.x -= 1.75 * ct
-      b.calfL.rotation.x -= 1.7 * ct
-    }
+
+    // hips: crouch drop + double-step walk bob
+    b.hips.position.y = lerp(0.95, 0.55, ct) + Math.sin(phase * 2) * 0.02 * wa
+
+    // legs: crouch fold + stride
+    const thighBase = 1.30 * ct
+    const kneeBase = 2.25 * ct
+    b.thighR.rotation.x = thighBase + Math.sin(phase) * 0.55 * wa
+    b.thighL.rotation.x = thighBase + Math.sin(phase + Math.PI) * 0.55 * wa
+    b.shinR.rotation.x = -kneeBase - Math.max(0, Math.sin(phase + 2.5)) * 0.85 * wa
+    b.shinL.rotation.x = -kneeBase - Math.max(0, Math.sin(phase + Math.PI + 2.5)) * 0.85 * wa
+
+    // torso: forward lean w/ speed + crouch (negative x), counter-sway, breathing; aim leans back
+    const breath = Math.sin(now * 0.0016) * 0.012
+    b.torso.rotation.x = -(0.06 + 0.10 * amp + 0.30 * ct) + pitch * 0.25 + breath
+    b.torso.rotation.y = Math.sin(phase) * 0.08 * wa
+
+    // head follows aim pitch (positive pitch = look up)
+    b.head.rotation.x = pitch * 0.55 - 0.10 * ct
+
+    // arms: weapon-ready pose, aim pitch raises the gun (gunRig rides the hand), subtle stride sway
+    b.armR.rotation.set(
+      1.10 - 0.08 * ct + Math.sin(phase) * 0.05 * wa + pitch * 0.28,
+      -0.22,
+      -0.12,
+    )
+    b.foreR.rotation.set(0.95 + 0.20 * ct + pitch * 0.15, 0, 0)
+    b.armL.rotation.set(
+      0.85 - 0.05 * ct + Math.sin(phase + Math.PI) * 0.05 * wa + pitch * 0.12,
+      0.30,
+      0.18,
+    )
+    b.foreL.rotation.set(1.05 + 0.15 * ct, 0, 0)
   }
 
   hitboxMeshes(): THREE.Object3D[] {

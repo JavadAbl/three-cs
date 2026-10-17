@@ -12,7 +12,7 @@ import type { MapBuild } from './mapview'
 import { PlayerManager } from './players'
 import { Effects, buildBombMesh } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
-import { soldierState } from './glbmodels'
+import { userModelState } from './usermodel'
 import type { ViewModel } from './weaponmodels'
 import { audio } from './audio'
 
@@ -301,10 +301,10 @@ export class Engine {
           rot: [Math.round(p.root.rotation.x * 100) / 100, Math.round(p.root.rotation.z * 100) / 100],
           vis: p.root.visible,
           gunParts: p.gunStub.children.length,
-          glb: !!p.glb, anim: p.glb ? p.glb.current : null,
+          glb: !!p.glb, anim: p.glb ? 'user' : null,
         })),
         sock: () => this.socket,
-        glb: () => soldierState(),
+        glb: () => userModelState(),
         upgrade: () => this.pm.upgradeAllNow(),
         meshWorld: (id: string) => {
           const p = this.pm.getById(id)
@@ -340,26 +340,39 @@ export class Engine {
             rot: [node.rotation.x, node.rotation.y, node.rotation.z].map((v: number) => Math.round(v * 1000) / 1000),
           }
         },
-        // mixer internals: does time advance? what weights?
-        mixerInfo: (id: string) => {
+        // user-rig bone state: rotations of the driven skeleton (proves animation is live)
+        rigInfo: (id: string) => {
           const p = this.pm.getById(id)
           if (!p || !p.glb) return null
-          const g = p.glb
+          const b = p.glb.bones
+          const r3 = (o: THREE.Object3D) => [o.rotation.x, o.rotation.y, o.rotation.z].map(v => Math.round(v * 100) / 100)
           return {
-            time: Math.round(g.mixer.time * 1000) / 1000,
-            current: g.current,
-            w: {
-              idle: Math.round(g.actions.idle.getEffectiveWeight() * 100) / 100,
-              walk: Math.round(g.actions.walk.getEffectiveWeight() * 100) / 100,
-              run: Math.round(g.actions.run.getEffectiveWeight() * 100) / 100,
-            },
-            playing: {
-              idle: g.actions.idle.isRunning(),
-              walk: g.actions.walk.isRunning(),
-              run: g.actions.run.isRunning(),
-            },
+            hipsY: Math.round(b.hips.position.y * 100) / 100,
+            torso: r3(b.torso),
+            head: r3(b.head),
+            armR: r3(b.armR),
+            foreR: r3(b.foreR),
+            thighR: r3(b.thighR),
+            shinR: r3(b.shinR),
+            thighL: r3(b.thighL),
+            shinL: r3(b.shinL),
             speed: Math.round(p.speed * 100) / 100,
+            crouchT: Math.round(p.crouchT * 100) / 100,
+            gunPos: p.glb.gunRig.position.toArray().map(v => Math.round(v * 1000) / 1000),
           }
+        },
+        // live bone-rotation probe: set a bone's rotation, read back its world transform
+        bonePose: (id: string, bone: string, x?: number, y?: number, z?: number) => {
+          const p = this.pm.getById(id)
+          if (!p || !p.glb) return null
+          const node = p.root.getObjectByName(bone) as THREE.Object3D | null
+          if (!node) return null
+          const before = node.getWorldPosition(new THREE.Vector3()).toArray()
+          if (x !== undefined) node.rotation.set(x, y ?? node.rotation.y, z ?? node.rotation.z)
+          p.root.updateMatrixWorld(true)
+          const after = node.getWorldPosition(new THREE.Vector3()).toArray()
+          const tip = new THREE.Vector3(0, -0.25, 0).applyQuaternion(node.getWorldQuaternion(new THREE.Quaternion())).add(node.getWorldPosition(new THREE.Vector3()))
+          return { before: before.map(v => +v.toFixed(3)), after: after.map(v => +v.toFixed(3)), tipDir: tip.toArray().map(v => +v.toFixed(3)), rot: [node.rotation.x, node.rotation.y, node.rotation.z] }
         },
         sfx: () => audio.info(),
         setAmmo: (mag: number, reserve: number) => {

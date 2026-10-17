@@ -69,6 +69,18 @@ export default function Home() {
   useEffect(() => { setSettings(loadSettings()) }, [])
   useEffect(() => { openRef.current = open }, [open])
 
+  // Warm the character model (human.glb, ~7.6 MB) while the player is still
+  // browsing the menu: the download then happens during lobby time, so hitting
+  // PLAY never triggers a fresh model download — players spawn rigged at once.
+  // players.ts calls preloadUserModel() again as a safety net; the promise is
+  // cached at module level, so this never double-fetches.
+  useEffect(() => {
+    void import('@/game/usermodel')
+      .then((m) => m.preloadUserModel())
+      .catch(() => { /* procedural rig stays the fallback */ })
+  }, [])
+
+
   // server browser live list (lobby only)
   useEffect(() => {
     if (screen !== 'lobby') return
