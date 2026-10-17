@@ -492,3 +492,20 @@ Stage Summary:
 - Full recovery from the overnight rollback: user model + auto-rig + lobby preload + IDM-proof POST route all live again, everything re-verified green
 - Asset-acceptance policy is now enforced mechanically (gitignore holds ALL new binaries), documented in repo READMEs + this worklog — future sessions must NOT commit/push model/asset binaries until the user explicitly accepts them
 - Local main = 15b03d5 (binary-free); remote b03dc4b still carries the 7.6MB blob — offer the user a history purge on next push (needs PAT + force-push)
+
+---
+Task ID: 25
+Agent: Super Z (main agent)
+Task: user provided GitHub PAT → execute pending remote history purge (Task 24 follow-up)
+
+Work Log:
+- Pre-push verification: local main = af9f2ab (platform snapshot commit; tree confirmed .glb-free — it also removed Soldier.glb from tracking + glbmodels.ts/test-glb-anim.ts). 15b03d5 still carried Soldier.glb blob 1788f122 in-tree (task 20 lineage, already-pushed, untouched). human.glb blob a7211c24 was in NO local branch (only reachable via stale origin/main ref = remote b03dc4b).
+- Server health before push: POST /api/assets/human on :3000 → 200; :3003 open; next/game-server procs alive since Oct 17 16:21 (no overnight rollback).
+- Force-push via ONE-OFF authenticated URL (token inline in the push command only — never written to .git/config or any file; git redacts the URL in output; worklog keeps it redacted): remote main b03dc4b → af9f2ab (forced update). Verified anonymously: ls-remote main = af9f2ab = local HEAD. human.glb now unreachable from all remote refs. (GitHub may still serve b03dc4b via API/cache until its own GC runs — ref-level purge is complete; a hard delete would need GitHub support, unnecessary for a game asset.)
+- Local hygiene: fetch updated origin/main → af9f2ab; reflog expire --expire-unreachable=now + gc --prune=now → human.glb blob a7211c24 GONE from local object store (cat-file: not a valid object); pack 17.17 MiB → 10.17 MiB. Soldier.glb blob remains (reachable via d54cd87 in main history, 2.1 MiB — optional history rewrite still on offer).
+- Noted: af9f2ab (platform auto-commit) swept the 3 intentionally-untracked dead-code files into tracking (src/game/dust2.ts, src/game/weaponskins.ts, mini-services/game-server/dust2.ts) — source files, not binaries, so no asset-policy violation; left as-is to avoid rewriting the platform's snapshot commit. Can be dropped in a follow-up commit if desired.
+
+Stage Summary:
+- Remote fully purged of the 7.6MB human.glb: remote main = af9f2ab (binary-free), blob unreachable on remote refs; local object store also GC'd (pack 10.17 MiB)
+- Token security: used once inline for push only, zero persistence anywhere; user advised to ROTATE/REVOKE it since it was pasted in plaintext chat
+- Open optional items: Soldier.glb history rewrite (2.1 MiB reclaim, needs git-filter-repo + force-push), dead-code removal commit, GitHub-side hard GC via support request
