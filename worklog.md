@@ -341,3 +341,19 @@ Stage Summary:
 - Bug 1 fixed: all anim-frame-1 faces (ramp side walls, top-landing strips) render — map regenerated with the previously-written-but-never-run v3 render fix.
 - Bug 2 fixed by 3 layers: wall-skirt band slicing (converter), global 8u grid band alignment (converter), and 2 engine physics fixes (level-top boxes no longer push-lock; landing picks the highest top).
 - Ramps are now climbable across their full width from the very base; bots pathing updated to new waypoint ids; server live on :3003 with map v4.
+
+---
+Task ID: 16
+Agent: Super Z (main agent)
+Task: Push latest updates (ramp bug fixes) to GitHub backup repo
+
+Work Log:
+- Verified PAT via GitHub API → owner JavadAbl, repo JavadAbl/three-cs, push permission confirmed
+- Checked remote state: remote main was at 8708aa8 (ramp collision fix), local main was 2 commits ahead at 937b251 (final fix: ramp left-side texture + ramp-start blocking, live browser climb verified)
+- Working tree clean — ramp fixes already committed locally
+- Pushed main via one-off token URL (token NOT stored in git config or credentials)
+- Verified remote main now = 937b251 matching local HEAD
+
+Stage Summary:
+- All ramp bug fixes (task 14/15 + ramp collision + ramp texture/blocking) are now on GitHub at JavadAbl/three-cs, main @ 937b251
+- Project fully backed up; sandbox loss can no longer wipe progress
