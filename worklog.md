@@ -401,3 +401,19 @@ Stage Summary:
 - Hitboxes 100% untouched (legacy dims/positions) — headshot gameplay unchanged.
 - Browser automation lessons: HMR/Fast-Refresh resets rooms mid-verification (reload + rejoin after every code edit); pause overlay must be hidden per-screenshot (hide the panel subtree, keep canvas); polling corpse screenshots race round transitions; spectate cam ignores __eng.teleport (must be alive).
 - NOT pushed to GitHub (PAT not stored by policy) — local main at d54cd87, ready to push when user provides token again.
+
+---
+Task ID: 20
+Agent: Super Z (main agent)
+Task: push pending commits to GitHub with fresh PAT — user policy: "dont push downloaded/uploaded contents. just actual running assets"
+
+Work Log:
+- Audited every tracked file before pushing: verified the pending GLB-models commits (d54cd87) contain ONLY running assets (public/assets/models/Soldier.glb 2.1 MB + src/game code) and zero junk; /download/ and tool-results/ were already gitignored
+- Found and removed from git tracking (files kept on disk): upload/ raw map sources (aim_headshot.bsp + .ztmp + .txt + cs-28 zip, ~740 KB), .env (local DATABASE_URL only, no real secret), tehran_game.json (dead — no code references), .zscripts/dev.pid (runtime), public/assets/maps/aimhead/debug-top.{png,ppm} (converter debug output, not read by the game)
+- .gitignore extended: /upload/, /tehran_game.json, .zscripts/*.pid, public/assets/maps/*/debug-top.*
+- Note: upload/ + .env blobs remain in EARLIER git history (commits 2c7c3fa / before 937b251, already on remote since previous session pushes) — user did not request a history rewrite; offered if wanted
+- Verified PAT via API (repo JavadAbl/three-cs, owner JavadAbl); remote main was 0315808, local ahead by 3 commits
+- Pushed main via one-off token URL (token NOT stored in git config / credentials / worklog, per policy)
+
+Stage Summary:
+- Remote main now matches local HEAD (GLB player models task 19 + repo cleanup); repo = source + running assets only; raw uploads/screenshots/local caches all excluded going forward
