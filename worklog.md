@@ -377,3 +377,27 @@ Work Log:
 Stage Summary:
 - Players are now articulated camo soldiers with team-specific gear, walking/crouching/aiming/falling animations — cubes gone
 - Committed 0315808 and pushed to JavadAbl/three-cs (main @ 0315808)
+
+---
+Task ID: 19
+Agent: Super Z (main agent)
+Task: replace procedural soldier players with real GLB models + animations (user request "add player model and texture")
+
+Work Log:
+- Asset sourcing: user offered CGTrader models (SWAT Operator CC-BY, Survivalist Royalty-Free) but CGTrader needs login; found that the three.js GitHub repo serves rigged+animated GLBs with no login. Self-downloaded Soldier.glb (Mixamo Vanguard: 49-joint mixamorig rig, Idle/Walk/Run/TPose clips, 2 PBR materials, 2.1 MB) from raw.githubusercontent.com to public/assets/models/. Also grabbed Xbot/Michelle for evaluation (unused, deleted).
+- New src/game/glbmodels.ts: preloadSoldier() single prototype load (height-normalized to 1.79 m, grounded), per-team tinted material clones (CT blue 0x82a6d8 / T tan 0xd8b98c, visor emissive CT blue/T orange), createSoldier(team) per player via SkeletonUtils.clone + AnimationMixer; gunRig parented to mixamorig:RightHand (GUN_HAND_POS/ROT tunable), C4 on Spine1 back, frustumCulled=false on skinned meshes, castShadow on. Served via Caddy gateway with correct model/gltf-binary MIME (verified byte-identical).
+- players.ts dual-path: getOrCreate builds GLB rig when soldierReady(), else procedural fallback; upgradeToGlb swaps existing players when the async load completes; setGun re-parents stubs to either rig's gun mount; update() drives both rigs from the same state (speed/crouch/pitch/death).
+- Animation drive (driveGlb): speed→idle/walk/run with hysteresis (0.5/0.9 and 3.4/4.3 thresholds) + MANUAL weight blending (exponential approach, dt-driven) + timeScale ∝ real speed; post-mixer additive bone overrides for aim pitch (Spine/Spine1/Spine2/Neck/Head) and crouch (hips −0.44, thighs +1.0, calves −1.75).
+- THREE BUGS FOUND + FIXED along the way:
+  1. Bone lookups failed: GLTFLoader sanitizes node names (mixamorig:Hips → mixamorigHips). Fix: dual-form lookup.
+  2. T-pose (bones frozen at bind): the fadeOut/fadeIn transition logic flapped on speed jitter, each flap canceled pending fades → all weights 0 → no deformation. Proven by mixerInfo probe (time advancing, weights all 0). Fix: manual weight control, no mixer fades at all. Repro'd + validated in bun (scripts/test-glb-anim.ts: strips GLB textures, parses, clones, runs mixer — ANIMATION WORKS).
+  3. Death mesh collapse (black jagged, meshes at one point below ground): mixer.stopAllAction() triggers PropertyBinding.restoreOriginalState() → bones restored to raw bind-state values that mismatch the skin. Proven by meshWorld (5 meshes at identical y=-0.55). Fix: never stop the mixer — just stop calling update while dead; bones freeze at the death-moment pose, root fall rotation still applies.
+- Debug hooks added to __eng: glb() loader state, upgrade() force-upgrade w/ per-player error capture, boneWorld(id, name) node world probe, mixerInfo(id) time/weights, gunTune(id, ...) live gun offset tuning; players() extended with glb/anim fields.
+- Verification gauntlet (via :81 gateway, 560x320 viewport): 9/9 players on GLB rigs; VLM confirmed detailed humanoid soldier (tactical armor, balaclava), natural pose NOT T-pose, gun in right hand at natural height (deagle) + AK-47 held with both hands while running, T-side tan/desert tint + CT blue tint with glowing blue visor, running animation visibly changing between frames (legs striding), corpse = proper intact model lying prone (no collapse), grounded standing, no glitches. Numeric: bone rot deltas confirmed animation; death rot ±1.52 with gun following hand above ground.
+- tsc clean (src + mini-services); E2E test-aimhead ALL PASS; test-glb-anim.ts PASS; committed d54cd87.
+
+Stage Summary:
+- Players are now real GLB animated soldiers (Vanguard) with team skins, idle/walk/run locomotion, aim-pitch, crouch, weapon-in-hand, C4 back-rig, death freeze-pose falls — with the procedural rig kept as automatic fallback if the GLB ever fails to load.
+- Hitboxes 100% untouched (legacy dims/positions) — headshot gameplay unchanged.
+- Browser automation lessons: HMR/Fast-Refresh resets rooms mid-verification (reload + rejoin after every code edit); pause overlay must be hidden per-screenshot (hide the panel subtree, keep canvas); polling corpse screenshots race round transitions; spectate cam ignores __eng.teleport (must be alive).
+- NOT pushed to GitHub (PAT not stored by policy) — local main at d54cd87, ready to push when user provides token again.
