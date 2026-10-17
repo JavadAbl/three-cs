@@ -8,10 +8,16 @@ export type WeaponId =
   | 'knife' | 'glock' | 'usp' | 'deagle' | 'mp5'
   | 'ak47' | 'm4' | 'awp' | 'c4'
 
+// Menu category. Weapons keep their own class for stats/logic; the buy menu
+// groups them under fixed CS 1.6 numbering. 'grenade' and 'gear' weapons land
+// in the EQUIPMENT (6) menu category, matching 1.6.
+export type WeaponCategory = 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'heavy' | 'grenade' | 'gear'
+
 export interface WeaponDef {
   id: WeaponId
   name: string
   slot: 1 | 2 | 3 | 4 | 5   // 1 primary, 2 pistol, 3 knife, 4 c4
+  category: WeaponCategory
   price: number
   team?: TeamId              // restricted
   damage: number             // base body damage
@@ -32,61 +38,115 @@ export interface WeaponDef {
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   knife: {
-    id: 'knife', name: 'Knife', slot: 3, price: 0, damage: 40, hsMult: 1, legMult: 1,
+    id: 'knife', name: 'Knife', slot: 3, category: 'gear', price: 0, damage: 40, hsMult: 1, legMult: 1,
     fireDelay: 400, mag: Infinity, reserve: Infinity, reloadMs: 0, moveSpeed: 5.0,
     armorPen: 0.85, falloff10m: 1, auto: true, killReward: 1500, accurate: 0,
   },
   glock: {
-    id: 'glock', name: 'Glock-18', slot: 2, price: 0, team: 'T', damage: 30, hsMult: 4, legMult: 0.75,
+    id: 'glock', name: 'Glock-18', slot: 2, category: 'pistol', price: 0, team: 'T', damage: 30, hsMult: 4, legMult: 0.75,
     fireDelay: 150, mag: 20, reserve: 120, reloadMs: 2200, moveSpeed: 4.9,
     armorPen: 0.47, falloff10m: 0.89, auto: false, killReward: 300, accurate: 0.45,
   },
   usp: {
-    id: 'usp', name: 'USP-S', slot: 2, price: 0, team: 'CT', damage: 35, hsMult: 4, legMult: 0.75,
+    id: 'usp', name: 'USP-S', slot: 2, category: 'pistol', price: 0, team: 'CT', damage: 35, hsMult: 4, legMult: 0.75,
     fireDelay: 170, mag: 12, reserve: 24, reloadMs: 2200, moveSpeed: 4.9,
     armorPen: 0.505, falloff10m: 0.91, auto: false, killReward: 300, accurate: 0.38,
   },
   deagle: {
-    id: 'deagle', name: 'Desert Eagle', slot: 2, price: 700, damage: 53, hsMult: 4, legMult: 0.75,
+    id: 'deagle', name: 'Desert Eagle', slot: 2, category: 'pistol', price: 700, damage: 53, hsMult: 4, legMult: 0.75,
     fireDelay: 350, mag: 7, reserve: 35, reloadMs: 2200, moveSpeed: 4.8,
     armorPen: 0.925, falloff10m: 0.81, auto: false, killReward: 300, accurate: 0.55,
   },
   mp5: {
-    id: 'mp5', name: 'MP5-SD', slot: 1, price: 1500, damage: 27, hsMult: 4, legMult: 0.75,
+    id: 'mp5', name: 'MP5-SD', slot: 1, category: 'smg', price: 1500, damage: 27, hsMult: 4, legMult: 0.75,
     fireDelay: 90, mag: 30, reserve: 120, reloadMs: 2600, moveSpeed: 4.7,
     armorPen: 0.55, falloff10m: 0.84, auto: true, killReward: 600, accurate: 0.55,
   },
   ak47: {
-    id: 'ak47', name: 'AK-47', slot: 1, price: 2700, team: 'T', damage: 36, hsMult: 4, legMult: 0.75,
+    id: 'ak47', name: 'AK-47', slot: 1, category: 'rifle', price: 2700, team: 'T', damage: 36, hsMult: 4, legMult: 0.75,
     fireDelay: 100, mag: 30, reserve: 90, reloadMs: 2400, moveSpeed: 4.35,
     armorPen: 0.775, falloff10m: 0.98, auto: true, killReward: 300, accurate: 0.35,
   },
   m4: {
-    id: 'm4', name: 'M4A4', slot: 1, price: 3100, team: 'CT', damage: 33, hsMult: 4, legMult: 0.75,
+    id: 'm4', name: 'M4A4', slot: 1, category: 'rifle', price: 3100, team: 'CT', damage: 33, hsMult: 4, legMult: 0.75,
     fireDelay: 90, mag: 30, reserve: 90, reloadMs: 3000, moveSpeed: 4.45,
     armorPen: 0.70, falloff10m: 0.97, auto: true, killReward: 300, accurate: 0.32,
   },
   awp: {
-    id: 'awp', name: 'AWP', slot: 1, price: 4750, damage: 115, hsMult: 4, legMult: 0.75,
+    id: 'awp', name: 'AWP', slot: 1, category: 'rifle', price: 4750, damage: 115, hsMult: 4, legMult: 0.75,
     fireDelay: 1450, mag: 10, reserve: 30, reloadMs: 3600, moveSpeed: 4.0,
     armorPen: 0.975, falloff10m: 1.0, auto: false, scope: true, killReward: 100, accurate: 0.05,
   },
   c4: {
-    id: 'c4', name: 'C4 Explosive', slot: 4, price: 0, team: 'T', damage: 0, hsMult: 1, legMult: 1,
+    id: 'c4', name: 'C4 Explosive', slot: 4, category: 'gear', price: 0, team: 'T', damage: 0, hsMult: 1, legMult: 1,
     fireDelay: 1000, mag: Infinity, reserve: Infinity, reloadMs: 0, moveSpeed: 5.0,
     armorPen: 1, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
   },
 }
 
-export const BUY_ITEMS: Array<{ id: string; name: string; price: number; team?: TeamId }> = [
-  { id: 'deagle', name: 'Desert Eagle', price: 700 },
-  { id: 'mp5', name: 'MP5-SD', price: 1500 },
-  { id: 'ak47', name: 'AK-47', price: 2700, team: 'T' },
-  { id: 'm4', name: 'M4A4', price: 3100, team: 'CT' },
-  { id: 'awp', name: 'AWP', price: 4750 },
-  { id: 'kevlar', name: 'Kevlar Vest', price: 650 },
-  { id: 'kevlarhelm', name: 'Kevlar + Helmet', price: 1000 },
+// ------------------------------------------------------------ buy menu
+// Non-weapon buyables (armor today; defuse kit and grenades later) live in
+// the EQUIPMENT category, exactly like CS 1.6.
+export interface GearDef {
+  id: string
+  name: string
+  price: number
+  team?: TeamId
+  desc: string
+}
+
+export const GEAR: GearDef[] = [
+  { id: 'kevlar', name: 'Kevlar Vest', price: 650, desc: 'Armor 100' },
+  { id: 'kevlarhelm', name: 'Kevlar + Helmet', price: 1000, desc: 'Armor 100 + helmet' },
 ]
+
+// The six fixed CS 1.6 menu slots. Numbering is 1:1 with 1.6 for muscle memory:
+// 1 pistols · 2 shotguns · 3 SMGs · 4 rifles · 5 machine guns · 6 equipment.
+// Ammo categories (1.6's 7/8) intentionally omitted — modern CS refills on buy.
+export type BuyMenuKey = 'pistol' | 'shotgun' | 'smg' | 'rifle' | 'heavy' | 'equipment'
+
+export const BUY_MENU: ReadonlyArray<{ key: BuyMenuKey; label: string }> = [
+  { key: 'pistol', label: 'PISTOLS' },
+  { key: 'shotgun', label: 'SHOTGUNS' },
+  { key: 'smg', label: 'SMGs' },
+  { key: 'rifle', label: 'RIFLES' },
+  { key: 'heavy', label: 'MACHINE GUNS' },
+  { key: 'equipment', label: 'EQUIPMENT' },
+]
+
+const MENU_KEY: Record<WeaponCategory, BuyMenuKey> = {
+  pistol: 'pistol', shotgun: 'shotgun', smg: 'smg', rifle: 'rifle',
+  heavy: 'heavy', grenade: 'equipment', gear: 'equipment',
+}
+
+export interface BuyEntry {
+  id: string
+  kind: 'weapon' | 'gear'
+  name: string
+  price: number
+  team?: TeamId
+  menuKey: BuyMenuKey
+}
+
+// Derived single source for the buy menu: every priced weapon + all gear.
+// Starters (glock/usp), knife and C4 are price 0 and never appear — later
+// phases just add priced weapons and they slot in automatically.
+export const BUY_ENTRIES: BuyEntry[] = [
+  ...Object.values(WEAPONS)
+    .filter(w => w.price > 0)
+    .map(w => ({
+      id: w.id, kind: 'weapon' as const, name: w.name, price: w.price,
+      team: w.team, menuKey: MENU_KEY[w.category],
+    })),
+  ...GEAR.map(g => ({
+    id: g.id, kind: 'gear' as const, name: g.name, price: g.price,
+    team: g.team, menuKey: 'equipment' as const,
+  })),
+]
+
+export function buyEntriesFor(key: BuyMenuKey): BuyEntry[] {
+  return BUY_ENTRIES.filter(e => e.menuKey === key)
+}
 
 export const PART_MULT: Record<HitPart, number> = { head: 4, body: 1, legs: 0.75 }
 

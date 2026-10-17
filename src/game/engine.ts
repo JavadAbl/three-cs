@@ -2,7 +2,7 @@
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { io } from 'socket.io-client'
-import { WEAPONS, ECONOMY, ROUND } from './weapons'
+import { WEAPONS, ECONOMY, ROUND, GEAR } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { MAPS } from './mapdata'
 import type { MapDef, MapId } from './mapdata'
@@ -526,6 +526,7 @@ export class Engine {
     const k = e.code
     if (k === 'Tab') { e.preventDefault(); this.scoreboardOpen = true; return }
     if (k === 'Escape') return // browser handles pointer unlock; React shows menu via pointerlockchange
+    if (this.menuOpen || this.buyOpen) return // pause/buy menus handle their own keys — digits navigate the buy menu, not weapon slots
     this.keys.add(k)
     if (k === 'KeyR') this.tryReload()
     if (k === 'Digit1') this.switchSlot(1)
@@ -1164,6 +1165,7 @@ export class Engine {
     if (this.scoped) maxSpeed *= 0.5
 
     const frozen = this.phase === 'freeze' || this.phase === 'warmup' || !this.alive
+      || this.menuOpen || this.buyOpen || this.chatOpen // no movement while any menu is open (incl. keys held from before)
     const wish = new THREE.Vector3()
     if (!frozen) {
       if (this.keys.has('KeyW')) { wish.x -= Math.sin(this.yaw); wish.z -= Math.cos(this.yaw) }
@@ -1580,7 +1582,8 @@ export class Engine {
   // ---------------------------------------------------------------- public api
   buy(item: string) {
     const def = WEAPONS[item as WeaponId]
-    if (def && this.money < def.price) { audio.cantBuy(); return }
+    const price = def?.price ?? GEAR.find(g => g.id === item)?.price
+    if (price !== undefined && price > 0 && this.money < price) { audio.cantBuy(); return }
     this.socket?.emit('buy', { item })
   }
 

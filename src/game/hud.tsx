@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { WEAPONS, BUY_ITEMS } from './weapons'
-import type { WeaponId } from './weapons'
+import { WEAPONS, BUY_MENU, buyEntriesFor, GEAR } from './weapons'
+import type { WeaponId, BuyMenuKey, BuyEntry } from './weapons'
 import type { HudState } from './engine'
 
 const ctColor = '#7ab0e8'
@@ -22,6 +22,137 @@ const WEAPON_SHORT: Record<string, string> = {
   ak47: 'AK-47', m4: 'M4A4', awp: 'AWP', deagle: 'Deagle', glock: 'Glock', usp: 'USP-S',
   mp5: 'MP5', knife: 'Knife', c4: 'C4', kevlar: 'Kevlar', kevlarhelm: 'Kevlar+Helm',
   world: 'C4', fall: 'Gravity',
+}
+
+// ============================================================
+// CS 1.6-style category buy menu — two-level keyboard navigation.
+// B opens (page.tsx toggles), digits 1-6 pick a category, digits
+// 1-9 buy inside a category, 0/Backspace goes one level up (0 at
+// root = exit, exactly like 1.6), B/ESC closes. Mouse works too.
+// Money/team/window validation lives in engine.buy() + the server;
+// rows stay clickable so rejected buys surface as toast feedback.
+// NOTE: categories cap at 9 entries (digit keys); Phase 5 (rifles)
+// will need paging or letter keys if a category exceeds that.
+function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
+  const [cat, setCat] = useState<BuyMenuKey | null>(null)
+  // live ref so the window-level key handler never sees stale state
+  const live = useRef({ cat, s, cb })
+  live.current = { cat, s, cb }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const { cat, cb } = live.current
+      if (e.code === 'Escape') { e.preventDefault(); cb.onOpenBuy(false); return }
+      if (e.code === 'Backspace') { e.preventDefault(); setCat(null); return }
+      // KeyB is handled by page.tsx (toggle) — never double-handle here
+      const m = /^(?:Digit|Numpad)([0-9])$/.exec(e.code)
+      if (!m) return
+      e.preventDefault()
+      const n = +m[1]
+      if (n === 0) {
+        if (cat === null) cb.onOpenBuy(false) // 0. EXIT at root, 1.6-style
+        else setCat(null)                      // 0. BACK one level up
+        return
+      }
+      if (cat === null) {
+        const c = BUY_MENU[n - 1]
+        if (c && buyEntriesFor(c.key).length > 0) setCat(c.key)
+        return
+      }
+      const entry = buyEntriesFor(cat)[n - 1]
+      if (entry) cb.onBuy(entry.id)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const catDef = cat ? BUY_MENU.find(c => c.key === cat)! : null
+
+  // per-entry display state
+  const rowState = (it: BuyEntry) => {
+    const w = WEAPONS[it.id as WeaponId]
+    const wrongTeam = !!it.team && it.team !== s.team
+    const afford = s.money >= it.price
+    const owned = w
+      ? s.inventory.includes(w.id)
+      : it.id === 'kevlar' ? s.armor > 0 && !s.helmet : it.id === 'kevlarhelm' ? s.helmet : false
+    const curPrimary = s.inventory.find(x => WEAPONS[x]?.slot === 1)
+    const swap = w?.slot === 1 && curPrimary && curPrimary !== w.id ? curPrimary : null
+    return { w, wrongTeam, afford, owned, swap }
+  }
+
+  return (
+    <div className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="w-[560px] max-w-[95vw] rounded-xl bg-zinc-900/95 p-6 shadow-2xl">
+        <div className="mb-1 flex items-baseline justify-between">
+          <h2 className="text-xl font-bold tracking-widest text-orange-400">{catDef ? catDef.label : 'BUY'}</h2>
+          <span className="font-bold tabular-nums text-emerald-400">{fmtMoney(s.money)}</span>
+        </div>
+        <p className="mb-4 text-xs text-white/50">
+          {s.canBuy ? 'Buy time is open' : 'Buy time is OVER — you can browse only'}
+        </p>
+
+        {/* level 1: category list (fixed 1.6 numbering 1-6) */}
+        {!cat && (
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+            {BUY_MENU.map((c, i) => {
+              const n = buyEntriesFor(c.key).length
+              const empty = n === 0
+              return (
+                <button key={c.key} onClick={() => { if (!empty) setCat(c.key) }}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${empty ? 'cursor-not-allowed bg-zinc-800/30 text-white/25' : 'bg-zinc-800 text-white hover:bg-zinc-700'}`}>
+                  <span className="w-4 font-bold text-orange-400">{i + 1}.</span>
+                  <span className="flex-1 text-sm font-bold tracking-wider">{c.label}</span>
+                  <span className="text-[10px] text-white/40">{empty ? '—' : n}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* level 2: weapons in category (digits 1..N) */}
+        {cat && (
+          <div className="flex flex-col gap-1.5">
+            {buyEntriesFor(cat).map((it, i) => {
+              const st = rowState(it)
+              const stats = st.w
+                ? `${st.w.damage} dmg · ${st.w.fireDelay}ms · ${st.w.mag === Infinity ? '∞' : st.w.mag} rds`
+                : (GEAR.find(g => g.id === it.id)?.desc ?? '')
+              return (
+                <button key={it.id} onClick={() => cb.onBuy(it.id)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left transition ${st.wrongTeam ? 'bg-zinc-800/40 opacity-40' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                  <span className="w-4 font-bold text-orange-400">{i + 1}.</span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 text-sm font-bold">
+                      {it.name}
+                      {it.team && (
+                        <span className={`rounded px-1 text-[9px] font-bold ${it.team === 'CT' ? 'bg-sky-900/70 text-sky-300' : 'bg-orange-900/60 text-orange-300'}`}>
+                          {it.team}
+                        </span>
+                      )}
+                      {st.owned && <span className="text-[9px] font-bold text-emerald-400">✓ OWNED</span>}
+                      {st.swap && <span className="text-[9px] text-amber-400/80">⇄ replaces {WEAPONS[st.swap]?.name}</span>}
+                    </div>
+                    <div className="text-[10px] text-white/40">{stats}</div>
+                  </div>
+                  <span className={`text-sm tabular-nums ${st.afford ? 'text-emerald-400' : 'text-red-400'}`}>${it.price}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center justify-between text-[10px] tracking-widest text-white/40">
+          <span>{cat ? 'DIGITS BUY · 0 BACK' : '1-6 CATEGORIES · 0 EXIT'}</span>
+          <span>B / ESC CLOSE</span>
+        </div>
+        <button onClick={() => { if (cat) setCat(null); else cb.onOpenBuy(false) }}
+          className="mt-2 w-full rounded-lg bg-orange-600 py-2 font-bold tracking-wider text-white transition hover:bg-orange-500">
+          {cat ? 'BACK (0)' : 'CLOSE (B) — BACK TO GAME'}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export interface HudCallbacks {
@@ -363,40 +494,8 @@ export function Hud({ s, cb, settings, open }: {
         </div>
       )}
 
-      {/* ---------------- buy menu (B) ---------------- */}
-      {open.buy && (
-        <div className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-[560px] max-w-[95vw] rounded-xl bg-zinc-900/95 p-6 shadow-2xl">
-            <div className="mb-1 flex items-baseline justify-between">
-              <h2 className="text-xl font-bold tracking-widest text-orange-400">BUY EQUIPMENT</h2>
-              <span className="font-bold tabular-nums text-emerald-400">{fmtMoney(s.money)}</span>
-            </div>
-            <p className="mb-4 text-xs text-white/50">{s.canBuy ? 'Buy time is open' : 'Buy time is OVER — you can browse only'}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {BUY_ITEMS.filter(it => !it.team || it.team === s.team).map(it => {
-                const w = WEAPONS[it.id as WeaponId]
-                const afford = s.money >= it.price
-                const owned = s.inventory.includes(it.id as WeaponId) || (it.id === 'kevlar' && s.armor > 0 && !s.helmet) || (it.id === 'kevlarhelm' && s.helmet)
-                return (
-                  <button key={it.id} disabled={!afford || !s.canBuy}
-                    onClick={() => cb.onBuy(it.id)}
-                    className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-left transition ${afford && s.canBuy ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-800/40 opacity-40 cursor-not-allowed'}`}>
-                    <div>
-                      <div className="text-sm font-bold">{it.name}{owned && <span className="ml-2 text-[10px] text-emerald-400">OWNED</span>}</div>
-                      {w && <div className="text-[10px] text-white/40">{w.damage} dmg · {w.fireDelay}ms · {w.mag === Infinity ? '∞' : w.mag} rds</div>}
-                      {!w && <div className="text-[10px] text-white/40">armor 100{it.id === 'kevlarhelm' ? ' + helmet' : ''}</div>}
-                    </div>
-                    <span className={`tabular-nums text-sm ${afford ? 'text-emerald-400' : 'text-red-400'}`}>{it.price ? '$' + it.price : 'FREE'}</span>
-                  </button>
-                )
-              })}
-            </div>
-            <button onClick={() => cb.onOpenBuy(false)} className="mt-4 w-full rounded-lg bg-orange-600 py-2 font-bold tracking-wider hover:bg-orange-500">
-              CLOSE (B) — BACK TO GAME
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ---------------- buy menu (B) — CS 1.6 categories ---------------- */}
+      {open.buy && <BuyMenu s={s} cb={cb} />}
 
       {/* ---------------- chat input (Enter) ---------------- */}
       {open.chat && (

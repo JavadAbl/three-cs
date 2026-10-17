@@ -555,3 +555,24 @@ Work Log:
 Stage Summary:
 - WEAPONS_PLAN.md = the canonical roadmap for the full 41-weapon roster; phase 0 (buy menu) is the foundation and can start immediately; each phase independently shippable/verifiable; grenade phase is the big systems branch (entities + LOS interplay)
 - Nothing implemented yet — plan only, awaiting user's phase order/go-ahead
+
+---
+Task ID: 29
+Agent: Super Z (main agent)
+Task: WEAPONS_PLAN.md Phase 0 — CS 1.6-style category buy menu (user: "Start with Phase 0")
+
+Work Log:
+- DATA (0.1): added WeaponCategory ('pistol'|'smg'|'shotgun'|'rifle'|'heavy'|'grenade'|'gear') to WeaponDef in BOTH stat tables (src/game/weapons.ts + mini-services/game-server/weapons.ts, byte-synced via cp + diff); backfilled all 9 weapons (glock/usp/deagle=pistol, mp5=smg, ak47/m4/awp=rifle, knife/c4=gear); added GearDef/GEAR (kevlar 650, kevlarhelm 1000); BUY_ITEMS dissolved → derived BUY_ENTRIES (priced weapons + gear) + fixed BUY_MENU (6 slots, 1.6 numbering 1-6, grenade/gear→EQUIPMENT, ammo intentionally omitted per plan §0.3); buyEntriesFor() helper; server index.ts dropped the (unused) BUY_ITEMS import.
+- UI (0.2, hud.tsx): new BuyMenu component — two-level nav: B opens (page.tsx toggle, unchanged), digits 1-6 select category, digits 1-9 buy inside category, 0/Backspace one level up (0 at root = exit, 1.6-style), B/ESC closes, mouse works in parallel; live-ref pattern keeps the window key handler fresh without re-binding; row states: wrong-team grey+tag (show-grey decision per plan), can't-afford dim+red price, ✓OWNED, ⇄replaces-X slot-conflict hint, per-weapon stats line; empty categories (shotgun/heavy today) dimmed with "—", count badges on populated ones; footer key hints.
+- ENGINE: onKeyDown now gates on menuOpen||buyOpen (digits no longer switch weapon slots while menu open — also fixes pause-menu leak); movePlayer frozen while any menu open (kills held-key drift); buy() pre-check extended to GEAR prices (cantBuy sound for armor too).
+- TESTS: new scripts/test-buymenu.ts (31 checks): category backfill, fixed menu numbering, derived BUY_ENTRIES set/prices/teams, per-category grouping incl. empty, client↔server WEAPONS/GEAR/BUY_ENTRIES/ECONOMY deep-parity (pre-Phase-1 drift guard), server-buys-every-entry.
+- VERIFIED: test-buymenu 31/31; E2E test-aimhead 4/4 + test-bugfixes 3/3; tsc clean (src + mini-services; only pre-existing scripts/examples/skills errors remain); browser via :81 (agent-browser): full keyboard buy B→4→2 bought M4A4 (16,000→12,900, OWNED tag), gear buy 6→2 (kevlarhelm −1,000), 0-back/0-exit nav, AK-47 greyed with T tag while CT (team filter), AWP/AK show "⇄ replaces M4A4"; VLM screenshots verified BOTH levels (root: 6 categories + dims + money header; rifles: all row states); buyError toast "Buy time is over" captured via in-DOM poll after closed-window attempt.
+- DEBUGGED en route: apparent buy "failures" were correct server rejections (live+20s window expired / match over "GG" / round cycling); one socket orphaned by a bun --hot mid-write reload — fixed by clean server restart (kill -9 the lingering pids; SIGTERM lingers because httpServer.close waits on open sockets).
+- OPS note: bun --hot + Edit-tool writes can race (watcher reads partial file → parse-error state); if the server log shows parse errors after an edit, restart it. Debug screenshots left untracked in scripts/bsp/debug/buymenu-*.png (not committed — source-only phase commit).
+- Committed (source-only): weapons.ts ×2, engine.ts, hud.tsx, index.ts, scripts/test-buymenu.ts.
+
+Stage Summary:
+- Phase 0 DONE: buy menu is category-native, fully keyboard-drivable, 1.6-numbered, team/afford/owned/slot states all live; BUY_ITEMS is gone — later phases just add priced weapons and they slot into categories automatically
+- BUY_ENTRIES + GEAR + WeaponCategory now exist in BOTH tables (kept byte-identical; test-buymenu guards the sync until Phase 1 unifies)
+- Bots/server buy logic untouched (server still special-cases gear by id — Phase 1/8 will formalize); no gameplay/balance change
+- Ready for Phase 1 (single source of truth + schema extensions: fireMode/burst, pellets, scopeLevels, suppressed, throwable)

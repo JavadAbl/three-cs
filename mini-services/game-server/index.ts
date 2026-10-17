@@ -1,6 +1,6 @@
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import { WEAPONS, ECONOMY, ROUND, computeDamage, BUY_ITEMS } from './weapons'
+import { WEAPONS, ECONOMY, ROUND, computeDamage } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { MAPS, MAP_LIST, rayHitsAABB } from './mapdata'
 import type { MapDef, MapId, Box } from './mapdata'
