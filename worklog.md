@@ -528,3 +528,16 @@ Stage Summary:
 - Asset-acceptance policy v3 live: public/assets/ = accepted committed running assets (normal git, no ignores); public/staging/ = gitignored web-served evaluation area; loaders fall back /assets→/staging (model route: staging wins for live evaluation); acceptance = plain mv + git add (no -f)
 - All pending binaries relocated to staging; the game runs the model from staging RIGHT NOW (verified end-to-end); revocation of the old ignore-rule system is complete
 - The 48 stale ogg + 5 dormant skin files sit in staging unreferenced — candidates for deletion on user's word (kept: policy = never delete user files unasked)
+
+---
+Task ID: 27
+Agent: Super Z (main agent)
+Task: user asked "did u add this to your rules docs?" → gap found (no AGENTS.md/CLAUDE.md existed), created AGENTS.md
+
+Work Log:
+- Verified: no AGENTS.md / CLAUDE.md / .cursorrules in repo (untracked or tracked) — policy so far lived in gitignore comments + asset READMEs + DEPLOY.md + this worklog only.
+- Created AGENTS.md (repo root, committed) capturing all standing rules: asset-acceptance policy v3 (staging vs accepted, acceptance command, never drop binaries into public/assets directly), git/PAT hygiene (one-off inline URL, redact, rotate expectation), ops (ports, :81 proxy for browser checks, double-fork daemonization, QUICK PLAY tab vs PLAY button), verification bar (E2E suites, model READY/N onRig, VLM alive-only caveat, tsc scope), session protocol (worklog first, append-only).
+- Committed + pushed via one-off PAT URL.
+
+Stage Summary:
+- Rules now durable in AGENTS.md — any future session, tool, or contributor that reads repo root discovers the standing rules without depending on this worklog or chat context
