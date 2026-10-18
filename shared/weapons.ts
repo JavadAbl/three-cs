@@ -30,6 +30,9 @@ export type WeaponId =
   | 'nova' | 'xm1014' | 'mag7' | 'sawedoff'
   // Phase 7 machine guns — ids match the staged audio map (shared/weapons-audio.ts)
   | 'm249' | 'negev'
+  // Phase 8 grenades — ids DOUBLE as grenade kinds (throwable.kind) and keys
+  // into GRENADE_AUDIO (shared/weapons-audio.ts); molotov is T, incendiary CT
+  | 'flash' | 'he' | 'smoke' | 'molotov' | 'inc' | 'decoy'
 
 // Menu category. Weapons keep their own class for stats/logic; the buy menu
 // groups them under fixed CS 1.6 numbering. 'grenade' and 'gear' weapons land
@@ -82,7 +85,8 @@ export interface WeaponDef {
   suppressed?: boolean       // quieter fire, no distant crack/tracer (m4a1-s)
   recoilPattern?: number     // deterministic recoil seed (Phase 9 parameterization)
   killRewardClass?: KillRewardClass // class-based rewards for new weapons
-  throwable?: { kind: 'flash' | 'smoke' | 'he' | 'molotov' | 'decoy' } // Phase 8
+  throwable?: { kind: 'flash' | 'smoke' | 'he' | 'molotov' | 'inc' | 'decoy' } // Phase 8 — id == kind for every grenade
+  maxCarry?: number           // Phase 8: grenades stack in slot 5 up to this count (flash 2, rest 1)
   accuracyRamp?: { startSpread: number; shots: number } // Phase 7 spool: consecutive shots settle spread from startSpread to accurate (negev)
 }
 
@@ -345,6 +349,51 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     armorPen: 0.80, falloff10m: 0.98, auto: true, killReward: 300, accurate: 0.55,
     fireMode: 'auto', killRewardClass: 'heavy', // belt-fed SAW, 100-rd box mag
   },
+  // ---------------------------------------------- Phase 8 grenades + equipment (CS:GO values)
+  // Grenades live in slot 5 and land in the EQUIPMENT (6) buy category,
+  // 1.6-style. Each inventory entry IS one grenade (mag 1, reserve 0);
+  // throwing removes the entry — ammo maps are never used. Gun-oriented
+  // fields (hsMult/legMult/falloff) are inert for throwables; `damage` +
+  // `armorPen` carry the HE numbers (98 base / 50% vs armor) so the shared
+  // heDamage() math in shared/grenades.ts reads them off the table like
+  // every other weapon stat. Carry limits per plan 8.3: max 1 HE / 2 flash /
+  // 1 smoke / 1 molotov / 1 inc / 1 decoy. The defuse kit is GEAR (below).
+  flash: {
+    id: 'flash', name: 'Flashbang', slot: 5, category: 'grenade', price: 200, damage: 0, hsMult: 1, legMult: 1,
+    fireDelay: 900, mag: 1, reserve: 0, reloadMs: 0, moveSpeed: 4.95,
+    armorPen: 1, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
+    fireMode: 'semi', throwable: { kind: 'flash' }, maxCarry: 2, killRewardClass: 'grenade', // blind everyone incl. the thrower
+  },
+  he: {
+    id: 'he', name: 'HE Grenade', slot: 5, category: 'grenade', price: 300, damage: 98, hsMult: 1, legMult: 1,
+    fireDelay: 900, mag: 1, reserve: 0, reloadMs: 0, moveSpeed: 4.95,
+    armorPen: 0.5, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
+    fireMode: 'semi', throwable: { kind: 'he' }, maxCarry: 1, killRewardClass: 'grenade', // radial 98 → 0 over 9m, walls block
+  },
+  smoke: {
+    id: 'smoke', name: 'Smoke Grenade', slot: 5, category: 'grenade', price: 300, damage: 0, hsMult: 1, legMult: 1,
+    fireDelay: 900, mag: 1, reserve: 0, reloadMs: 0, moveSpeed: 4.95,
+    armorPen: 1, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
+    fireMode: 'semi', throwable: { kind: 'smoke' }, maxCarry: 1, killRewardClass: 'grenade', // 18s cloud, opaque to LOS + bots
+  },
+  molotov: {
+    id: 'molotov', name: 'Molotov', slot: 5, category: 'grenade', price: 400, team: 'T', damage: 0, hsMult: 1, legMult: 1,
+    fireDelay: 900, mag: 1, reserve: 0, reloadMs: 0, moveSpeed: 4.95,
+    armorPen: 1, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
+    fireMode: 'semi', throwable: { kind: 'molotov' }, maxCarry: 1, killRewardClass: 'grenade', // ground fire 7s, ignites on impact
+  },
+  inc: {
+    id: 'inc', name: 'Incendiary Grenade', slot: 5, category: 'grenade', price: 600, team: 'CT', damage: 0, hsMult: 1, legMult: 1,
+    fireDelay: 900, mag: 1, reserve: 0, reloadMs: 0, moveSpeed: 4.95,
+    armorPen: 1, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
+    fireMode: 'semi', throwable: { kind: 'inc' }, maxCarry: 1, killRewardClass: 'grenade', // CT fire grenade, same zone
+  },
+  decoy: {
+    id: 'decoy', name: 'Decoy Grenade', slot: 5, category: 'grenade', price: 50, damage: 0, hsMult: 1, legMult: 1,
+    fireDelay: 900, mag: 1, reserve: 0, reloadMs: 0, moveSpeed: 4.95,
+    armorPen: 1, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
+    fireMode: 'semi', throwable: { kind: 'decoy' }, maxCarry: 1, killRewardClass: 'grenade', // fake gunfire loop at rest, 30s
+  },
 }
 
 // ------------------------------------------------------------ buy menu
@@ -361,6 +410,7 @@ export interface GearDef {
 export const GEAR: GearDef[] = [
   { id: 'kevlar', name: 'Kevlar Vest', price: 650, desc: 'Armor 100' },
   { id: 'kevlarhelm', name: 'Kevlar + Helmet', price: 1000, desc: 'Armor 100 + helmet' },
+  { id: 'defusekit', name: 'Defuse Kit', price: 400, team: 'CT', desc: 'Defuse 10s → 5s' },
 ]
 
 // The six fixed CS 1.6 menu slots. Numbering is 1:1 with 1.6 for muscle memory:
@@ -394,9 +444,11 @@ export interface BuyEntry {
 // Derived single source for the buy menu: every priced weapon + all gear.
 // Starters (glock/usp), knife and C4 are price 0 and never appear — later
 // phases just add priced weapons and they slot in automatically.
+// EQUIPMENT ordering is 1.6-style: armor gear first, then the grenades
+// (weapons whose category routes to the equipment menu) in table order.
 export const BUY_ENTRIES: BuyEntry[] = [
   ...Object.values(WEAPONS)
-    .filter(w => w.price > 0)
+    .filter(w => w.price > 0 && MENU_KEY[w.category] !== 'equipment')
     .map(w => ({
       id: w.id, kind: 'weapon' as const, name: w.name, price: w.price,
       team: w.team, menuKey: MENU_KEY[w.category],
@@ -405,6 +457,12 @@ export const BUY_ENTRIES: BuyEntry[] = [
     id: g.id, kind: 'gear' as const, name: g.name, price: g.price,
     team: g.team, menuKey: 'equipment' as const,
   })),
+  ...Object.values(WEAPONS)
+    .filter(w => w.price > 0 && MENU_KEY[w.category] === 'equipment')
+    .map(w => ({
+      id: w.id, kind: 'weapon' as const, name: w.name, price: w.price,
+      team: w.team, menuKey: MENU_KEY[w.category],
+    })),
 ]
 
 export function buyEntriesFor(key: BuyMenuKey): BuyEntry[] {
@@ -467,6 +525,11 @@ export function zoomFovOf(w: WeaponDef): number {
 /** Negev-style spool (Phase 7): null = no ramp — spread is just `accurate`. */
 export function accuracyRampOf(w: WeaponDef): { startSpread: number; shots: number } | null {
   return w.accuracyRamp ?? null
+}
+
+/** Phase 8: how many of this grenade one player may carry (plan 8.3 limits). */
+export function grenadeLimitOf(w: WeaponDef): number {
+  return w.throwable ? (w.maxCarry ?? 1) : 0
 }
 
 /** Class-based kill reward lookup (Phase 9 derives new weapons from class). */

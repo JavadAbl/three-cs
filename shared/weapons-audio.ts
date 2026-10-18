@@ -82,6 +82,15 @@ export const WEAPON_AUDIO: Record<string, WeaponAudio> = {
   // ---- Phase 7: machine guns (staged; reload = ammo box) ----
   m249: { fire: 'm249_fire', distant: 'm249_distant', out: 'm249_boxout', in: 'm249_boxin', rack: 'm249_coverup', draw: 'm249_draw' },
   negev: { fire: 'negev_fire', distant: 'negev_distant', out: 'negev_boxout', in: 'negev_boxin', rack: 'negev_coverup' },
+
+  // ---- Phase 8: grenades (staged; draw = the pin-pull/raise on switch;
+  //      the full per-kind effect sounds live in GRENADE_AUDIO below) ----
+  flash: { draw: 'flash_draw' },
+  he: { draw: 'grenade_deploy' },
+  smoke: { draw: 'smoke_draw' },
+  molotov: { draw: 'grenade_deploy' },
+  inc: { draw: 'grenade_deploy' },
+  decoy: { draw: 'grenade_deploy' },
 }
 
 /** Grenade/equipment audio (Phase 8 consumes; staged now). */
@@ -143,4 +152,22 @@ export function liveWeaponSoundFiles(): string[] {
     if (a) out.push(...weaponAudioNames(a))
   }
   return [...new Set(out)]
+}
+
+/**
+ * Phase 8: grenade effect samples for LIVE grenade kinds + the shared
+ * throw-sequence sounds (pin pull / throw / bounce / deploy) — anyone
+ * holding a grenade needs those regardless of kind. The weapon ids in
+ * WEAPONS double as GRENADE_AUDIO keys (id == kind).
+ */
+export function liveGrenadeSoundFiles(): string[] {
+  const out: string[] = []
+  for (const id of Object.keys(WEAPONS)) {
+    const w = WEAPONS[id as keyof typeof WEAPONS]
+    if (!w.throwable) continue
+    const g = GRENADE_AUDIO[w.throwable.kind]
+    if (g) out.push(g.draw ?? 'grenade_deploy', g.deploy ?? 'grenade_deploy', g.emit ?? 'smoke_emit', g.explode ?? 'he_explode', g.explodeDistant ?? 'he_explode_distant')
+  }
+  out.push(...Object.values(GRENADE_COMMON))
+  return [...new Set(out.filter((n): n is string => !!n))]
 }

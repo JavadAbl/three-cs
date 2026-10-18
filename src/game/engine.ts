@@ -5,13 +5,16 @@ import { io } from 'socket.io-client'
 import { WEAPONS, ECONOMY, ROUND, GEAR, fireModeOf, scopeLevelsOf, zoomFovOf, pelletsOf, pelletSpreadOf, accuracyRampOf } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { pelletDirs } from '../../shared/pellets'
+import { NADE } from '../../shared/grenades'
+import type { GrenadeKind } from '../../shared/grenades'
 import { MAPS } from './mapdata'
 import type { MapDef, MapId } from './mapdata'
 import { buildMap } from './mapview'
 import { buildDetails } from './mapdetails'
 import type { MapBuild } from './mapview'
 import { PlayerManager } from './players'
-import { Effects, buildBombMesh } from './fx'
+import { Effects, buildBombMesh, buildNadeMesh, SmokeCloud, FireZone } from './fx'
+import type { WorldFx } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
 import { userModelState } from './usermodel'
 import type { ViewModel } from './weaponmodels'
@@ -66,6 +69,9 @@ export interface HudState {
   canPlant: boolean
   canDefuse: boolean
   scoreboardOpen: boolean
+  flash: number            // Phase 8: 0..1 whiteout intensity (fade window)
+  hasKit: boolean          // Phase 8: defuse kit
+  grenadeCount: number     // Phase 8: copies of the CURRENT grenade held
 }
 
 export interface EngineOpts {
@@ -198,6 +204,16 @@ export class Engine {
   private hasBomb = false
   private kills = 0
   private deaths = 0
+
+  // Phase 8: grenades + equipment
+  private nadeWorld = new Map<number, { mesh: THREE.Group; kind: GrenadeKind; vel: THREE.Vector3; pos: THREE.Vector3; lastSyncAt: number; lastSeenAt: number; trailAt: number }>()
+  private smokeWorld = new Map<number, WorldFx>()
+  private fireWorld = new Map<number, WorldFx>()
+  private blindUntil = 0
+  private blindMs = 1
+  private hasKit = false
+  private lastThrowAt = 0
+  private pinPullAt = -1e9   // viewmodel pin-out anim timestamp
 
   // bomb
   private bombPlanted = false
@@ -534,7 +550,10 @@ export class Engine {
       this.tryFire()
     } else if (e.button === 2) {
       const w = this.currentWeapon()
-      if (scopeLevelsOf(w) > 0 && this.alive) {
+      if (w.throwable && this.alive) {
+        // Phase 8 (plan 8.3): RMB = underhand lob while holding a grenade
+        this.throwGrenade(0.45)
+      } else if (scopeLevelsOf(w) > 0 && this.alive) {
         // cycle zoom steps: 2-level snipers 0→1→2→0, scoped rifles 0→1→0
         this.setScopeLevel((this.scopeLevel + 1) % (scopeLevelsOf(w) + 1))
         audio.zoom()
@@ -558,6 +577,7 @@ export class Engine {
     if (k === 'Digit2') this.switchSlot(2)
     if (k === 'Digit3') this.switchSlot(3)
     if (k === 'Digit4') this.switchSlot(4)
+    if (k === 'Digit5') this.switchSlot(5)   // cycles through held grenades
     if (k === 'KeyQ') this.switchLast()
     if (k === 'KeyE') {
       this.socket?.emit('useDown')
@@ -628,8 +648,33 @@ export class Engine {
 
     socket.on('playerLeft', (d: { id: string }) => this.pm.remove(d.id))
 
-    socket.on('snapshot', (d: { t: number; ps: unknown[][] }) => {
+    socket.on('snapshot', (d: { t: number; ps: unknown[][]; gs?: unknown[][]; sm?: unknown[][]; fi?: unknown[][] }) => {
       const rt = performance.now()
+      // Phase 8 entity reconciliation — positions/vels authoritative, meshes
+      // dead-reckon between snapshots (see loop)
+      if (d.gs) {
+        for (const row of d.gs) {
+          this.trackNade(row[0] as number, row[1] as GrenadeKind,
+            [row[2] as number, row[3] as number, row[4] as number],
+            [row[5] as number, row[6] as number, row[7] as number], rt)
+        }
+      }
+      if (d.sm) {
+        for (const row of d.sm) {
+          const id = row[0] as number
+          if (!this.smokeWorld.has(id)) {
+            this.smokeWorld.set(id, new SmokeCloud(this.scene, new THREE.Vector3(row[1] as number, row[2] as number, row[3] as number)))
+          }
+        }
+      }
+      if (d.fi) {
+        for (const row of d.fi) {
+          const id = row[0] as number
+          if (!this.fireWorld.has(id)) {
+            this.fireWorld.set(id, new FireZone(this.scene, new THREE.Vector3(row[1] as number, row[2] as number, row[3] as number)))
+          }
+        }
+      }
       for (const row of d.ps) {
         const id = row[0] as string
         if (id === this.myId) {
@@ -642,6 +687,7 @@ export class Engine {
           this.kills = row[18] as number
           this.deaths = row[19] as number
           this.money = row[20] as number
+          this.hasKit = row[21] === 1
           // respawn / round-start position sync (server owns spawn placement)
           {
             const sx = row[1] as number, sy = row[2] as number, sz = row[3] as number
@@ -697,6 +743,9 @@ export class Engine {
         this.wIdx = 0
         this.reloadEndsAt = 0
         this.cancelReloadSfx()
+        this.blindUntil = 0
+        this.lastThrowAt = 0
+        this.clearNadeWorld()
         for (const w of this.inventory) {
           const def = WEAPONS[w]
           if (def && def.mag !== Infinity) this.ammo[w] = { mag: def.mag, reserve: def.reserve }
@@ -790,6 +839,54 @@ export class Engine {
       audio.gunshot(d.weapon, d.origin as [number, number, number], [myEye.x, myEye.y, myEye.z])
     })
 
+    // ---- Phase 8: grenade events ----
+    // projectile spawned (throw broadcast — everyone incl. the thrower gets
+    // the world mesh immediately; snapshots reconcile position afterwards)
+    socket.on('nade', (d: { id: number; kind: GrenadeKind; weapon: string; owner: string; pos: number[]; vel: number[] }) => {
+      this.trackNade(d.id, d.kind, d.pos, d.vel)
+    })
+
+    // detonation reports: visuals + sounds per kind
+    socket.on('nadeFx', (d: { id: number; kind: string; pos: number[] }) => {
+      const pos = new THREE.Vector3(d.pos[0], d.pos[1], d.pos[2])
+      const eye = this.camera.position
+      // remove the projectile body (smoke bodies vanish into the cloud, etc.)
+      const n = this.nadeWorld.get(d.id)
+      if (n) { this.scene.remove(n.mesh); this.nadeWorld.delete(d.id) }
+      if (d.kind === 'he') {
+        this.fx.explosion(pos)
+        this.camShake = Math.max(this.camShake, THREE.MathUtils.clamp(1.4 - pos.distanceTo(eye) / 22, 0.15, 1.2))
+      } else if (d.kind === 'smoke') {
+        if (!this.smokeWorld.has(d.id)) this.smokeWorld.set(d.id, new SmokeCloud(this.scene, pos))
+      } else if (d.kind === 'molotov' || d.kind === 'inc') {
+        this.fx.explosion(pos)
+      }
+      // sound for every kind (flash pops, smoke hisses, HE booms, decoy deploys)
+      audio.nadeExplode(d.kind, [pos.x, pos.y, pos.z], [eye.x, eye.y, eye.z])
+    })
+
+    // hard-landing bounce ticks
+    socket.on('gBounce', (d: { id: number; pos: number[]; speed: number }) => {
+      const eye = this.camera.position
+      audio.nadeBounce([d.pos[0], d.pos[1], d.pos[2]], [eye.x, eye.y, eye.z])
+    })
+
+    // personal flashblind: server computed distance + facing + LOS for ME
+    socket.on('flash', (d: { ms: number; pos: number[] }) => {
+      const t = performance.now()
+      if (d.ms > (this.blindUntil ?? 0) - t) {
+        this.blindUntil = t + d.ms
+        this.blindMs = Math.max(1, d.ms)
+        audio.duckFor(d.ms)
+      }
+    })
+
+    // decoy fake gunfire (mimics the thrower's primary)
+    socket.on('decoyShot', (d: { id: number; pos: number[]; weapon: string }) => {
+      const eye = this.camera.position
+      audio.gunshot(d.weapon, [d.pos[0], d.pos[1], d.pos[2]], [eye.x, eye.y, eye.z])
+    })
+
     socket.on('reloadFx', (d: { id: string }) => {
       const rp = this.pm.getById(d.id)
       audio.reloadStage(rp?.weapon ?? 'rifle', 'out')
@@ -869,11 +966,12 @@ export class Engine {
 
     socket.on('toast', (d: { msg: string }) => this.pushToast(d.msg))
 
-    socket.on('buyOk', (d: { money: number; armor: number; helmet: boolean; inventory: WeaponId[]; wIdx: number }) => {
+    socket.on('buyOk', (d: { money: number; armor: number; helmet: boolean; inventory: WeaponId[]; wIdx: number; hasKit?: boolean }) => {
       const prevW = this.inventory[this.wIdx]
       this.money = d.money
       this.armor = d.armor
       this.helmet = d.helmet
+      if (d.hasKit !== undefined) this.hasKit = d.hasKit
       this.inventory = d.inventory
       this.wIdx = d.wIdx ?? 0
       this.syncAmmo()
@@ -926,6 +1024,81 @@ export class Engine {
     this.specIdx = 0
   }
 
+  /** Phase 8: create or server-sync a world grenade entry. */
+  private trackNade(id: number, kind: GrenadeKind, pos: number[], vel: number[], at?: number) {
+    let n = this.nadeWorld.get(id)
+    if (!n) {
+      n = {
+        mesh: buildNadeMesh(kind), kind,
+        vel: new THREE.Vector3(vel[0], vel[1], vel[2]),
+        pos: new THREE.Vector3(pos[0], pos[1], pos[2]),
+        lastSyncAt: at ?? performance.now(), lastSeenAt: performance.now(), trailAt: 0,
+      }
+      n.mesh.position.copy(n.pos)
+      this.scene.add(n.mesh)
+      this.nadeWorld.set(id, n)
+    } else {
+      // reconcile: hard-snap if we drifted far, else blend toward server truth
+      const sp = new THREE.Vector3(pos[0], pos[1], pos[2])
+      if (n.pos.distanceTo(sp) > 1.5) n.pos.copy(sp)
+      else n.pos.lerp(sp, 0.5)
+      n.vel.set(vel[0], vel[1], vel[2])
+      n.lastSyncAt = at ?? performance.now()
+    }
+    n.lastSeenAt = performance.now()
+  }
+
+  /** Purge all local grenade/smoke/fire visuals (round boundary). */
+  private clearNadeWorld() {
+    for (const n of this.nadeWorld.values()) this.scene.remove(n.mesh)
+    this.nadeWorld.clear()
+    for (const s of this.smokeWorld.values()) s.dispose()
+    this.smokeWorld.clear()
+    for (const f of this.fireWorld.values()) f.dispose()
+    this.fireWorld.clear()
+  }
+
+  /**
+   * Dead-reckon world grenades between snapshots (gravity + drag, the SAME
+   * constants the server steps with), spin the bodies, drop a faint trail,
+   * and reap entries the server stopped listing (detonated / round-cleared).
+   */
+  private updateNadeWorld(now: number, dt: number) {
+    for (const [id, n] of [...this.nadeWorld]) {
+      if (now - n.lastSeenAt > 300) {
+        // server no longer lists it and no nadeFx removed it — reap quietly
+        this.scene.remove(n.mesh)
+        this.nadeWorld.delete(id)
+        continue
+      }
+      if (now - n.lastSyncAt > 60) {
+        // between syncs: step locally with the shared physics constants
+        n.vel.y -= NADE.gravity * dt
+        const damp = Math.max(0, 1 - NADE.drag * dt)
+        n.vel.multiplyScalar(damp)
+        n.pos.addScaledVector(n.vel, dt)
+        if (n.pos.y < NADE.radius) {
+          n.pos.y = NADE.radius
+          if (n.vel.y < 0) n.vel.y = -n.vel.y * NADE.restitution
+        }
+        n.mesh.position.copy(n.pos)
+      }
+      n.mesh.rotation.x += 9 * dt
+      n.mesh.rotation.z += 6 * dt
+      // faint trail puffs while moving fast
+      if (n.vel.lengthSq() > 6 && now - n.trailAt > 90) {
+        n.trailAt = now
+        this.fx.nadeTrailPuff(n.pos)
+      }
+    }
+    for (const [id, s] of [...this.smokeWorld]) {
+      if (!s.update(now, dt)) { s.dispose(); this.smokeWorld.delete(id) }
+    }
+    for (const [id, f] of [...this.fireWorld]) {
+      if (!f.update(now, dt)) { f.dispose(); this.fireWorld.delete(id) }
+    }
+  }
+
   private cycleSpectate() {
     if (!this.spectating) return
     const mates = [...this.pm.players.values()].filter(p => p.team === this.myTeam && p.alive)
@@ -951,7 +1124,15 @@ export class Engine {
   }
 
   private switchSlot(slot: number) {
-    const idx = this.inventory.findIndex(w => WEAPONS[w]?.slot === slot)
+    let idx = this.inventory.findIndex(w => WEAPONS[w]?.slot === slot)
+    // Phase 8: grenade slot cycles — pressing 5 again advances to the next
+    // held grenade (CS behavior); wraps around
+    if (slot === 5 && idx >= 0 && this.inventory[this.wIdx] !== undefined &&
+        WEAPONS[this.inventory[this.wIdx]]?.slot === 5) {
+      const entries = this.inventory.map((w, i) => WEAPONS[w]?.slot === 5 ? i : -1).filter(i => i >= 0)
+      const cur = entries.indexOf(this.wIdx)
+      idx = entries[(cur + 1) % entries.length]
+    }
     if (idx >= 0 && idx !== this.wIdx) {
       this.lastW = this.wIdx
       this.wIdx = idx
@@ -1076,6 +1257,12 @@ export class Engine {
     const w = this.currentWeapon()
     if (w.id === 'c4') return // planting is via E
     const now = performance.now()
+    // Phase 8: LMB = full-power grenade throw (RMB lobs); one per click
+    if (w.throwable) {
+      this.throwGrenade(1)
+      this.lastShotAt = now
+      return
+    }
     const fm = fireModeOf(w)
     if (fm === 'burst') {
       // Phase 5 burst: in-burst cadence gate + retrigger gate (fireDelay).
@@ -1293,6 +1480,44 @@ export class Engine {
       dir: [dir.x, dir.y, dir.z],
       seed,
     })
+  }
+
+  /**
+   * Phase 8 (plan 8.3): LMB full throw / RMB underhand lob. The pin pulls
+   * audibly + the lever swings out on the viewmodel, then the 'throw' event
+   * goes to the server which owns origin, velocity and physics — the local
+   * mesh appears with the next 'nade' broadcast (≤ 50 ms, 20 Hz stream).
+   */
+  private throwGrenade(power: number) {
+    if (!this.alive || this.phase !== 'live') return
+    const w = this.currentWeapon()
+    if (!w.throwable) return
+    const now = performance.now()
+    if (now - this.lastThrowAt < NADE.throwCooldownMs) return
+    this.lastThrowAt = now
+
+    // aim direction from the camera (pitch up = arcs)
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize()
+
+    // pin + release: sounds and the vm pin-out anim
+    audio.pinPull()
+    setTimeout(() => audio.throwSfx(), 120)
+    this.pinPullAt = performance.now()
+    this.vmKick = 1
+
+    this.socket?.emit('throw', { weapon: w.id, dir: [dir.x, dir.y, dir.z], power })
+
+    // local inventory: remove one copy of this grenade; if none remain,
+    // fall back to slot 0 (primary/pistol). The server's invSync confirms.
+    const idx = this.inventory.lastIndexOf(w.id)
+    if (idx >= 0) this.inventory.splice(idx, 1)
+    if (this.inventory[this.wIdx] !== w.id) {
+      const j = this.inventory.indexOf(w.id)
+      this.wIdx = j >= 0 ? j : 0
+      this.rebuildViewmodel()
+      this.socket?.emit('switch', { wIdx: this.wIdx })
+      audio.draw(this.inventory[this.wIdx])
+    }
   }
 
   private fireKnife(weapon: WeaponId) {
@@ -1656,6 +1881,21 @@ export class Engine {
             vm.pump.position.z = homeZ
           }
         }
+        if (vm.pin) {
+          // Phase 8: pin/lever swings out + flies away after the throw
+          const t = (now - this.pinPullAt) / 500
+          if (t >= 0 && t < 1) {
+            vm.pin.rotation.x = -1.4 * Math.sin(Math.PI * Math.min(1, t * 1.6))
+            vm.pin.position.y = 0.02 * t
+            vm.pin.visible = t < 0.85
+          } else if (t >= 1) {
+            vm.pin.visible = false
+          } else {
+            vm.pin.visible = true
+            vm.pin.rotation.x = 0
+            vm.pin.position.y = 0
+          }
+        }
         if (vm.mag) {
           if (vm.mag.userData.fixed) {
             // tube-fed shotguns: shells load through the port — the tube never
@@ -1703,6 +1943,8 @@ export class Engine {
     // remote players interp
     this.pm.update(now, this.myId)
     this.fx.update(dt, this.camera.position)
+    // Phase 8: world grenade dead-reckoning + smoke/fire lifecycles
+    this.updateNadeWorld(now, dt)
 
     // network state push (20Hz)
     if (now - this.stateSentAt > 50) {
@@ -1765,7 +2007,8 @@ export class Engine {
       weapon: this.inventory[this.wIdx] ?? 'knife',
       inventory: this.inventory,
       wIdx: this.wIdx,
-      ammo: w.mag === Infinity ? { mag: -1, reserve: -1 } : am,
+      ammo: w.throwable ? { mag: this.inventory.filter(x => x === w.id).length, reserve: 0 }
+        : w.mag === Infinity ? { mag: -1, reserve: -1 } : am,
       reloading: this.reloadEndsAt > now,
       scoped: this.scoped,
       hasBomb: this.hasBomb,
@@ -1792,6 +2035,9 @@ export class Engine {
       canPlant: this.phase === 'live' && this.alive && this.hasBomb && this.myTeam === 'T' && this.inSiteNow(),
       canDefuse: this.phase === 'live' && this.alive && this.myTeam === 'CT' && this.bombPlanted && !!this.bombPos && Math.hypot(this.pos.x - this.bombPos.x, this.pos.z - this.bombPos.z) < 2,
       scoreboardOpen: this.scoreboardOpen,
+      flash: this.alive ? Math.max(0, Math.min(1, (this.blindUntil - now) / 2000)) : 0,
+      hasKit: this.hasKit,
+      grenadeCount: w.throwable ? this.inventory.filter(x => x === w.id).length : 0,
     }
     this.hudCb(state)
     // debugging/verification hook (harmless in production)

@@ -10,13 +10,15 @@
 // shared/weapons-audio.ts (WEAPON_AUDIO covers the full 41-weapon target
 // roster; only live weapons preload). Non-weapon sounds (knife melee, C4,
 // feedback, footsteps, UI, music) come from NON_WEAPON_FILES.
-import { WEAPON_AUDIO, NON_WEAPON_FILES, liveWeaponSoundFiles } from '../../shared/weapons-audio'
+import { WEAPON_AUDIO, NON_WEAPON_FILES, GRENADE_AUDIO, GRENADE_COMMON, liveWeaponSoundFiles, liveGrenadeSoundFiles } from '../../shared/weapons-audio'
 import { WEAPONS } from './weapons'
 
 export type Vec3 = [number, number, number]
 
-// derived: live-weapon samples + the fixed non-weapon set — nothing hand-listed
-const FILES = [...liveWeaponSoundFiles(), ...NON_WEAPON_FILES]
+// derived: live-weapon samples + live grenade samples + the fixed non-weapon
+// set — nothing hand-listed (Set-deduped: grenade draw names appear in both
+// the weapon map and the grenade map by design)
+const FILES = [...new Set([...liveWeaponSoundFiles(), ...liveGrenadeSoundFiles(), ...NON_WEAPON_FILES])]
 
 const DIR = '/assets/sounds/'
 const STAGE_DIR = '/staging/sounds/'
@@ -261,6 +263,54 @@ export class GameAudio {
   impact() {
     if (this.play(pick(['impact1', 'impact2', 'impact3', 'impact4']), { gain: 0.28, variance: 0.05 })) return
     this.noise(0.05, 1800, 0.15)
+  }
+
+  // ---------------------------------------------------------------- grenades (Phase 8)
+  /** pin pull right before the throw (every grenade kind) */
+  pinPull() {
+    if (this.play(GRENADE_COMMON.pinpull, { gain: 0.5, variance: 0.03 })) return
+    this.tone(1500, 0.05, 0.3, 'square', 900)
+  }
+
+  /** release/throw whoosh */
+  throwSfx() {
+    if (this.play(GRENADE_COMMON.throw, { gain: 0.45, variance: 0.04 })) return
+    this.noise(0.12, 2600, 0.25, 'bandpass', 2)
+  }
+
+  /** landing bounce (server 'gBounce' events — already gated to hard hits) */
+  nadeBounce(pos?: Vec3, self?: Vec3) {
+    const s = this.spatial(pos, self)
+    if (this.play(GRENADE_COMMON.bounce, { gain: 0.4 * s.gain, pan: s.pan, variance: 0.05 })) return
+    this.tone(320, 0.05, 0.25 * s.gain, 'square', 180)
+  }
+
+  /** detonation report per kind (server 'nadeFx' events) */
+  nadeExplode(kind: string, pos?: Vec3, self?: Vec3) {
+    const s = this.spatial(pos, self)
+    const g = GRENADE_AUDIO[kind]
+    let name = g?.explode
+    if (s.far && g?.explodeDistant) name = g.explodeDistant
+    if (kind === 'smoke') name = g?.emit
+    if (kind === 'decoy') name = GRENADE_COMMON.deploy
+    if (name && this.play(name, { gain: 0.9 * s.gain, pan: s.pan })) return
+    // synth fallback
+    if (kind === 'flash') { this.noise(0.5, 4000, 0.8 * s.gain); this.tone(2600, 0.4, 0.5 * s.gain, 'sine', 100) }
+    else if (kind === 'smoke') { this.noise(1.6, 900, 0.4 * s.gain) }
+    else { this.noise(0.9, 500, 0.9 * s.gain); this.tone(70, 0.7, 0.7 * s.gain, 'sine', 25) }
+  }
+
+  /** flashbang audio duck — hearing shuts down with vision (plan 8.2) */
+  duckFor(ms: number) {
+    if (!this.ctx || !this.master) return
+    const t = this.ctx.currentTime
+    try {
+      this.master.gain.cancelScheduledValues(t)
+      this.master.gain.setValueAtTime(this.master.gain.value, t)
+      this.master.gain.linearRampToValueAtTime(0.12, t + 0.05)
+      this.master.gain.setValueAtTime(0.12, t + Math.max(0.05, ms / 1000) * 0.6)
+      this.master.gain.linearRampToValueAtTime(this.volume, t + Math.max(0.05, ms / 1000) * 0.6 + 1.2)
+    } catch { /* ramp failure is cosmetic */ }
   }
 
   // ---------------------------------------------------------------- knife

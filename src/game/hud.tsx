@@ -32,6 +32,9 @@ const WEAPON_SHORT: Record<string, string> = {
   ssg08: 'SSG 08', scar20: 'SCAR-20', g3sg1: 'G3SG1',
   // Phase 6 shotguns
   nova: 'Nova', xm1014: 'XM1014', mag7: 'MAG-7', sawedoff: 'Sawed-Off',
+  // Phase 8 grenades + equipment
+  flash: 'Flash', he: 'HE', smoke: 'Smoke', molotov: 'Molly', inc: 'Inc',
+  decoy: 'Decoy', defusekit: 'Kit',
 }
 
 // ============================================================
@@ -134,7 +137,18 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
           <div className="flex flex-col gap-1.5">
             {shown.map((it, i) => {
               const st = rowState(it)
-              const stats = st.w
+              // grenades: kind-flavored stat lines instead of gun numbers
+              const NADE_DESC: Record<string, string> = {
+                flash: 'blinds up to 5s · max 2',
+                he: '98 dmg · 9m radius',
+                smoke: '18s vision blocker',
+                molotov: 'fire zone · 7s burn',
+                inc: 'fire zone · 7s burn',
+                decoy: 'fake gunfire · 30s',
+              }
+              const stats = st.w?.throwable
+                ? (NADE_DESC[it.id] ?? '')
+                : st.w
                 ? `${st.w.damage}${(st.w.pellets ?? 0) > 1 ? `×${st.w.pellets}` : ''} dmg · ${st.w.fireDelay}ms · ${st.w.mag === Infinity ? '∞' : st.w.mag} rds`
                 : (GEAR.find(g => g.id === it.id)?.desc ?? '')
               return (
@@ -149,7 +163,11 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
                           {it.team}
                         </span>
                       )}
-                      {st.owned && <span className="text-[9px] font-bold text-emerald-400">✓ OWNED</span>}
+                      {st.owned && (
+                        <span className="text-[9px] font-bold text-emerald-400">
+                          ✓ {st.w?.throwable ? `${s.inventory.filter(x => x === it.id).length}/${st.w.maxCarry ?? 1}` : 'OWNED'}
+                        </span>
+                      )}
                       {st.swap && <span className="text-[9px] text-amber-400/80">⇄ replaces {WEAPONS[st.swap]?.name}</span>}
                     </div>
                     <div className="text-[10px] text-white/40">{stats}</div>
@@ -245,6 +263,11 @@ export function Hud({ s, cb, settings, open }: {
             <line x1="23" y1="23" x2="17" y2="17" stroke={s.headshotAge < 400 ? '#ff4d4d' : '#ffffff'} strokeWidth="2.4" />
           </svg>
         </div>
+      )}
+
+      {/* ---------------- Phase 8: flashbang whiteout ---------------- */}
+      {s.flash > 0.01 && (
+        <div className="pointer-events-none absolute inset-0 z-[70] bg-white" style={{ opacity: s.flash }} />
       )}
 
       {/* ---------------- damage vignette ---------------- */}
@@ -378,7 +401,7 @@ export function Hud({ s, cb, settings, open }: {
             <div className={`text-3xl font-bold tabular-nums ${s.hp < 30 ? 'text-red-400' : 'text-white'}`}>{s.hp}</div>
           </div>
           <div>
-            <div className="text-[10px] tracking-widest text-white/50">ARMOR {s.helmet ? '🪖' : ''}</div>
+            <div className="text-[10px] tracking-widest text-white/50">ARMOR {s.helmet ? '🪖' : ''}{s.hasKit ? ' · KIT' : ''}</div>
             <div className="text-3xl font-bold tabular-nums text-sky-300">{s.armor}</div>
           </div>
         </div>
@@ -389,7 +412,9 @@ export function Hud({ s, cb, settings, open }: {
         <div className="text-[10px] tracking-widest text-white/50">MONEY</div>
         <div className="text-xl font-bold tabular-nums text-emerald-400">{fmtMoney(s.money)}</div>
         <div className="mt-2 text-[10px] tracking-widest text-white/50">{WEAPONS[s.weapon]?.name ?? ''}</div>
-        {s.ammo.mag >= 0 ? (
+        {s.grenadeCount > 0 ? (
+          <div className="text-3xl font-bold tabular-nums text-orange-300">×{s.grenadeCount}</div>
+        ) : s.ammo.mag >= 0 ? (
           <div className="text-3xl font-bold tabular-nums">
             <span className={s.ammo.mag === 0 ? 'text-red-400' : ''}>{s.ammo.mag}</span>
             <span className="text-base text-white/50"> / {s.ammo.reserve}</span>
@@ -397,17 +422,44 @@ export function Hud({ s, cb, settings, open }: {
         ) : (
           <div className="text-3xl font-bold">∞</div>
         )}
+        {WEAPONS[s.weapon]?.throwable && s.alive && (
+          <div className="text-[10px] tracking-widest text-white/50">LMB THROW · RMB LOB</div>
+        )}
         {s.reloading && <div className="animate-pulse text-xs text-orange-300">RELOADING…</div>}
         {s.hasBomb && s.alive && <div className="mt-1 text-xs font-bold text-orange-400">C4 CARRIER — press 4</div>}
       </div>
 
-      {/* weapon slots hint */}
+      {/* weapon slots hint (grenades collapse to counted kinds — 5 FLASH×2 SMOKE) */}
       <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-3 text-xs">
-        {s.inventory.map((w, i) => (
-          <span key={w} className={`px-1.5 ${i === s.wIdx ? 'border-b-2 border-orange-400 text-orange-300' : 'text-white/40'}`}>
-            {i + 1} {WEAPONS[w]?.slot === 4 ? 'C4' : WEAPON_SHORT[w] ?? w}
-          </span>
-        ))}
+        {(() => {
+          const shown: Array<{ key: string; label: string; active: boolean }> = []
+          const nadeShown = new Set<string>()
+          for (let i = 0; i < s.inventory.length; i++) {
+            const w = s.inventory[i]
+            const def = WEAPONS[w]
+            if (def?.slot === 5) {
+              if (nadeShown.has(w)) continue
+              nadeShown.add(w)
+              const count = s.inventory.filter(x => x === w).length
+              shown.push({
+                key: `n-${w}`,
+                label: `5 ${WEAPON_SHORT[w] ?? w}${count > 1 ? `×${count}` : ''}`,
+                active: WEAPONS[s.inventory[s.wIdx] ?? '']?.id === w,
+              })
+              continue
+            }
+            shown.push({
+              key: `s-${i}`,
+              label: `${i + 1} ${def?.slot === 4 ? 'C4' : WEAPON_SHORT[w] ?? w}`,
+              active: i === s.wIdx,
+            })
+          }
+          return shown.map(e => (
+            <span key={e.key} className={`px-1.5 ${e.active ? 'border-b-2 border-orange-400 text-orange-300' : 'text-white/40'}`}>
+              {e.label}
+            </span>
+          ))
+        })()}
       </div>
 
       {/* ---------------- buy hint during freeze ---------------- */}

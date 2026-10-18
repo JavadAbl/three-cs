@@ -799,3 +799,25 @@ Stage Summary:
 - Bots stay CS-realistic: never buy MGs, proven structurally + statistically
 - Source-only commit fddde16 (944 insertions); the 11 MG oggs were already staged by Phase 2 and remain gitignored until user acceptance (Phase 9 or per-batch on request)
 - Next: Phase 8 — grenades & equipment (the systems phase, biggest of all: server projectile entities, per-grenade effects incl. flash blind + smoke-LOS interplay, throw mechanics + slot 5)
+
+---
+Task ID: 41
+Agent: Super Z (main agent)
+Task: Phase 8 — grenades & equipment (WEAPONS_PLAN.md 8.1-8.4), finishing the interrupted in-progress implementation and landing the acceptance stack
+
+Work Log:
+- Diagnosed the "stuck" state: previous session left full WIP uncommitted (12 modified files + shared/grenades.ts + 4 test scripts); unit (81) and bot (15) suites were green; E2E was 21/22 with 'kit halves the defuse' failing (-1792326495103ms — roundEnded never set)
+- Root-caused via 2-player debug replay (plant+defuse chain worked, 5102ms kit defuse) then a 3-socket carrier probe: socket.io connection order does NOT follow creation order — victim2 connected first, became the bomb carrier (players Map insertion order), so the E2E's hard-coded victim socket planted nothing → no bomb → no defuse → round never ended. FIX: test now reads snapshot row[13] (hasBomb) and plants with whichever T socket actually carries it
+- Fixed 2 stale regression checks lagging the Phase 8 WIP: phase6 'setBotContext({...})' exact-match → prefix-match (Phase 8 added botThrowGrenade); phase7 roster 37/33 → 43/39 (6 grenades added, defusekit lives in GEAR)
+- Fixed test-phase8.ts tsc parse failure: `=> ({...})` parenthesized object-literal arrow body directly followed by a statement-level block `{` trips the tsc 5.9 cover-grammar reparse (TS1003/TS1005 cascade; bun tolerates it — which is why the suite ran green). Rewrote mk() with a block body; documented the quirk in-file
+- Browser verification (scripts/browser-phase8.sh, agent-browser + VLM): B→6 EQUIPMENT menu renders all 9 utility rows across 2 pages (VLM read every row + price + PAGE 1/2); keyboard buys flash+smoke ($16000→$15500); slot-5 cycling (flash→smoke); LMB full throw + RMB underhand lob both consume the grenade; smoke volumetric cloud VLM-confirmed in both early+late screenshots; flash whiteout intensity 1.0 read off __cs2hud.flash + VLM partial-whiteout screenshot; zero console errors. Notes: synthetic clicks need a lock-acquisition click first (onMouseDown gates on pointerLocked); keyboard buys do NOT close the 1.6 menu (re-pressing B toggles it closed — script buys both nades in ONE session); background-page rAF throttling makes __cs2hud reads stale for ~1s after server echoes
+- Full acceptance battery re-run: test-phase8 81/81, test-phase8-bots 15/15, E2E 22/22 (kit defuse 5102ms) + phases 3-7 E2E regressions + aimhead + bugfixes ALL PASS; unit regressions buymenu 214, audio-map 329, phase3 130 / phase4 125 / phase4-bots 25 / phase5 182 / phase5-bots 11 / phase6 109 / phase6-bots 18 / phase7 98 / phase7-bots 22, money green; tsc --noEmit clean for all production scope (src/, mini-services/, shared/, phase tests — remaining errors are pre-existing legacy scripts/bsp+examples, untouched)
+- Removed the two one-off debug scripts (debug-p8-defuse.ts, debug-p8-carrier.ts) before commit
+
+Stage Summary:
+- Roster 37 → 43 (flash/he/smoke/molotov/inc/decoy — full CS:GO utility); EQUIPMENT (1.6 slot 6) is the final non-empty category; WEAPONS_PLAN roster is functionally complete (Phase 9 = balance/polish only)
+- The systems layer shipped: server projectile entities (shared/grenades.ts stepNade physics — gravity/drag/bounce/rest, deterministic, seeded), per-grenade effects (HE radial+LOS+armor, flash per-player blind + bots blindUntil, smoke 18s volumetric + LOS-opaque for hit-validation AND bot vision, molly/inc 7s fire DoT 8dmg/500ms + smoke-extinguish, decoy gunfire mimic loop, defuse kit 10s→5s), throw mechanics (slot 5 cycling, LMB 22m/s full / RMB 11m/s lob, 900ms cooldown, carry limits 1/2/1/1), bot nade AI (flash-before-push p<0.3, HE-on-cluster, smoke-retreat, blind-gated, ≤2/round, kit buys on CT)
+- E2E lesson recorded: any test that depends on WHO carries the bomb must read snapshot row[13] at runtime — join order is a connection race, not a creation order
+- tsc lesson recorded: avoid `=> ({...})` arrow bodies immediately followed by statement-level blocks — tsc 5.9 cover-grammar reparse fails while bun runs it fine
+- Source-only commit; the 16 Phase 8 oggs were already staged by Phase 2 policy and remain gitignored until user acceptance
+- Next: Phase 9 — balance, polish, acceptance sweep (plan 9.1-9.3)

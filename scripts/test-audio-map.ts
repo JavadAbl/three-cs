@@ -17,7 +17,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { WEAPONS } from '../shared/weapons'
 import {
   WEAPON_AUDIO, GRENADE_AUDIO, GRENADE_COMMON, NON_WEAPON_FILES,
-  liveWeaponSoundFiles, weaponAudioNames,
+  liveWeaponSoundFiles, liveGrenadeSoundFiles, weaponAudioNames,
 } from '../shared/weapons-audio'
 
 let pass = 0, fail = 0
@@ -51,8 +51,10 @@ for (const id of liveIds) {
   const a = WEAPON_AUDIO[id]
   const w = WEAPONS[id as keyof typeof WEAPONS]
   if (!a) continue
-  if (w.category === 'gear') {
-    check(`gear[${id}] has draw`, !!a.draw)
+  if (w.category === 'gear' || w.category === 'grenade') {
+    // grenades carry draw (the raise/pin sound); their effect sounds live in
+    // GRENADE_AUDIO and are preloaded via liveGrenadeSoundFiles()
+    check(`gear/grenade[${id}] has draw`, !!a.draw)
   } else {
     const trio = !!(a.out && a.in && a.rack)
     check(`gun[${id}] has fire (+ reload trio unless exempt)`,
@@ -76,25 +78,32 @@ for (const n of NON_WEAPON_FILES) {
 }
 
 // --- 4. future names exist in the staged pack ---
+// (Phase 8 live: every grenade kind is a live weapon, so its GRENADE_AUDIO +
+// GRENADE_COMMON names are PRELOADED — only names no live weapon references
+// remain "future")
+const liveNade = new Set(liveGrenadeSoundFiles())
 const futureNames = new Set<string>()
 for (const id of futureIds) {
   const a = WEAPON_AUDIO[id]
   if (a) for (const n of weaponAudioNames(a)) futureNames.add(n)
 }
 for (const g of Object.values(GRENADE_AUDIO)) {
-  for (const n of [g.draw, g.deploy, g.emit, g.explode, g.explodeDistant]) if (n) futureNames.add(n)
+  for (const n of [g.draw, g.deploy, g.emit, g.explode, g.explodeDistant]) if (n && !liveNade.has(n)) futureNames.add(n)
 }
-for (const n of Object.values(GRENADE_COMMON)) futureNames.add(n)
+for (const n of Object.values(GRENADE_COMMON)) if (!liveNade.has(n)) futureNames.add(n)
 for (const n of futureNames) {
   check(`staged: ${n}.ogg`, existsSync(`${STAGED}/${n}.ogg`))
 }
+check('every live grenade sound name resolves (accepted or staged)',
+  [...liveNade].every(n => existsSync(`${ACCEPTED}/${n}.ogg`) || existsSync(`${STAGED}/${n}.ogg`)))
 
 // --- 5. no duplicates / no overlap in the derived preload ---
-const files = [...liveWeaponSoundFiles(), ...NON_WEAPON_FILES]
-check('derived FILES has no duplicates', new Set(files).size === files.length, `${files.length} names`)
+const files = [...new Set([...liveWeaponSoundFiles(), ...liveGrenadeSoundFiles(), ...NON_WEAPON_FILES])]
+check('derived FILES dedupes the weapon/grenade map overlap (draw names)',
+  files.length === new Set([...liveWeaponSoundFiles(), ...liveGrenadeSoundFiles(), ...NON_WEAPON_FILES]).size, `${files.length} names`)
 check('weapon-map names do not overlap NON_WEAPON_FILES',
   liveNames.every(n => !NON_WEAPON_FILES.includes(n)))
-check('preload = live weapons only (no future-roster names preloaded)',
+check('preload = live weapons + live grenades only (no future-roster names preloaded)',
   files.every(n => !futureNames.has(n)), `${liveNames.length} live weapon names`)
 
 // --- 6. HTTP serving (every staged + every committed ogg → 200) ---

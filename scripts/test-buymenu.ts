@@ -38,6 +38,9 @@ const EXPECTED_CAT: Record<string, WeaponCategory> = {
   ssg08: 'rifle', scar20: 'rifle', g3sg1: 'rifle',
   // Phase 7 machine guns
   negev: 'heavy', m249: 'heavy',
+  // Phase 8 grenades
+  flash: 'grenade', he: 'grenade', smoke: 'grenade',
+  molotov: 'grenade', inc: 'grenade', decoy: 'grenade',
 }
 
 // --- 1. category backfill ---
@@ -71,7 +74,9 @@ const want = [
   'nova:1050', 'xm1014:2000', 'mag7:1300@CT', 'sawedoff:1100@T',
   // Phase 7 machine guns (heavy category goes live)
   'negev:1700', 'm249:5200',
-  'kevlar:650', 'kevlarhelm:1000',
+  // Phase 8: equipment = gear first (1.6-style), then grenades in table order
+  'kevlar:650', 'kevlarhelm:1000', 'defusekit:400@CT',
+  'flash:200', 'he:300', 'smoke:300', 'molotov:400@T', 'inc:600@CT', 'decoy:50',
 ]
 check('BUY_ENTRIES derived set + prices + teams', JSON.stringify(got) === JSON.stringify(want), got.join(', '))
 check('no price-0 starters/knife/c4 in buy list',
@@ -82,7 +87,8 @@ const groups: Record<string, string[]> = {
   pistol: ['deagle', 'p250', 'fiveseven', 'tec9', 'cz75', 'elites', 'hkp2000', 'revolver', 'taser'],
   shotgun: ['nova', 'xm1014', 'mag7', 'sawedoff'], smg: ['mp5', 'mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'],
   rifle: ['ak47', 'm4', 'm4a1s', 'galil', 'famas', 'sg553', 'aug', 'ssg08', 'scar20', 'g3sg1', 'awp'],
-  heavy: ['negev', 'm249'], equipment: ['kevlar', 'kevlarhelm'],
+  heavy: ['negev', 'm249'],
+  equipment: ['kevlar', 'kevlarhelm', 'defusekit', 'flash', 'he', 'smoke', 'molotov', 'inc', 'decoy'],
 }
 check('pistol category fits the 9-digit buy menu cap', groups.pistol.length <= 9)
 for (const [key, ids] of Object.entries(groups)) {
@@ -148,12 +154,12 @@ for (const w of Object.values(shared.WEAPONS)) {
 }
 
 // 7e. future-phase fields stay absent on the current roster except where a
-//     phase owns them: pellets ONLY on the 4 Phase-6 shotguns; no throwables,
-//     no recoil seeds yet; burst exists ONLY on the famas per plan 5.2
-check('pellets only on the 4 shotguns; no throwable/recoilPattern; burst only on famas',
+//     phase owns them: pellets ONLY on the 4 Phase-6 shotguns; throwables
+//     ONLY on the 6 Phase-8 grenades; no recoil seeds; burst ONLY on famas
+check('pellets only on shotguns; throwables only on the 6 grenades; burst only on famas',
   Object.values(shared.WEAPONS).every(w =>
     (['nova', 'xm1014', 'mag7', 'sawedoff'].includes(w.id) ? (w.pellets ?? 0) > 1 : w.pellets === undefined) &&
-    w.throwable === undefined &&
+    (w.category === 'grenade' ? !!w.throwable : w.throwable === undefined) &&
     w.recoilPattern === undefined &&
     (w.id === 'famas' ? w.burstRounds === 3 : w.burstRounds === undefined)))
 
@@ -255,3 +261,36 @@ check('shotgun category fits one buy page (4 rows, no paging needed)',
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
+
+// --- 11. Phase 8 grenades + equipment (schema-level) ---
+const GRENADES = ['flash', 'he', 'smoke', 'molotov', 'inc', 'decoy'] as const
+check('all six grenades live in slot 5 with maxCarry set',
+  GRENADES.every(id => {
+    const w = shared.WEAPONS[id]
+    return w.slot === 5 && (w.maxCarry ?? 0) > 0
+  }))
+check('carry limits per plan 8.3: flash 2, all others 1',
+  shared.WEAPONS.flash.maxCarry === 2 &&
+  ['he', 'smoke', 'molotov', 'inc', 'decoy'].every(id => shared.WEAPONS[id].maxCarry === 1))
+check('grenadeLimitOf resolves the table limits (0 for non-throwables)',
+  shared.grenadeLimitOf(shared.WEAPONS.flash) === 2 &&
+  shared.grenadeLimitOf(shared.WEAPONS.he) === 1 &&
+  shared.grenadeLimitOf(shared.WEAPONS.ak47) === 0)
+check('team fire grenades: molotov T / incendiary CT, rest free',
+  shared.WEAPONS.molotov.team === 'T' && shared.WEAPONS.inc.team === 'CT' &&
+  ['flash', 'he', 'smoke', 'decoy'].every(id => shared.WEAPONS[id].team === undefined))
+check('prices per plan 8.2: flash 200, he 300, smoke 300, molly 400, inc 600, decoy 50, kit 400',
+  shared.WEAPONS.flash.price === 200 && shared.WEAPONS.he.price === 300 &&
+  shared.WEAPONS.smoke.price === 300 && shared.WEAPONS.molotov.price === 400 &&
+  shared.WEAPONS.inc.price === 600 && shared.WEAPONS.decoy.price === 50 &&
+  shared.GEAR.find(g => g.id === 'defusekit')?.price === 400)
+check('defuse kit is CT-only gear',
+  shared.GEAR.find(g => g.id === 'defusekit')?.team === 'CT')
+check('HE carries the blast numbers for shared heDamage (98 / 50% armor)',
+  shared.WEAPONS.he.damage === 98 && shared.WEAPONS.he.armorPen === 0.5)
+check('grenade kill rewards ride the grenade class at $300',
+  GRENADES.every(id => shared.WEAPONS[id].killReward === 300 &&
+    shared.WEAPONS[id].killRewardClass === 'grenade' &&
+    shared.KILL_REWARD_BY_CLASS.grenade === 300))
+check('equipment category has 9 entries → buy menu pages (8/page)',
+  client.buyEntriesFor('equipment').length === 9)

@@ -1,7 +1,10 @@
 // Visual effects (tracers, flashes, impacts, shells, dropped mags)
+// Phase 8 additions: world grenade bodies, smoke clouds, fire zones.
 import * as THREE from 'three'
 import { texMat, box } from './weaponmodels'
 import { bulletHoleTexture, scorchTexture } from './textures'
+import { NADE } from '../../shared/grenades'
+import type { GrenadeKind } from '../../shared/grenades'
 
 // ---------------- sprite textures ----------------
 function radialTex(inner: string, outer: string, size = 64): THREE.Texture {
@@ -445,6 +448,14 @@ export class Effects {
     this.items.push({ obj: m, born: performance.now(), life: 0.85, vel, kind: 'shellcase' })
   }
 
+  /** Phase 8: faint trail puff behind a fast-moving grenade (plain 'smoke'
+   *  item at tiny scale — the existing particle behavior does the rest). */
+  nadeTrailPuff(at: THREE.Vector3) {
+    const s = this.sprite(this.smokeSpriteTex, at, false, 0x8d8880)
+    s.scale.set(0.14, 0.14, 0.14)
+    this.items.push({ obj: s, born: performance.now(), life: 0.42, vel: new THREE.Vector3(0, 0.25, 0), kind: 'smoke' })
+  }
+
   /** dropped magazine during reload (textured, tumbles, fades) */
   dropMag(pos: THREE.Vector3) {
     const src = texMat('metal_dark', 1, 1, { roughnessMul: 0.8 })
@@ -455,6 +466,148 @@ export class Effects {
     this.scene.add(m)
     const vel = new THREE.Vector3(0.12, -0.15, 0.05)
     this.items.push({ obj: m, born: performance.now(), life: 2.4, vel, kind: 'debris' })
+  }
+}
+
+// ================================================================ Phase 8 world objects
+
+/** Flying/resting grenade body in the world (engine-owned, dead-reckoned). */
+export function buildNadeMesh(kind: GrenadeKind): THREE.Group {
+  const g = new THREE.Group()
+  const add = (mesh: THREE.Mesh, y = 0) => { mesh.position.y = y; g.add(mesh); return mesh }
+  if (kind === 'he') {
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), new THREE.MeshLambertMaterial({ color: 0x39402c })))
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.028, 6), new THREE.MeshLambertMaterial({ color: 0x2c3122 })), 0.06)
+  } else if (kind === 'flash') {
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.09, 10), new THREE.MeshLambertMaterial({ color: 0x8b9096 })))
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.02, 10), new THREE.MeshLambertMaterial({ color: 0x3556a8 })), 0.02)
+  } else if (kind === 'smoke') {
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.1, 10), new THREE.MeshLambertMaterial({ color: 0x5b6157 })))
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.018, 10), new THREE.MeshLambertMaterial({ color: 0x9c3b30 })), 0.03)
+  } else if (kind === 'molotov') {
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.036, 0.11, 10), new THREE.MeshLambertMaterial({ color: 0x7a4f1e, transparent: true, opacity: 0.85 })))
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.04, 8), new THREE.MeshLambertMaterial({ color: 0x4a6612 })), 0.075) // rag
+  } else if (kind === 'inc') {
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.1, 10), new THREE.MeshLambertMaterial({ color: 0x6a3b1c })))
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.05, 0.012), new THREE.MeshLambertMaterial({ color: 0xc7c2ba })), 0.07)
+  } else { // decoy
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.045), new THREE.MeshLambertMaterial({ color: 0x4a4238 })))
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.06, 5), new THREE.MeshLambertMaterial({ color: 0x1c1c1c })), 0.055)
+  }
+  return g
+}
+
+/** Persistent controller objects the engine ticks every frame. */
+export interface WorldFx { update(now: number, dt: number): boolean; dispose(): void }
+
+/** Smoke volume: layered billboard shells that puff in, drift, fade out. */
+export class SmokeCloud implements WorldFx {
+  private group = new THREE.Group()
+  private puffs: Array<{ s: THREE.Sprite; r: number; a: number; seed: number; spin: number }> = []
+  private born = performance.now()
+  constructor(private scene: THREE.Scene, pos: THREE.Vector3) {
+    const tex = radialTex('rgba(205,200,190,0.98)', 'rgba(190,186,178,0)')
+    const R = NADE.smokeRadius
+    const mk = (x: number, y: number, z: number, scale: number, opacity: number) => {
+      const mat = new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthWrite: false, opacity,
+        color: 0xb9b4ab, rotation: Math.random() * Math.PI,
+      })
+      const s = new THREE.Sprite(mat)
+      s.position.set(x, y, z)
+      s.scale.setScalar(scale)
+      s.renderOrder = 4
+      this.group.add(s)
+      this.puffs.push({ s, r: scale / 2, a: opacity, seed: Math.random() * 9, spin: (Math.random() - 0.5) * 0.25 })
+    }
+    // fat core + shell ring + cap — reads as a volumetric blob from any angle
+    mk(0, 0.6, 0, R * 1.5, 0.95)
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      mk(Math.cos(a) * R * 0.55, 0.5 + Math.sin(i * 2.1) * 0.5, Math.sin(a) * R * 0.55, R * 1.2, 0.9)
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.6
+      mk(Math.cos(a) * R * 0.3, 1.5 + Math.random() * 0.4, Math.sin(a) * R * 0.3, R, 0.85)
+    }
+    this.group.position.copy(pos)
+    scene.add(this.group)
+  }
+  update(now: number, dt: number): boolean {
+    const age = now - this.born
+    if (age > NADE.smokeMs + 800) return false
+    const popIn = Math.min(1, age / 450)                     // 0..1 puff-up
+    const fadeOut = age > NADE.smokeMs ? 1 - (age - NADE.smokeMs) / 800 : 1
+    if (fadeOut <= 0) return false
+    for (const p of this.puffs) {
+      const mat = p.s.material as THREE.SpriteMaterial
+      mat.opacity = p.a * popIn * Math.max(0, fadeOut)
+      mat.rotation += p.spin * dt
+      const wob = 1 + Math.sin(now / 900 + p.seed) * 0.05
+      p.s.scale.setScalar((p.r * 2) * (0.3 + 0.7 * popIn) * wob)
+    }
+    return true
+  }
+  dispose() {
+    this.scene.remove(this.group)
+    for (const p of this.puffs) (p.s.material as THREE.Material).dispose()
+  }
+}
+
+/** Molotov/incendiary burn zone: flickering flame billboards + light. */
+export class FireZone implements WorldFx {
+  private group = new THREE.Group()
+  private flames: Array<{ s: THREE.Sprite; seed: number; base: number }> = []
+  private light: THREE.PointLight
+  private born = performance.now()
+  constructor(private scene: THREE.Scene, pos: THREE.Vector3) {
+    const tex = radialTex('rgba(255,190,80,0.95)', 'rgba(255,90,20,0)')
+    const R = NADE.fireRadius
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5
+      const rr = i === 0 ? 0 : R * (0.3 + Math.random() * 0.65)
+      const mat = new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthWrite: false, opacity: 0.9,
+        blending: THREE.AdditiveBlending, rotation: Math.random() * Math.PI,
+      })
+      const s = new THREE.Sprite(mat)
+      s.position.set(Math.cos(a) * rr, 0.35 + Math.random() * 0.5, Math.sin(a) * rr)
+      s.scale.setScalar(1 + Math.random() * 1.3)
+      s.renderOrder = 6
+      this.group.add(s)
+      this.flames.push({ s, seed: Math.random() * 9, base: s.scale.x })
+    }
+    // scorched ground patch
+    const sc = new THREE.Mesh(
+      new THREE.CircleGeometry(R, 20),
+      new THREE.MeshBasicMaterial({ map: scorchTexture(), transparent: true, depthWrite: false, opacity: 0.65, polygonOffset: true, polygonOffsetFactor: -3 }),
+    )
+    sc.rotation.x = -Math.PI / 2
+    sc.position.y = 0.02
+    this.group.add(sc)
+    this.light = new THREE.PointLight(0xff7a28, 3.2, 11, 1.6)
+    this.light.position.set(0, 1, 0)
+    this.group.add(this.light)
+    this.group.position.copy(pos)
+    scene.add(this.group)
+  }
+  update(now: number, dt: number): boolean {
+    const age = (now - this.born) / 1000
+    if (age > NADE.fireMs + 1) return false
+    const out = age > NADE.fireMs ? 1 - (age - NADE.fireMs) : 1
+    for (const f of this.flames) {
+      const flick = 0.75 + Math.sin(now / 70 + f.seed * 7) * 0.15 + Math.random() * 0.12
+      f.s.scale.setScalar(f.base * flick)
+      f.s.position.y = 0.35 + Math.sin(now / 130 + f.seed * 3) * 0.18 + 0.25
+      ;(f.s.material as THREE.SpriteMaterial).opacity = 0.9 * out * flick
+    }
+    this.light.intensity = 3.2 * out * (0.8 + Math.sin(now / 90) * 0.2 + Math.random() * 0.1)
+    return out > 0
+  }
+  dispose() {
+    this.scene.remove(this.group)
+    for (const f of this.flames) (f.s.material as THREE.Material).dispose()
+    this.light.dispose()
   }
 }
 

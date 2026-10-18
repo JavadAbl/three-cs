@@ -232,7 +232,10 @@ for (const id of NEW) {
   check('server: killPlayer extracted (shared death bookkeeping)',
     srvSrc.includes('function killPlayer(m: Match, victim: PlayerState, attacker: PlayerState | null, weapon: WeaponId, hs: boolean)'))
   check('server: bots get the pellet damage path',
-    srvSrc.includes('setBotContext({ applyDamage, applyShotgunDamage, hasLOS })'))
+    // Phase 8 extended the bot context with botThrowGrenade — prefix-match so the
+    // pellet wiring (applyShotgunDamage routed to bots) stays proven while later
+    // phases can extend the context without breaking this check.
+    srvSrc.includes('setBotContext({ applyDamage, applyShotgunDamage, hasLOS'))
 
   const botsSrc = readFileSync('mini-services/game-server/bots.ts', 'utf8')
   check('bots: shotgun rung in the ladder (force band + steal tiers + xm1014)',

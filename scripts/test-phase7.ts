@@ -167,8 +167,8 @@ for (const id of NEW) {
     JSON.stringify(heavy.map(e => e.id)) === JSON.stringify(['negev', 'm249']),
     heavy.map(e => `${e.id} $${e.price}`).join(', '))
   check('heavy category fits one menu page (<= 8 rows)', heavy.length <= 8)
-  check('total roster = 37 weapons, 33 priced (35 + 2 MGs; knife/starters/c4 are free)',
-    Object.values(WEAPONS).length === 37 && Object.values(WEAPONS).filter(w => w.price > 0).length === 33)
+  check('total roster = 43 weapons, 39 priced (37 guns + 6 grenades from Phase 8; knife/starters/c4 are free)',
+    Object.values(WEAPONS).length === 43 && Object.values(WEAPONS).filter(w => w.price > 0).length === 39)
 }
 
 // --- 7. wiring source checks (engine spool + KICK + bots exclusion) ---

@@ -1,8 +1,10 @@
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import { WEAPONS, ECONOMY, ROUND, computeDamage, fireModeOf, pelletsOf, pelletSpreadOf } from './weapons'
+import { WEAPONS, ECONOMY, ROUND, computeDamage, fireModeOf, pelletsOf, pelletSpreadOf, grenadeLimitOf } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { pelletDirs, angleDeg } from '../../shared/pellets'
+import { NADE, stepNade, toNadeBoxes, heDamage, flashBlindMs, smokeBlocksSeg, viewDirFromYawPitch } from '../../shared/grenades'
+import type { NadeEnt, NadeBox, GrenadeKind } from '../../shared/grenades'
 import { MAPS, MAP_LIST, rayHitsAABB } from './mapdata'
 import type { MapDef, MapId, Box } from './mapdata'
 import type { PlayerState, Match, Phase } from './types'
@@ -38,6 +40,7 @@ function getMatch(roomId: string, opts?: { mapId?: MapId; serverName?: string; l
       roomId, players: new Map(), phase: 'warmup', phaseEndsAt: 0, round: 0,
       scores: { CT: 0, T: 0 }, lossStreak: { CT: 0, T: 0 },
       bomb: { planted: false, x: 0, y: 0, z: 0, plantedAt: 0, explodeAt: 0, defuseProgress: 0, defusingBy: null, exploded: false, defused: false },
+      nades: [], smokes: [], fires: [], decoys: [], nadeSeq: 0,
       winTarget: 8, botFill: true, botDifficulty: 'normal',
       roundWinner: null, winReason: '', mvp: null, started: false,
       lastHumanAt: now(), roundKills: new Map(),
@@ -127,6 +130,15 @@ function hasLOS(m: Match, ax: number, ay: number, az: number, bx: number, by: nu
   for (const b of los) {
     if (rayHitsAABB(ax, ay, az, nx, ny, nz, b, len)) return false
   }
+  // Phase 8 (plan 8.2): active smoke volumes are OPAQUE to this LOS check —
+  // hit validation AND bot vision both route through here, so one gate
+  // makes smoke real for bullets-in-the-dark denial and blind bots alike.
+  // Pop-in window + fade tail stay see-through (matches the visual cloud).
+  const t = now()
+  for (const s of m.smokes) {
+    if (t < s.startedAt + NADE.smokePopInMs || t > s.endsAt - NADE.smokeFadeMs) continue
+    if (smokeBlocksSeg(ax, ay, az, bx, by, bz, s)) return false
+  }
   return true
 }
 
@@ -141,6 +153,7 @@ function makePlayer(id: string, name: string, team: TeamId, bot: boolean): Playe
     inventory: team === 'T' ? ['glock', 'knife'] : ['usp', 'knife'],
     wIdx: 0, ammo: {}, lastShotAt: 0, reloadEndsAt: 0, burstShots: 0,
     hasBomb: false, plantingSince: 0, defusingSince: 0, lastStateAt: now(),
+    hasKit: false, blindUntil: 0, lastThrowAt: 0,
   }
   refillAmmo(p)
   return p
@@ -187,6 +200,8 @@ function startRound(m: Match) {
   m.bomb = { planted: false, x: 0, y: 0, z: 0, plantedAt: 0, explodeAt: 0, defuseProgress: 0, defusingBy: null, exploded: false, defused: false }
   m.roundWinner = null; m.winReason = ''; m.mvp = null
   m.roundKills = new Map()
+  // Phase 8: grenade entities never survive a round boundary (CS rule)
+  m.nades = []; m.smokes = []; m.fires = []; m.decoys = []
 
   balanceTeams(m)
   const ts = teamOf(m, 'T')
@@ -203,10 +218,13 @@ function startRound(m: Match) {
       p.inventory = p.team === 'T' ? ['glock', 'knife'] : ['usp', 'knife']
       p.armor = 0
       p.helmet = false
+      p.hasKit = false           // equipment dies with you (CS rule)
       p.ammo = {}
     }
     p.alive = true
     p.hp = 100
+    p.blindUntil = 0
+    p.lastThrowAt = 0
     p.plantingSince = 0; p.defusingSince = 0
     p.reloadEndsAt = 0; p.lastShotAt = 0; p.burstShots = 0; p.shot = undefined
     p.hasBomb = false
@@ -444,6 +462,276 @@ function handleShotgunHit(
   attacker.shot = { ...shot, claims: shot.claims + taken }
 }
 
+
+// ---------------------------------------------------------------- Phase 8 grenades
+// Server-authoritative projectile subsystem (plan 8.1-8.2): entities spawn
+// on throw (velocity from view dir + power), advance on a dedicated 20 Hz
+// tick (gravity/drag/bounce/rest via shared/grenades.stepNade — the SAME
+// math the client dead-reckons with), and detonate server-side: HE radial
+// damage with LOS gating, flash blind per distance+facing+LOS, smoke
+// volumes that hasLOS treats as opaque, molotov fire zones with DoT ticks,
+// decoy gunfire loops. Clients only render + predict trajectories.
+//
+// Tick budget: O(active nades × boxes) per 50 ms — a handful of entities a
+// round, ~100 AABB tests each; smokes/fires/decoys are a few array walks.
+// The 20 Hz snapshot carries only non-empty entity arrays.
+
+const NADE_TICK_MS = 50
+
+// AABB conversion cache per mapId (maps are immutable)
+const nadeBoxCache = new Map<string, NadeBox[]>()
+function nadeBoxes(m: Match): NadeBox[] {
+  let b = nadeBoxCache.get(m.mapId)
+  if (!b) {
+    b = toNadeBoxes(mapOf(m).losBoxes)
+    nadeBoxCache.set(m.mapId, b)
+  }
+  return b
+}
+
+/** Remove one grenade entry from the inventory and fix the weapon index. */
+function consumeGrenade(m: Match, p: PlayerState, weapon: WeaponId) {
+  const i = p.inventory.indexOf(weapon)
+  if (i >= 0) p.inventory.splice(i, 1)
+  // keep holding another of the same kind if one remains, else slot 0
+  if (p.inventory[p.wIdx] !== weapon) {
+    const j = p.inventory.indexOf(weapon)
+    p.wIdx = j >= 0 ? j : 0
+  }
+  if (p.wIdx >= p.inventory.length) p.wIdx = 0
+  sendInvSync(p)
+}
+
+/** Spawn a projectile at the thrower's eye and tell every client instantly. */
+function spawnGrenade(m: Match, p: PlayerState, weapon: WeaponId, dir: { x: number; y: number; z: number }, power: number) {
+  const w = WEAPONS[weapon]
+  const kind = (w.throwable?.kind ?? weapon) as GrenadeKind
+  // power is a mode, not a scalar: 1 = full throw (22 m/s), <0.9 = underhand
+  // lob (11 m/s) — the client only ever sends these two
+  const v = power >= 0.9 ? NADE.throwV : NADE.lobV
+  const ent: NadeEnt = {
+    id: ++m.nadeSeq, kind, weapon: w.id, owner: p.id,
+    x: p.x, y: eyeY(p) - 0.12, z: p.z,
+    vx: dir.x * v, vy: dir.y * v, vz: dir.z * v,
+    bornAt: now(), restAt: null, bounces: 0,
+  }
+  m.nades.push(ent)
+  broadcast(m, 'nade', {
+    id: ent.id, kind, weapon: w.id, owner: p.id,
+    pos: [+ent.x.toFixed(3), +ent.y.toFixed(3), +ent.z.toFixed(3)],
+    vel: [+ent.vx.toFixed(3), +ent.vy.toFixed(3), +ent.vz.toFixed(3)],
+  })
+}
+
+/** Validated grenade throw shared by human 'throw' events and bot AI. */
+function throwGrenade(m: Match, p: PlayerState, weapon: WeaponId, dir: { x: number; y: number; z: number }, power: number): boolean {
+  if (m.phase !== 'live' || !p.alive) return false
+  const w = WEAPONS[weapon]
+  if (!w?.throwable) return false
+  if (!p.inventory.includes(weapon)) return false
+  if (now() - (p.lastThrowAt ?? 0) < NADE.throwCooldownMs) return false
+  p.lastThrowAt = now()
+  spawnGrenade(m, p, weapon, dir, power)
+  consumeGrenade(m, p, weapon)
+  return true
+}
+
+/** Bot-facing wrapper: aims at a world point with a distance-scaled arc. */
+function botThrowGrenade(m: Match, p: PlayerState, weapon: WeaponId, aimX: number, aimY: number, aimZ: number): boolean {
+  const ox = p.x, oy = eyeY(p) - 0.12, oz = p.z
+  let dx = aimX - ox, dy = aimY - oy, dz = aimZ - oz
+  const d = Math.hypot(dx, dy, dz) || 1
+  dx /= d; dy /= d; dz /= d
+  const lift = 0.2 + Math.min(0.4, d * 0.015)
+  const vy = dy + lift
+  const l = Math.hypot(dx, vy, dz) || 1
+  return throwGrenade(m, p, weapon, { x: dx / l, y: vy / l, z: dz / l }, 1)
+}
+
+function removeNade(m: Match, n: NadeEnt) {
+  const i = m.nades.indexOf(n)
+  if (i >= 0) m.nades.splice(i, 1)
+}
+
+/** HE detonation (plan 8.2): radial falloff + LOS so walls block, enemies + self. */
+function detonateHE(m: Match, n: NadeEnt) {
+  broadcast(m, 'nadeFx', { id: n.id, kind: 'he', pos: [+n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2)] })
+  const attacker = m.players.get(n.owner) ?? null
+  for (const v of m.players.values()) {
+    if (!v.alive) continue
+    if (attacker && v.team === attacker.team && v.id !== attacker.id) continue
+    const dist = Math.hypot(v.x - n.x, (v.y + 1.0) - n.y, v.z - n.z)
+    if (dist >= NADE.heRadius) continue
+    // LOS gate — walls block the blast (point-blank exempt)
+    if (dist > 1.4 && !hasLOS(m, n.x, n.y + 0.25, n.z, v.x, eyeY(v), v.z)) continue
+    const dmg = heDamage(dist, v.armor > 0, WEAPONS[n.weapon])
+    if (dmg <= 0) continue
+    if (v.armor > 0) {
+      const armorDmg = Math.min(v.armor, Math.round(dmg * 0.5))
+      v.armor = Math.max(0, v.armor - armorDmg)
+      if (v.armor === 0) v.helmet = false
+    }
+    v.hp = Math.max(0, v.hp - dmg)
+    broadcast(m, 'hitConfirm', {
+      victimId: v.id, attackerId: attacker?.id ?? null,
+      dmg, part: 'body', hs: false, hp: v.hp, victimTeam: v.team,
+    })
+    if (v.hp <= 0) killPlayer(m, v, attacker, n.weapon as WeaponId, false)
+  }
+}
+
+/** Flash detonation: per-player blind from distance + facing + LOS (plan 8.2).
+ *  Blinds EVERYONE incl. teammates and the thrower (CS rule); bots get the
+ *  blindUntil timer (no vision — real counterplay). */
+function detonateFlash(m: Match, n: NadeEnt) {
+  broadcast(m, 'nadeFx', { id: n.id, kind: 'flash', pos: [+n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2)] })
+  const t = now()
+  for (const v of m.players.values()) {
+    if (!v.alive) continue
+    const dist = Math.hypot(v.x - n.x, eyeY(v) - n.y, v.z - n.z)
+    if (dist >= NADE.flashRadius) continue
+    if (dist > 1 && !hasLOS(m, n.x, n.y, n.z, v.x, eyeY(v), v.z)) continue
+    // facing: dot(victim view, dir victim->flash)
+    const vd = viewDirFromYawPitch(v.yaw, v.pitch)
+    let tx = n.x - v.x, ty = n.y - eyeY(v), tz = n.z - v.z
+    const tl = Math.hypot(tx, ty, tz) || 1
+    tx /= tl; ty /= tl; tz /= tl
+    const dot = vd.x * tx + vd.y * ty + vd.z * tz
+    const ms = flashBlindMs(dist, dot)
+    if (ms <= 120) continue
+    v.blindUntil = Math.max(v.blindUntil ?? 0, t + ms)
+    if (v.socketId) io.to(v.socketId).emit('flash', { ms, pos: [+n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2)] })
+  }
+}
+
+/** Smoke pop (plan 8.2): 18 s volume, opaque via hasLOS; extinguishes fire. */
+function popSmoke(m: Match, n: NadeEnt) {
+  const t = now()
+  broadcast(m, 'nadeFx', { id: n.id, kind: 'smoke', pos: [+n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2)] })
+  m.smokes.push({ id: n.id, x: n.x, y: n.y, z: n.z, startedAt: t, endsAt: t + NADE.smokeMs })
+  // stretch goal, plan 8.2: smoke kills fire zones it lands on
+  for (const f of m.fires) {
+    if (Math.hypot(f.x - n.x, f.z - n.z) < NADE.smokeExtinguishR) f.endsAt = Math.min(f.endsAt, t)
+  }
+  removeNade(m, n)
+}
+
+/** Molotov/incendiary ignition (plan 8.2): ground fire zone, DoT, burn-out. */
+function igniteFire(m: Match, n: NadeEnt) {
+  broadcast(m, 'nadeFx', { id: n.id, kind: n.kind, pos: [+n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2)] })
+  m.fires.push({
+    id: n.id, x: n.x, y: n.y, z: n.z,
+    endsAt: now() + NADE.fireMs, lastTickAt: 0,
+    owner: n.owner, weapon: n.weapon,
+  })
+  removeNade(m, n)
+}
+
+/** The 20 Hz entity tick: physics, fuses, effects, expiry. */
+function stepGrenades(m: Match) {
+  const t = now()
+  const live = m.phase === 'live'
+
+  if (live) {
+    const boxes = nadeBoxes(m)
+    const bounds = mapOf(m).bounds
+    for (const n of [...m.nades]) {
+      // resting decoys persist until their sound loop expires
+      if (n.restAt !== null && n.kind === 'decoy') continue
+      const events = stepNade(n, NADE_TICK_MS / 1000, boxes, bounds)
+      // fuse: HE/flash detonate mid-air after their timer, whatever the physics
+      if (n.kind === 'he' || n.kind === 'flash') {
+        if (t - n.bornAt >= (n.kind === 'he' ? NADE.heFuseMs : NADE.flashFuseMs)) {
+          removeNade(m, n)
+          if (n.kind === 'he') detonateHE(m, n)
+          else detonateFlash(m, n)
+          continue
+        }
+      }
+      // molotov/incendiary: first ground contact ignites (hard fuse fallback)
+      if (n.kind === 'molotov' || n.kind === 'inc') {
+        if (events.some(e => e.kind === 'ground') || t - n.bornAt >= NADE.mollyFuseMs) {
+          removeNade(m, n)
+          igniteFire(m, n)
+          continue
+        }
+      }
+      // bounce sfx — throttled, only meaningful impacts
+      for (const e of events) {
+        if (e.kind === 'bounce' && e.speed >= NADE.bounceSfxMinV && t - (n.lastBounceSfxAt ?? 0) > 140) {
+          n.lastBounceSfxAt = t
+          broadcast(m, 'gBounce', { id: n.id, pos: [+n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2)], speed: +e.speed.toFixed(1) })
+        }
+      }
+      // rest
+      if (n.restAt === null && events.some(e => e.kind === 'rest')) n.restAt = t
+      // smoke pops shortly after rest; decoy activates at rest
+      if (n.kind === 'smoke' && n.restAt !== null && t - n.restAt >= NADE.smokePopAfterRestMs) {
+        popSmoke(m, n)
+        continue
+      }
+      if (n.kind === 'decoy' && n.restAt !== null) {
+        // mimic the thrower's primary (CS rule); starter pistol otherwise
+        const owner = m.players.get(n.owner)
+        const primary = owner?.inventory.find(w => WEAPONS[w]?.slot === 1)
+        m.decoys.push({
+          id: n.id, x: n.x, y: n.y, z: n.z, endsAt: t + NADE.decoyMs, nextShotAt: t + 600,
+          owner: n.owner, weapon: primary ?? (owner?.team === 'T' ? 'glock' : 'usp'),
+        })
+        broadcast(m, 'nadeFx', { id: n.id, kind: 'decoy', pos: [+n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2)] })
+        continue // ent stays in m.nades as the resting body (snapshot renders it)
+      }
+      // failsafe: a nade still flying after 12 s is stuck in geometry — despawn
+      if (n.restAt === null && t - n.bornAt > NADE.lifetimeMs) removeNade(m, n)
+    }
+  }
+
+  // expiry + effects run in every phase so post-round visuals fade out
+  m.smokes = m.smokes.filter(s => t < s.endsAt)
+  m.decoys = m.decoys.filter(d => {
+    if (t >= d.endsAt) {
+      const body = m.nades.find(n => n.id === d.id)
+      if (body) removeNade(m, body)
+      return false
+    }
+    return true
+  })
+  if (live) {
+    for (const d of m.decoys) {
+      if (t >= d.nextShotAt) {
+        broadcast(m, 'decoyShot', { id: d.id, pos: [+d.x.toFixed(2), +d.y.toFixed(2), +d.z.toFixed(2)], weapon: d.weapon })
+        d.nextShotAt = t + NADE.decoyShotMinMs + Math.random() * (NADE.decoyShotMaxMs - NADE.decoyShotMinMs)
+      }
+    }
+    // fire DoT (plan 8.2): tick every 500 ms, enemies + self, armor no help
+    for (const f of m.fires) {
+      if (t >= f.endsAt || t - f.lastTickAt < NADE.fireTickMs) continue
+      f.lastTickAt = t
+      const attacker = m.players.get(f.owner) ?? null
+      for (const v of m.players.values()) {
+        if (!v.alive) continue
+        if (attacker && v.team === attacker.team && v.id !== attacker.id) continue
+        if (Math.hypot(v.x - f.x, v.z - f.z) >= NADE.fireRadius) continue
+        if (Math.abs(v.y - f.y) >= NADE.fireHeight) continue
+        v.hp = Math.max(0, v.hp - NADE.fireTickDmg)
+        broadcast(m, 'hitConfirm', {
+          victimId: v.id, attackerId: attacker?.id ?? null,
+          dmg: NADE.fireTickDmg, part: 'body', hs: false, hp: v.hp, victimTeam: v.team,
+        })
+        if (v.hp <= 0) killPlayer(m, v, attacker, f.weapon as WeaponId, false)
+      }
+    }
+  }
+  m.fires = m.fires.filter(f => t < f.endsAt)
+}
+
+setInterval(() => {
+  for (const m of matches.values()) {
+    if (!m.started) continue
+    stepGrenades(m)
+  }
+}, NADE_TICK_MS)
+
 // ---------------------------------------------------------------- bomb logic
 function inSite(m: Match, p: PlayerState): 'A' | 'B' | null {
   const s = mapOf(m).sites
@@ -476,7 +764,9 @@ function updateBomb(m: Match) {
     if (defuser) {
       if (b.defusingBy !== defuser.id) { b.defusingBy = defuser.id; b.plantedAt = b.plantedAt } // keep timer
       const dt = (t - defuser.defusingSince) / 1000
-      b.defuseProgress = clamp(dt / (ROUND.defuseMs / 1000), 0, 1)
+      // Phase 8: defuse kit halves the 10 s channel (plan 8.2)
+      const defuseSec = (ROUND.defuseMs / 1000) / (defuser.hasKit ? 2 : 1)
+      b.defuseProgress = clamp(dt / defuseSec, 0, 1)
       broadcast(m, 'plantProgress', { id: defuser.id, action: 'defuse', progress: b.defuseProgress })
       if (b.defuseProgress >= 1) {
         b.defused = true
@@ -569,6 +859,28 @@ function handleBuy(m: Match, p: PlayerState, item: string) {
     if (item === 'kevlarhelm') p.helmet = true
     return { ok: true, money: p.money, armor: p.armor, helmet: p.helmet }
   }
+  // Phase 8: defuse kit (CT gear) — halves the 10 s defuse, lost on death
+  if (item === 'defusekit') {
+    if (p.team !== 'CT') return { ok: false, msg: 'CT only' }
+    if (p.hasKit) return { ok: false, msg: 'Already have a kit' }
+    if (p.money < 400) return { ok: false, msg: 'Not enough money' }
+    p.money -= 400
+    p.hasKit = true
+    return { ok: true, money: p.money, kit: true }
+  }
+  // Phase 8: grenades STACK in slot 5 up to their carry limit — never replace
+  // (plan 8.3: max 1 HE / 2 flash / 1 smoke / 1 molly / 1 decoy). Same gates
+  // as guns: team lock + affordability, then the money is charged.
+  if (def?.throwable) {
+    if (def.team && def.team !== p.team) return { ok: false, msg: 'Wrong team weapon' }
+    if (p.money < def.price) return { ok: false, msg: 'Not enough money' }
+    const have = p.inventory.filter(w => w === item).length
+    const max = grenadeLimitOf(def)
+    if (have >= max) return { ok: false, msg: `Max ${max} ${def.name}` }
+    p.money -= def.price
+    p.inventory.push(item as WeaponId)
+    return { ok: true, money: p.money, weapon: item }
+  }
   if (!def || def.price <= 0) return { ok: false, msg: 'Unknown item' }
   if (def.team && def.team !== p.team) return { ok: false, msg: 'Wrong team weapon' }
   if (p.money < def.price) return { ok: false, msg: 'Not enough money' }
@@ -596,9 +908,24 @@ function snapshot(m: Match) {
       p.hp, p.armor, p.alive ? 1 : 0, p.hasBomb ? 1 : 0,
       p.inventory[p.wIdx] ?? 'knife', p.name, p.team, p.bot ? 1 : 0,
       p.kills, p.deaths, p.money,
+      p.hasKit ? 1 : 0,   // 21: Phase 8 defuse kit (own-row HUD sync)
     ])
   }
-  io.to(m.roomId).emit('snapshot', { t: now(), ps })
+  // Phase 8 entity overlays — only present when non-empty (20 Hz stream stays
+  // lean on the 99% of ticks with no grenades in flight)
+  const t = now()
+  const gs = m.nades.map(n => [
+    n.id, n.kind, +n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2),
+    +n.vx.toFixed(2), +n.vy.toFixed(2), +n.vz.toFixed(2), n.restAt !== null ? 1 : 0,
+  ])
+  const sm = m.smokes.map(s => [s.id, +s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2), Math.max(0, s.endsAt - t)])
+  const fi = m.fires.map(f => [f.id, +f.x.toFixed(2), +f.y.toFixed(2), +f.z.toFixed(2), Math.max(0, f.endsAt - t)])
+  io.to(m.roomId).emit('snapshot', {
+    t, ps,
+    ...(gs.length ? { gs } : {}),
+    ...(sm.length ? { sm } : {}),
+    ...(fi.length ? { fi } : {}),
+  })
 }
 
 // ---------------------------------------------------------------- main loops
@@ -874,6 +1201,23 @@ io.on('connection', (socket) => {
     handleShotgunHit(m, attacker, w, data.pellets)
   })
 
+  // Phase 8: grenade throw — LMB full power / RMB underhand. Server owns
+  // origin (anti-teleport-gated position), velocity and physics; the client
+  // only aims. Anti-cheat: inventory + phase + rate gate + team weapon check
+  // (all handled inside throwGrenade, same path bots use).
+  socket.on('throw', (data: { weapon?: string; dir?: number[]; power?: number }) => {
+    if (!joinedRoom) return
+    const m = matches.get(joinedRoom)
+    const p = m?.players.get(socket.id)
+    if (!m || !p) return
+    const w = WEAPONS[(data.weapon ?? '') as WeaponId]
+    if (!w?.throwable) return
+    const d = data.dir ?? [0, 0, 1]
+    const dl = Math.hypot(d[0], d[1], d[2]) || 1
+    const power = clamp(Number(data.power) || 1, 0.25, 1)
+    throwGrenade(m, p, w.id, { x: d[0] / dl, y: d[1] / dl, z: d[2] / dl }, power)
+  })
+
   socket.on('selfdamage', (data: { dmg?: number; reason?: string }) => {
     if (!joinedRoom) return
     const m = matches.get(joinedRoom)
@@ -956,7 +1300,7 @@ io.on('connection', (socket) => {
     const p = m?.players.get(socket.id)
     if (!m || !p) return
     const res = handleBuy(m, p, String(data.item ?? ''))
-    if (res.ok) socket.emit('buyOk', { money: p.money, armor: p.armor, helmet: p.helmet, inventory: p.inventory, wIdx: p.wIdx })
+    if (res.ok) socket.emit('buyOk', { money: p.money, armor: p.armor, helmet: p.helmet, inventory: p.inventory, wIdx: p.wIdx, hasKit: !!p.hasKit })
     else socket.emit('buyError', { msg: res.msg })
     cb?.(res)
   })
@@ -1020,8 +1364,8 @@ httpServer.listen(PORT, () => {
   console.log(`[CS2-clone] game server (bomb defusal, dust2) on :${PORT}`)
 })
 
-// inject damage/LOS into bot module (avoid circular imports)
-setBotContext({ applyDamage, applyShotgunDamage, hasLOS })
+// inject damage/LOS/grenades into bot module (avoid circular imports)
+setBotContext({ applyDamage, applyShotgunDamage, hasLOS, botThrowGrenade })
 
 process.on('SIGTERM', () => { httpServer.close(() => process.exit(0)) })
 process.on('SIGINT', () => { httpServer.close(() => process.exit(0)) })

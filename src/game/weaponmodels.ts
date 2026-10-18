@@ -11,6 +11,7 @@
 //  - material + geometry caches keep draw setup cheap; texture clones share one GPU upload
 import * as THREE from 'three'
 import type { TeamId, WeaponId } from './weapons'
+import { WEAPONS } from './weapons'
 
 export interface ViewModel {
   group: THREE.Group
@@ -30,6 +31,8 @@ export interface ViewModel {
   eject?: THREE.Vector3
   /** C4 blinking LED */
   led?: THREE.Mesh
+  /** grenade pin/lever assembly — engine rotates it out on throw (Phase 8) */
+  pin?: THREE.Group
   muzzleLen?: number
 }
 
@@ -1347,6 +1350,62 @@ function buildC4(team: TeamId): ViewModel {
   return { group: g, tip: new THREE.Vector3(0, 0, -0.2), led }
 }
 
+// ---------------------------------------------------------------- grenades (Phase 8)
+// Hand-held viewmodels: each kind gets a distinct silhouette (HE olive ball,
+// flash steel cylinder w/ blue band, smoke grey can w/ red band, molotov
+// bottle + rag, incendiary canister w/ white stripe, decoy box + antenna).
+// The pin/lever assembly is a separate group the engine rotates out on throw.
+function buildGrenade(weapon: 'flash' | 'he' | 'smoke' | 'molotov' | 'inc' | 'decoy', team: TeamId): ViewModel {
+  const g = new THREE.Group()
+  const pin = new THREE.Group()
+
+  if (weapon === 'he') {
+    // olive sphere + spoon lever + top fuze well
+    P(g, new THREE.SphereGeometry(0.052, 14, 12), 'enamel_od', { color: 0x39402c, roughnessMul: 1.15 }, 0, 0.015, -0.09)
+    P(g, cyl(0.014, 0.02, 8), 'metal_dark', { color: 0x2c3122 }, 0, 0.072, -0.09)
+    P(g, box(0.014, 0.005, 0.085), 'metal_dark', { color: 0x8a8f96, metalness: 1.0, roughnessMul: 0.35 }, 0.012, 0.055, -0.075, q(14))
+    basic(0x2f3a22, g, box(0.05, 0.012, 0.02), 0, 0.012, -0.038)
+  } else if (weapon === 'flash') {
+    // steel cylinder + blue band + lever
+    P(g, cyl(0.03, 0.115, 14), 'metal_dark', { color: 0x8b9096, metalness: 0.9, roughnessMul: 0.4 }, 0, 0.015, -0.09)
+    P(g, cyl(0.031, 0.02, 14), 'metal_dark', { color: 0x3556a8, roughnessMul: 0.6 }, 0, 0.038, -0.09)
+    P(g, cyl(0.031, 0.014, 14), 'metal_dark', { color: 0x8b9096, metalness: 0.9, roughnessMul: 0.4 }, 0, -0.045, -0.09)
+    P(g, box(0.012, 0.004, 0.09), 'metal_dark', { color: 0x8a8f96, metalness: 1.0, roughnessMul: 0.35 }, 0.011, 0.05, -0.078, q(10))
+  } else if (weapon === 'smoke') {
+    // grey-green can + red band + top cap
+    P(g, cyl(0.033, 0.125, 14), 'metal_dark', { color: 0x5b6157, metalness: 0.6, roughnessMul: 0.55 }, 0, 0.015, -0.09)
+    P(g, cyl(0.034, 0.018, 14), 'metal_dark', { color: 0x9c3b30, roughnessMul: 0.6 }, 0, 0.032, -0.09)
+    P(g, cyl(0.02, 0.014, 10), 'metal_dark', { color: 0x40443d }, 0, 0.078, -0.09)
+    P(g, box(0.012, 0.004, 0.095), 'metal_dark', { color: 0x8a8f96, metalness: 1.0, roughnessMul: 0.35 }, 0.011, 0.05, -0.08, q(10))
+  } else if (weapon === 'molotov') {
+    // glass bottle + neck + fuel tint + rag
+    P(g, cyl(0.036, 0.125, 12), 'metal_dark', { color: 0x7a4f1e, metalness: 0.15, roughnessMul: 0.25 }, 0, 0.015, -0.09)
+    P(g, cyl(0.024, 0.115, 12), 'metal_dark', { color: 0x3d2c12, metalness: 0.05, roughnessMul: 0.3 }, 0, 0.012, -0.088)
+    P(g, cyl(0.013, 0.045, 10), 'metal_dark', { color: 0x6a4a22, metalness: 0.1, roughnessMul: 0.35 }, 0, 0.09, -0.09)
+    P(g, box(0.02, 0.05, 0.02), 'polymer_black', { color: 0x4a6612, density: 6 }, 0, 0.125, -0.09, q(-8), 0, q(10))
+    basic(0xff9a30, g, box(0.008, 0.012, 0.008), 0, 0.155, -0.09) // ember tip
+  } else if (weapon === 'inc') {
+    // CT incendiary: sealed metal canister + white stripe
+    P(g, cyl(0.034, 0.12, 14), 'metal_dark', { color: 0x6a3b1c, metalness: 0.75, roughnessMul: 0.45 }, 0, 0.015, -0.09)
+    P(g, cyl(0.035, 0.016, 14), 'metal_dark', { color: 0xc7c2ba, roughnessMul: 0.5 }, 0, 0.012, -0.09)
+    P(g, box(0.012, 0.004, 0.09), 'metal_dark', { color: 0x8a8f96, metalness: 1.0, roughnessMul: 0.35 }, 0.011, 0.052, -0.078, q(10))
+  } else { // decoy
+    // brown box + antenna + blinking red dot
+    P(g, box(0.07, 0.055, 0.05), 'polymer_black', { color: 0x4a4238, roughnessMul: 1.2 }, 0, 0.012, -0.09)
+    P(g, cyl(0.004, 0.085, 6), 'metal_dark', { color: 0x1c1c1c, metalness: 1.0 }, 0, 0.078, -0.078, q(12))
+    basic(0xd02020, g, box(0.008, 0.006, 0.008), 0.032, 0.04, -0.112)
+  }
+
+  // pin/lever assembly at the top — rotates away when the throw releases it
+  P(pin, cyl(0.009, 0.012, 8), 'metal_dark', { color: 0xb9c2c9, metalness: 1.0, roughnessMul: 0.3 }, 0, 0.082, -0.093, 0, 0, q(90))
+  P(pin, new THREE.TorusGeometry(0.016, 0.0028, 8, 18), 'metal_dark', { color: 0xb9c2c9, metalness: 1.0, roughnessMul: 0.3 }, 0.03, 0.088, -0.093, q(78), 0, 0)
+  g.add(pin)
+
+  // right hand cradling the grenade
+  buildGloves(g, team, { x: 0.002, y: -0.02, z: -0.02, rx: 0.5 })
+  return { group: g, tip: new THREE.Vector3(0, 0.05, -0.16), pin }
+}
+
 // ---------------------------------------------------------------- dispatcher
 const VM_BASE = new THREE.Vector3(0.26, -0.24, -0.45)
 
@@ -1378,6 +1437,9 @@ export function buildViewModel(weapon: WeaponId, team: TeamId): ViewModel {
     case 'taser': return buildTaser(team)
     case 'knife': return buildKnife(team)
     case 'c4': return buildC4(team)
+    case 'flash': case 'he': case 'smoke':
+    case 'molotov': case 'inc': case 'decoy':
+      return buildGrenade(weapon, team)
     default: return buildKnife(team)
   }
 }
@@ -1387,6 +1449,7 @@ export function vmBase(weapon: WeaponId): THREE.Vector3 {
   const off = weapon === 'c4' ? new THREE.Vector3(-0.1, -0.075, 0.02)
     : weapon === 'knife' ? new THREE.Vector3(0.24, -0.25, -0.4)
     : weapon === 'awp' ? new THREE.Vector3(0.24, -0.235, -0.43)
+    : WEAPONS[weapon]?.throwable ? new THREE.Vector3(0.24, -0.245, -0.42)
     : VM_BASE.clone()
   return off
 }
@@ -1566,6 +1629,29 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
     case 'c4':
       P(g, box(0.13, 0.05, 0.16), 'enamel_od', { color: 0x5a5c42, roughnessMul: 1.1 }, 0, 0, -0.02)
       basic(0xff2020, g, box(0.01, 0.006, 0.01), 0.02, 0.028, 0.04)
+      break
+    case 'he':
+      P(g, new THREE.SphereGeometry(0.045, 10, 8), 'enamel_od', { color: 0x39402c }, 0, 0.01, -0.06)
+      break
+    case 'flash':
+      P(g, cyl(0.026, 0.1, 10), 'metal_dark', { color: 0x8b9096, roughnessMul: 0.4 }, 0, 0.01, -0.06)
+      P(g, cyl(0.027, 0.016, 10), 'metal_dark', { color: 0x3556a8 }, 0, 0.03, -0.06)
+      break
+    case 'smoke':
+      P(g, cyl(0.029, 0.11, 10), 'metal_dark', { color: 0x5b6157, roughnessMul: 0.55 }, 0, 0.01, -0.06)
+      P(g, cyl(0.03, 0.015, 10), 'metal_dark', { color: 0x9c3b30 }, 0, 0.025, -0.06)
+      break
+    case 'molotov':
+      P(g, cyl(0.03, 0.11, 10), 'metal_dark', { color: 0x7a4f1e, roughnessMul: 0.3 }, 0, 0.01, -0.06)
+      P(g, box(0.016, 0.04, 0.016), 'polymer_black', { color: 0x4a6612, density: 6 }, 0, 0.08, -0.06)
+      break
+    case 'inc':
+      P(g, cyl(0.03, 0.1, 10), 'metal_dark', { color: 0x6a3b1c, roughnessMul: 0.45 }, 0, 0.01, -0.06)
+      P(g, cyl(0.031, 0.014, 10), 'metal_dark', { color: 0xc7c2ba }, 0, 0.008, -0.06)
+      break
+    case 'decoy':
+      P(g, box(0.06, 0.05, 0.045), 'polymer_black', { color: 0x4a4238 }, 0, 0.01, -0.06)
+      P(g, cyl(0.004, 0.07, 6), 'metal_dark', { color: 0x1c1c1c }, 0, 0.06, -0.05, q(12))
       break
     default:
       P(g, box(0.045, 0.06, 0.4), 'metal_dark', {}, 0, 0, -0.1)

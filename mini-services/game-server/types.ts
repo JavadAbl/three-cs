@@ -35,6 +35,10 @@ export interface PlayerState {
   // split-resend). Undefined for single-ray weapons / between shots.
   shot?: { seed: number; dir: [number, number, number]; at: number; claims: number }
   lastSelfDmgAt?: number
+  // Phase 8 grenades + equipment
+  hasKit?: boolean                 // defuse kit (CT) — halves defuse time, lost on death
+  blindUntil?: number              // flashbang: no vision past this ms timestamp
+  lastThrowAt?: number             // grenade throw rate gate
   // objective
   hasBomb: boolean
   plantingSince: number
@@ -59,9 +63,43 @@ export interface BotBrain {
   strafeUntil: number
   stuckAt: number
   lastX: number; lastZ: number
+  // Phase 8 grenade AI (light, statistical — plan 8.4)
+  nadeNextAt: number             // earliest next grenade throw
+  nadesThrown: number            // throws this round (cap 2)
+  flashThrown: boolean           // one site-push flash per round
+  lastEnemyX: number; lastEnemyZ: number  // smoke-retreat aim memory
 }
 
 export type Phase = 'warmup' | 'freeze' | 'live' | 'post' | 'over'
+
+// ---- Phase 8 grenade entities (projectile shape lives in
+// shared/grenades.ts for the shared physics; these carry server effect state) ----
+import type { NadeEnt } from '../../shared/grenades'
+
+export interface SmokeEnt {
+  id: number
+  x: number; y: number; z: number
+  startedAt: number
+  endsAt: number
+}
+
+export interface FireEnt {
+  id: number
+  x: number; y: number; z: number
+  endsAt: number
+  lastTickAt: number
+  owner: string
+  weapon: string               // 'molotov' | 'inc' (kill credit + sound)
+}
+
+export interface DecoyEnt {
+  id: number
+  x: number; y: number; z: number
+  endsAt: number
+  nextShotAt: number
+  owner: string
+  weapon: string               // the gun sound it mimics
+}
 
 export interface BombState {
   planted: boolean
@@ -88,6 +126,12 @@ export interface Match {
   scores: { CT: number; T: number }
   lossStreak: { CT: number; T: number }
   bomb: BombState
+  // Phase 8 grenade entities (server-authoritative, 20 Hz tick)
+  nades: NadeEnt[]                  // flying/resting projectiles
+  smokes: SmokeEnt[]                // popped smoke volumes (LOS blockers)
+  fires: FireEnt[]                  // molotov/incendiary burn zones
+  decoys: DecoyEnt[]                // resting decoy sound sources
+  nadeSeq: number                   // grenade id counter
   winTarget: number
   botFill: boolean
   botDifficulty: 'easy' | 'normal' | 'hard'

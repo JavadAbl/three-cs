@@ -22,6 +22,8 @@ interface BotCtx {
   applyDamage?: (m: Match, victim: PlayerState, attacker: PlayerState | null, weapon: WeaponId, part: HitPart, dist: number, hs: boolean) => void
   applyShotgunDamage?: (m: Match, victim: PlayerState, attacker: PlayerState, weapon: WeaponId, pellets: Array<{ part: HitPart }>, dist: number) => number
   hasLOS?: (m: Match, ax: number, ay: number, az: number, bx: number, by: number, bz: number) => boolean
+  // Phase 8: server-side grenade throw (validated + physics'd by index.ts)
+  botThrowGrenade?: (m: Match, p: PlayerState, weapon: WeaponId, aimX: number, aimY: number, aimZ: number) => boolean
 }
 export const botCtx: BotCtx = {}
 export function setBotContext(c: BotCtx) { Object.assign(botCtx, c) }
@@ -151,6 +153,7 @@ export function defaultBrain(): BotBrain {
     holdYaw: 0, engageTarget: null, lastSeenAt: 0, nextShotAt: 0,
     burstLeft: 0, reactAt: 0, strafeDir: 1, strafeUntil: 0,
     stuckAt: 0, lastX: 0, lastZ: 0,
+    nadeNextAt: 0, nadesThrown: 0, flashThrown: false, lastEnemyX: 0, lastEnemyZ: 0,
   }
 }
 
@@ -160,6 +163,7 @@ export function resetBotForRound(m: Match, p: PlayerState) {
   ai.path = []; ai.goal = ''
   ai.engageTarget = null; ai.nextShotAt = 0; ai.burstLeft = 0
   ai.stuckAt = 0; ai.lastX = p.x; ai.lastZ = p.z
+  ai.nadeNextAt = 0; ai.nadesThrown = 0; ai.flashThrown = false; ai.lastEnemyX = 0; ai.lastEnemyZ = 0
   if (p.team === 'T') {
     // mostly agree on one site
     const site: 'A' | 'B' = Math.random() < 0.6 ? 'A' : 'B'
@@ -183,6 +187,12 @@ export function botBuy(m: Match, p: PlayerState) {
     if (!w || p.money < w.price) return false
     if (w.team && w.team !== p.team) return false
     p.money -= w.price
+    if (w.throwable) {
+      // grenades stack in slot 5 (never replace); carry limit respected
+      if (p.inventory.filter(x => x === id).length >= (w.maxCarry ?? 1)) return false
+      p.inventory.push(id)
+      return true
+    }
     p.inventory = p.inventory.filter(x => WEAPONS[x]?.slot !== w.slot || x === 'knife')
     p.inventory.unshift(id)
     p.ammo[id] = { mag: w.mag, reserve: w.reserve }
@@ -196,6 +206,20 @@ export function botBuy(m: Match, p: PlayerState) {
     p.armor = 100
     if (helm) p.helmet = true
     return true
+  }
+  const kit = (): boolean => {
+    if (p.team !== 'CT' || p.hasKit || p.money < 400) return false
+    p.money -= 400
+    p.hasKit = true
+    return true
+  }
+  // Phase 8 (plan 8.4): light grenade shopping — statistical, not tactical.
+  // Full buys grab kit + a utility roll; mid-economy adds cheaper utility.
+  const nade = (id: WeaponId, chance: number): boolean => {
+    const w = WEAPONS[id]
+    if (!w || Math.random() >= chance) return false
+    if (p.money < w.price + 300) return false       // never spend the last of it
+    return buy(id)
   }
   if (m.round === 1) {
     // pistol round: team-flavored sidearm table (plan 3.4) — replaces the old
@@ -211,6 +235,7 @@ export function botBuy(m: Match, p: PlayerState) {
       else if (roll < 0.55) buy('p250')       // $300
     }
     if (p.money >= 650) armor(false)          // else: kevlar + stock starter
+    if (p.money >= 500 && Math.random() < 0.20) buy('flash')  // some pistol-round utility
     return
   }
   const awpChance = m.round > 2 ? 0.15 : 0
@@ -219,6 +244,9 @@ export function botBuy(m: Match, p: PlayerState) {
     const auto = p.money >= 6000 && Math.random() < 0.4
     buy(auto ? (p.team === 'T' ? 'g3sg1' : 'scar20') : 'awp')
     armor(true)
+    kit()
+    nade('flash', 0.40); nade('smoke', 0.25); nade('he', 0.25)
+    nade(p.team === 'T' ? 'molotov' : 'inc', 0.25)
     return
   }
   const rifle: WeaponId = p.team === 'T' ? 'ak47' : 'm4'
@@ -230,6 +258,9 @@ export function botBuy(m: Match, p: PlayerState) {
     else if (p.team === 'CT' && roll < 0.35 && p.money >= 3550) buy('m4a1s')
     else buy(rifle)
     armor(true)
+    kit()
+    nade('flash', 0.40); nade('smoke', 0.25); nade('he', 0.25)
+    nade(p.team === 'T' ? 'molotov' : 'inc', 0.25)
     return
   }
   if (p.money >= WEAPONS[rifle].price) {
@@ -258,6 +289,8 @@ export function botBuy(m: Match, p: PlayerState) {
     if (p.team === 'CT' && roll > 0.8 && p.money >= 1700) buy('ssg08')   // scout gambit
     else buy(budgetRifle)
     if (p.money >= 650) armor(false)
+    kit()
+    nade('flash', 0.30); nade('he', 0.20)
     return
   }
   // mid-economy SMG branch (plan 4.4) — $1500 class mixes mp7/ump45/mp5 +
@@ -272,6 +305,7 @@ export function botBuy(m: Match, p: PlayerState) {
     else if (roll < 0.90) buy('mp5')              // $1500, suppressed allrounder
     else buy('bizon')                             // $1400, 64-round spray
     if (p.money >= 650) armor(false)
+    nade('flash', 0.20)
     return
   }
   if (p.money >= 1250) {
@@ -325,19 +359,27 @@ function updateBot(m: Match, p: PlayerState, t: number) {
   if (m.phase !== 'live' && m.phase !== 'freeze') return
   if (p.reloadEndsAt > t) return
 
+  // ---------- Phase 8: flashblind (plan 8.2 — "no vision", real counterplay) ----------
+  // A blinded bot cannot scan, engage or shoot; it keeps navigating blind.
+  const blinded = t < (p.blindUntil ?? 0)
+
   // ---------- enemy scan ----------
   let best: PlayerState | null = null
   let bestD = Infinity
-  for (const e of m.players.values()) {
-    if (e.team === p.team || !e.alive) continue
-    const dx = e.x - p.x, dz = e.z - p.z
-    const d = Math.hypot(dx, dz)
-    if (d > 55) continue
-    const yawTo = Math.atan2(-dx, -dz)
-    const fovLimit = ai.engageTarget === e.id ? 2.4 : 1.05
-    if (Math.abs(angleDiff(p.yaw, yawTo)) > fovLimit && d > 3) continue
-    if (!botCtx.hasLOS?.(m, p.x, eyeY(p), p.z, e.x, e.y + 1.3, e.z)) continue
-    if (d < bestD) { bestD = d; best = e }
+  if (!blinded) {
+    for (const e of m.players.values()) {
+      if (e.team === p.team || !e.alive) continue
+      const dx = e.x - p.x, dz = e.z - p.z
+      const d = Math.hypot(dx, dz)
+      if (d > 55) continue
+      const yawTo = Math.atan2(-dx, -dz)
+      const fovLimit = ai.engageTarget === e.id ? 2.4 : 1.05
+      if (Math.abs(angleDiff(p.yaw, yawTo)) > fovLimit && d > 3) continue
+      if (!botCtx.hasLOS?.(m, p.x, eyeY(p), p.z, e.x, e.y + 1.3, e.z)) continue
+      if (d < bestD) { bestD = d; best = e }
+    }
+  } else {
+    ai.engageTarget = null   // eyes full of white — lose the target
   }
 
   if (best) {
@@ -357,6 +399,39 @@ function updateBot(m: Match, p: PlayerState, t: number) {
   }
 
   const target = ai.engageTarget ? m.players.get(ai.engageTarget) ?? null : null
+
+  // ---------- Phase 8: grenade AI (light, plan 8.4 — statistical, not tactical) ----------
+  // HE on spotted clustered enemies · flash before the site push (p<0.3) ·
+  // smoke on the hurt-retreat. Capped 2 throws/round, 2.5 s between attempts.
+  if (m.phase === 'live' && !blinded && t >= ai.nadeNextAt && ai.nadesThrown < 2 && botCtx.botThrowGrenade) {
+    let throwId: WeaponId | null = null
+    if (target && target.alive) {
+      ai.lastEnemyX = target.x; ai.lastEnemyZ = target.z
+      const d = Math.hypot(target.x - p.x, target.z - p.z)
+      // HE: cluster — target plus another enemy within 3.5 m, mid range
+      const cluster = [...m.players.values()].some(e => e !== target && e.alive && e.team !== p.team &&
+        Math.hypot(e.x - target.x, e.z - target.z) < 3.5)
+      if (cluster && d > 6 && d < 20 && p.inventory.includes('he')) throwId = 'he'
+      // smoke: hurt + recently engaged → cover the retreat
+      else if (p.hp < 35 && t - ai.lastSeenAt < 5000 && p.inventory.includes('smoke')) throwId = 'smoke'
+    } else if (!ai.flashThrown && p.team === 'T' && ai.role === 'rush' && p.inventory.includes('flash')) {
+      // flash before push: within 16 m of the site goal (plan 8.4)
+      const g = graphFor(m)
+      const goal = g.nodeById.get(ai.goal.replace(/^def/, '').replace(/^bomb:/, ''))
+      if (goal && Math.hypot(goal.x - p.x, goal.z - p.z) < 16 && Math.random() < 0.3) throwId = 'flash'
+    }
+    let thrown = false
+    if (throwId === 'he') thrown = botCtx.botThrowGrenade(m, p, 'he', target!.x, 1.0, target!.z)
+    else if (throwId === 'smoke') thrown = botCtx.botThrowGrenade(m, p, 'smoke', (p.x + ai.lastEnemyX) / 2, 1.0, (p.z + ai.lastEnemyZ) / 2)
+    else if (throwId === 'flash') {
+      const g = graphFor(m)
+      const goal = g.nodeById.get(ai.goal.replace(/^def/, '').replace(/^bomb:/, ''))
+      thrown = botCtx.botThrowGrenade(m, p, 'flash', goal ? goal.x : p.x, 1.6, goal ? goal.z : p.z)
+      if (thrown) ai.flashThrown = true
+    }
+    if (thrown) { ai.nadesThrown++; ai.nadeNextAt = t + 2500 }
+    else ai.nadeNextAt = t + 900
+  }
 
   // ---------- freeze phase: face forward ----------
   if (m.phase === 'freeze') {
