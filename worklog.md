@@ -646,3 +646,19 @@ Stage Summary:
 - Schema is future-proofed: phases 3-8 add weapons with fireMode/burst/pellets/scopeLevels/suppressed/throwable/killRewardClass without touching consumers
 - Zero gameplay change (all 53 checks + E2E + live browser buy confirm byte-equivalent behavior)
 - Next: Phase 2 (data-driven audio map + stage all new-weapon samples per policy v3)
+
+---
+Task ID: 34
+Agent: Super Z (main agent)
+Task: Repair environment wipe that struck between Phase 1 commit and push
+
+Work Log:
+- Symptom: `git push` after the Phase 1 commit failed with "could not read Username" despite the task-31 credential store, and ~26 tracked files showed modified.
+- Diagnosis: partial environment reset — platform wiped `/home/z/.git-credentials` AND the credential.helper line in `~/.gitconfig` (file reverted to boot-time state), and chmod-flipped tracked files 644→755 (content untouched, mode-only diffs). Phase 1 commit df7dfe5 itself was intact with correct author identity (gitconfig user.* survived).
+- Repair: re-created credential helper config + credentials file (chmod 600, same PAT per user's task-31 standing decision), `git diff --name-only | xargs chmod 644` cleared all mode diffs, push then succeeded (7bc2efc..df7dfe5).
+- AGENTS.md persistent-push-auth bullet extended with the two-cause auth-failure decision tree (revoked vs environment-wipe) and the turnkey recovery recipe.
+
+Stage Summary:
+- Phase 1 is pushed and remote main = local main = df7dfe5
+- New failure mode documented: environment resets can silently kill HOME-state config (credentials) and flip file modes — check both before assuming a token was revoked
+- Lesson: repo state survives these resets (git dir untouched), only HOME dotfiles + file modes wobble

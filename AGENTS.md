@@ -32,11 +32,16 @@ sessions. When in doubt, ask the user — never assume an exception.
 - **Persistent push auth (user decision 2026-10-17)**: a PAT is stored in git's
   credential store at `/home/z/.git-credentials` — OUTSIDE the repo, chmod 600,
   never committed, never print/cat its contents. Plain `git push origin main`
-  authenticates automatically. If auth fails, the token was revoked/rotated:
-  ask the user for a new PAT and write it back in the same format
-  (`https://x-access-token:<PAT>@github.com`). Do NOT embed tokens in remote
-  URLs in `.git/config`, in repo files, or in logs; redact any token that
-  appears in command output.
+  authenticates automatically. If auth fails, ONE of two causes:
+  (a) the PAT was revoked/rotated → ask the user for a new one;
+  (b) the environment was reset (happened 2026-10-17: the platform wiped
+  `~/.git-credentials` AND the credential.helper line in `~/.gitconfig`, and
+  chmod-flipped tracked files to 755). Recovery for (b): re-run
+  `git config --global credential.helper 'store --file=/home/z/.git-credentials'`,
+  rewrite the credentials file (`https://x-access-token:<PAT>@github.com`,
+  chmod 600), and `git diff --name-only | xargs chmod 644` to clear mode-only
+  changes. Do NOT embed tokens in remote URLs in `.git/config`, in repo
+  files, or in logs; redact any token that appears in command output.
 - Force-push only for a stated purpose (e.g. history purge) and never silently.
 - Keep remote `main` = local `main`: push when work is committed and verified.
 
