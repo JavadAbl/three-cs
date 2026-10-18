@@ -74,10 +74,10 @@ export const WEAPON_AUDIO: Record<string, WeaponAudio> = {
   m4a1s: { fire: 'm4a1s_fire', distant: 'm4a1s_distant', out: 'm4a1s_clipout', in: 'm4a1s_clipin', rack: 'm4a1s_bolt', draw: 'm4a1s_draw', suppressed: 'm4a1s_fire' },
 
   // ---- Phase 6: shotguns (staged; reload = shell insert + pump) ----
-  nova: { fire: 'nova_fire', distant: 'nova_distant', out: 'nova_shell', in: 'nova_shell', rack: 'nova_pump', draw: 'nova_draw' },
+  nova: { fire: 'nova_fire', distant: 'nova_distant', out: 'nova_shell', in: 'nova_shell', rack: 'nova_pump', draw: 'nova_draw', bolt: 'nova_pump' },
   xm1014: { fire: 'xm1014_fire', distant: 'xm1014_distant', out: 'xm1014_shell', in: 'xm1014_shell', rack: 'xm1014_pump' },
-  mag7: { fire: 'mag7_fire', distant: 'mag7_distant', out: 'mag7_shell', in: 'mag7_shell', rack: 'mag7_pump', draw: 'mag7_draw' },
-  sawedoff: { fire: 'sawedoff_fire', distant: 'sawedoff_distant', out: 'sawedoff_shell', in: 'sawedoff_shell', rack: 'sawedoff_pump', draw: 'sawedoff_draw' },
+  mag7: { fire: 'mag7_fire', distant: 'mag7_distant', out: 'mag7_shell', in: 'mag7_shell', rack: 'mag7_pump', draw: 'mag7_draw', bolt: 'mag7_pump' },
+  sawedoff: { fire: 'sawedoff_fire', distant: 'sawedoff_distant', out: 'sawedoff_shell', in: 'sawedoff_shell', rack: 'sawedoff_pump', draw: 'sawedoff_draw', bolt: 'sawedoff_pump' },
 
   // ---- Phase 7: machine guns (staged; reload = ammo box) ----
   m249: { fire: 'm249_fire', distant: 'm249_distant', out: 'm249_boxout', in: 'm249_boxin', rack: 'm249_coverup', draw: 'm249_draw' },

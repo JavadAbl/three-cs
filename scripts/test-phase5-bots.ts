@@ -52,13 +52,13 @@ function tally(team: TeamId, money: number, trials = 400): Record<string, number
 {
   const t = tally('T', 2000)
   const tKeys = Object.keys(t)
-  check('T $2000: galil (~75%) or p90 (~25%), nothing else',
-    tKeys.every(w => ['galil', 'p90'].includes(w)) && (t.galil ?? 0) > 200,
+  check('T $2000: galil (~75%) or p90 (~25%) or xm1014 (~12% of the gap), nothing else',
+    tKeys.every(w => ['galil', 'p90', 'xm1014'].includes(w)) && (t.galil ?? 0) > 200,
     tKeys.map(w => `${w} ${t[w]}`).join(' '))
   const c = tally('CT', 2000)
   const cKeys = Object.keys(c)
-  check('CT $2000: famas (~80%) / ssg08 (~20%), nothing else',
-    cKeys.every(w => ['famas', 'ssg08'].includes(w)) && (t.famas ?? (c.famas ?? 0)) > 0 && (c.famas ?? 0) > 200,
+  check('CT $2000: famas (~80%) / ssg08 (~20%) / xm1014 (Phase-6 roll), nothing else',
+    cKeys.every(w => ['famas', 'ssg08', 'xm1014'].includes(w)) && (t.famas ?? (c.famas ?? 0)) > 0 && (c.famas ?? 0) > 200,
     cKeys.map(w => `${w} ${c[w]}`).join(' '))
   let famasKevlar = 0
   for (let i = 0; i < 100; i++) {

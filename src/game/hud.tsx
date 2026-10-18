@@ -30,6 +30,8 @@ const WEAPON_SHORT: Record<string, string> = {
   // Phase 5 rifles + snipers
   m4a1s: 'M4A1-S', galil: 'Galil', famas: 'FAMAS', sg553: 'SG 553', aug: 'AUG',
   ssg08: 'SSG 08', scar20: 'SCAR-20', g3sg1: 'G3SG1',
+  // Phase 6 shotguns
+  nova: 'Nova', xm1014: 'XM1014', mag7: 'MAG-7', sawedoff: 'Sawed-Off',
 }
 
 // ============================================================
@@ -133,7 +135,7 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
             {shown.map((it, i) => {
               const st = rowState(it)
               const stats = st.w
-                ? `${st.w.damage} dmg · ${st.w.fireDelay}ms · ${st.w.mag === Infinity ? '∞' : st.w.mag} rds`
+                ? `${st.w.damage}${(st.w.pellets ?? 0) > 1 ? `×${st.w.pellets}` : ''} dmg · ${st.w.fireDelay}ms · ${st.w.mag === Infinity ? '∞' : st.w.mag} rds`
                 : (GEAR.find(g => g.id === it.id)?.desc ?? '')
               return (
                 <button key={it.id} onClick={() => cb.onBuy(it.id)}

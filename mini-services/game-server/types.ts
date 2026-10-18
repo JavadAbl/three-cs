@@ -30,6 +30,10 @@ export interface PlayerState {
   lastShotAt: number
   reloadEndsAt: number
   burstShots: number    // Phase 5: shots fired in the current burst window (famas anti-cheat)
+  // Phase 6: the shotgun shell currently in flight — seed + aim dir (for
+  // pellet-cone validation) and the per-shot pellet-claim budget (anti
+  // split-resend). Undefined for single-ray weapons / between shots.
+  shot?: { seed: number; dir: [number, number, number]; at: number; claims: number }
   lastSelfDmgAt?: number
   // objective
   hasBomb: boolean

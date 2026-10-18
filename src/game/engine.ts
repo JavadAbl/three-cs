@@ -2,8 +2,9 @@
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { io } from 'socket.io-client'
-import { WEAPONS, ECONOMY, ROUND, GEAR, fireModeOf, scopeLevelsOf, zoomFovOf } from './weapons'
+import { WEAPONS, ECONOMY, ROUND, GEAR, fireModeOf, scopeLevelsOf, zoomFovOf, pelletsOf, pelletSpreadOf } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
+import { pelletDirs } from '../../shared/pellets'
 import { MAPS } from './mapdata'
 import type { MapDef, MapId } from './mapdata'
 import { buildMap } from './mapview'
@@ -101,6 +102,8 @@ const KICK: Partial<Record<WeaponId, number>> = {
   // Phase 5 rifles + snipers
   m4a1s: 0.38, galil: 0.6, famas: 0.45, sg553: 0.55, aug: 0.5,
   ssg08: 1.6, scar20: 1.8, g3sg1: 1.9,
+  // Phase 6 shotguns — a shell kicks like a mule
+  nova: 2.4, xm1014: 1.5, mag7: 2.6, sawedoff: 2.8,
 }
 
 export class Engine {
@@ -156,6 +159,7 @@ export class Engine {
   // viewmodel part animations
   private slideKickAt = -1e9
   private boltCycleAt = -1e9
+  private pumpAt = -1e9      // Phase 6: shotgun fore-end cycle (pump anim)
   private slashAt = -1e9
   private slideLeft = false   // dual berettas: which gun fires next
   private vmKick = 0
@@ -732,11 +736,35 @@ export class Engine {
       }
     })
 
-    socket.on('shot', (d: { id: string; weapon: string; origin: number[]; dir: number[] }) => {
+    socket.on('shot', (d: { id: string; weapon: string; origin: number[]; dir: number[]; seed?: number }) => {
       // remote shot fx (suppressed shooters keep their tracer/flash hidden)
       const o = new THREE.Vector3(d.origin[0], d.origin[1], d.origin[2])
       const dir = new THREE.Vector3(d.dir[0], d.dir[1], d.dir[2])
-      const sup = !!WEAPONS[d.weapon as WeaponId]?.suppressed
+      const rw = WEAPONS[d.weapon as WeaponId]
+      const sup = !!rw?.suppressed
+      if (rw && pelletsOf(rw) > 1 && typeof d.seed === 'number') {
+        // Phase 6: rebuild the shooter's EXACT fan from the broadcast seed —
+        // every witness draws the identical tracer spread
+        const dirs = pelletDirs(d.seed, pelletsOf(rw), pelletSpreadOf(rw), { x: dir.x, y: dir.y, z: dir.z })
+        let pocks = 0
+        for (const pd of dirs) {
+          const pdir = new THREE.Vector3(pd.x, pd.y, pd.z)
+          this.raycaster.set(o, pdir)
+          this.raycaster.far = 60
+          const ph = this.raycaster.intersectObjects(this.map.raycastMeshes, false)
+          const pend = ph.length ? ph[0].point : o.clone().addScaledVector(pdir, 60)
+          if (ph.length && pocks < 3) {
+            const surf = (ph[0].object.userData as { surf?: string }).surf
+            this.fx.impact(ph[0].point, ph[0].face ? ph[0].face.normal.clone().transformDirection(ph[0].object.matrixWorld) : undefined, surf)
+            pocks++
+          }
+          if (!sup) this.fx.tracer(o.clone().addScaledVector(pdir, 0.8), pend)
+        }
+        this.fx.muzzleFlash(o.clone().addScaledVector(dir, 0.5), sup)
+        const myEye = this.camera.position
+        audio.gunshot(d.weapon, d.origin as [number, number, number], [myEye.x, myEye.y, myEye.z])
+        return
+      }
       // find map hit for tracer end + impact fx
       this.raycaster.set(o, dir)
       this.raycaster.far = 150
@@ -1071,6 +1099,13 @@ export class Engine {
       .addScaledVector(up, Math.tan(spreadRad) * rz)
       .normalize()
 
+    // Phase 6: multi-pellet shotguns — the perturbed center dir becomes the
+    // bore axis; the deterministic seeded fan spreads around it
+    if (pelletsOf(w) > 1) {
+      this.fireShotgun(w, dir)
+      return
+    }
+
     this.raycaster.set(this.camera.position, dir)
     // zeus: short-range electric arc (knife-like reach, not a ballistic gun)
     this.raycaster.far = w.id === 'taser' ? 6 : 200
@@ -1142,6 +1177,92 @@ export class Engine {
       weapon: w.id,
       origin: [this.camera.position.x, this.camera.position.y, this.camera.position.z],
       dir: [dir.x, dir.y, dir.z],
+    })
+  }
+
+  /**
+   * Phase 6 multi-pellet fire (plan 6.1): deterministic seeded fan around the
+   * perturbed bore axis. Client predicts: per-pellet raycasts (tracer fan,
+   * blood, wall pocks) and per-pellet hit CLAIMS — the server owns all the
+   * numbers (distance/falloff/armor/aggregation, see handleShotgunHit).
+   * One shell = one gunshot, one flash, one ejected hull, one recoil kick —
+   * the FAN is the only multiplied thing.
+   */
+  private fireShotgun(w: (typeof WEAPONS)[WeaponId], dir: THREE.Vector3) {
+    const now = performance.now()
+    const pellets = pelletsOf(w)
+    const seed = (Math.random() * 0xffffffff) >>> 0 || 1
+    const dirs = pelletDirs(seed, pellets, pelletSpreadOf(w), { x: dir.x, y: dir.y, z: dir.z })
+    const hitboxes = this.pm.hitboxMeshes()
+    const claims: Array<{ target: string; part: HitPart }> = []
+    const blooded = new Set<string>()
+    let anyHead = false
+    let mapPocks = 0
+    const tracerEnds: Array<{ d: THREE.Vector3; end: THREE.Vector3 }> = []
+    for (const pd of dirs) {
+      const pdir = new THREE.Vector3(pd.x, pd.y, pd.z)
+      this.raycaster.set(this.camera.position, pdir)
+      this.raycaster.far = 60        // shotguns are a close-range argument
+      const hits = this.raycaster.intersectObjects([...hitboxes, ...this.map.raycastMeshes], false)
+      const hit = hits.find(h => h.distance > 0.2)
+      let end = this.camera.position.clone().addScaledVector(pdir, 60)
+      if (hit) {
+        end = hit.point
+        const ud = hit.object.userData as { pid?: string; part?: HitPart }
+        if (ud?.pid) {
+          const rp = this.pm.getById(ud.pid)
+          if (rp && rp.team !== this.myTeam) {
+            claims.push({ target: ud.pid, part: ud.part ?? 'body' })
+            if (ud.part === 'head') anyHead = true
+            if (!blooded.has(ud.pid)) { this.fx.blood(hit.point, pdir); blooded.add(ud.pid) }
+          }
+        } else if (mapPocks < 4) {
+          // one wall-puff cluster per blast, not 9 overlapping puffs
+          const surf = (hit.object.userData as { surf?: string }).surf
+          this.fx.impact(hit.point, hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : undefined, surf)
+          mapPocks++
+        }
+      }
+      tracerEnds.push({ d: pdir, end })
+    }
+
+    // claims ride their own event; the single-ray 'hit' path is server-blocked
+    // for shotguns (per-shot pellet budget lives there)
+    if (claims.length) {
+      this.socket?.emit('pellets', { weapon: w.id, pellets: claims })
+      this.hitmarkerAt = now                 // local instant feedback; server confirms totals
+      if (anyHead) { this.headshotAt = now; audio.headshotDing() }
+      else audio.hitmarker()
+    }
+
+    // visuals + audio: ONE report for the whole shell
+    audio.gunshot(w.id)
+    if (mapPocks > 0) audio.impact()
+    const muzzle = this.muzzleWorld()
+    for (const t of tracerEnds) this.fx.tracer(muzzle, t.end)
+    this.fx.muzzleFlash(muzzle, false)
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize()
+    if (this.vmGroup && this.vm?.eject) {
+      this.fx.shell(this.vmGroup.localToWorld(this.vm.eject.clone()), right)
+    } else {
+      this.fx.shell(muzzle, right)
+    }
+
+    // recoil — one mule kick for the shell
+    this.recoil = Math.min(this.recoil + 1, 18)
+    const kick = (KICK[w.id] ?? 2.4) * (Math.PI / 180)
+    this.pitch += kick
+    this.yaw += (Math.random() - 0.5) * kick * 0.6 + Math.sin(this.recoil * 2.1) * 0.00035
+    this.vmKick = 1
+    // pump guns cycle the fore-end after the shot (audio pump comes from the
+    // audio map's bolt slot — 300ms after the report)
+    if (this.vm?.pump) this.pumpAt = now
+
+    this.socket?.emit('shoot', {
+      weapon: w.id,
+      origin: [this.camera.position.x, this.camera.position.y, this.camera.position.z],
+      dir: [dir.x, dir.y, dir.z],
+      seed,
     })
   }
 
@@ -1491,17 +1612,38 @@ export class Engine {
             vm.bolt.rotation.z = 0
           }
         }
-        if (vm.mag) {
-          const homeY = vm.mag.userData.homeY as number
-          if (this.reloadEndsAt > now) {
-            const w = this.currentWeapon()
-            const rp = 1 - (this.reloadEndsAt - now) / Math.max(1, w.reloadMs)
-            vm.mag.visible = !(rp > 0.18 && rp < 0.72)
-            // fresh mag slides up into the well during 0.72-0.86
-            vm.mag.position.y = (rp > 0.72 && rp < 0.86) ? homeY - 0.05 * (1 - (rp - 0.72) / 0.14) : homeY
+        if (vm.pump) {
+          // Phase 6 shotgun fore-end: recoil pause, rack back, slam forward
+          // (~520ms cycle; the pump SOUND rides the audio map's bolt slot)
+          const t = (now - this.pumpAt) / 520
+          const homeZ = vm.pump.userData.homeZ as number
+          if (t >= 0 && t < 1) {
+            let dz = 0
+            if (t < 0.2) dz = 0                                   // recoil settles
+            else if (t < 0.5) dz = 0.075 * ((t - 0.2) / 0.3)      // pull back
+            else dz = 0.075 * (1 - (t - 0.5) / 0.3)               // slam home
+            vm.pump.position.z = homeZ + dz
           } else {
+            vm.pump.position.z = homeZ
+          }
+        }
+        if (vm.mag) {
+          if (vm.mag.userData.fixed) {
+            // tube-fed shotguns: shells load through the port — the tube never
+            // drops out (mag7's box mag is the exception and animates normally)
             vm.mag.visible = true
-            vm.mag.position.y = homeY
+          } else {
+            const homeY = vm.mag.userData.homeY as number
+            if (this.reloadEndsAt > now) {
+              const w = this.currentWeapon()
+              const rp = 1 - (this.reloadEndsAt - now) / Math.max(1, w.reloadMs)
+              vm.mag.visible = !(rp > 0.18 && rp < 0.72)
+              // fresh mag slides up into the well during 0.72-0.86
+              vm.mag.position.y = (rp > 0.72 && rp < 0.86) ? homeY - 0.05 * (1 - (rp - 0.72) / 0.14) : homeY
+            } else {
+              vm.mag.visible = true
+              vm.mag.position.y = homeY
+            }
           }
         }
         if (vm.led) {

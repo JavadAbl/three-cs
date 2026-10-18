@@ -24,6 +24,8 @@ export interface ViewModel {
   slideL?: THREE.Mesh
   /** AWP bolt assembly (cycle anim) */
   bolt?: THREE.Group
+  /** shotgun fore-end pump (rack anim, Phase 6) */
+  pump?: THREE.Group
   /** shell ejection port, local to group */
   eject?: THREE.Vector3
   /** C4 blinking LED */
@@ -578,6 +580,163 @@ function buildSniper(id: keyof typeof SNIPERS, team: TeamId): ViewModel {
   }
 }
 
+// ---------------------------------------------------------------- Phase 6 shotguns
+// Parametric shotgun family (plan 6.3). Shared bones: receiver + barrel over
+// an under-barrel shell TUBE (the `mag` group, userData.fixed — shells load
+// through the port, the tube never drops) + pump fore-end (the `pump` group,
+// racks after every shot on the pump-action guns). Per-model mold breaks:
+//  nova     classic pump: slim polymer, 8-shell tube, full stock, front bead
+//  xm1014   auto: chunky receiver, heat-shield ribs, side charging handle —
+//           gas-operated, so NO cycling pump (static handguard)
+//  mag7     compact CAWS: 5-rd BOX magazine below the action (the only
+//           shotgun mag that actually drops on reload), short thick barrel
+//  sawedoff cut-down: wood furniture, exposed hammer, pistol grip, no stock
+
+interface ShotgunSpec {
+  bodyLen: number; bodyH: number; bodyW: number; bodyCol: number
+  barrelR: number; barrelLen: number; muzzleZ: number
+  tubeR: number; tubeLen: number          // under-barrel shell tube (0 = box-mag gun)
+  pumpLen: number                         // 0 = no cycling fore-end (xm1014)
+  stock: 'full' | 'compact' | 'none'
+  wood?: boolean
+  bead?: boolean
+  heatShield?: boolean
+  chargingHandle?: boolean
+  hammer?: boolean
+  boxMag?: { w: number; h: number; d: number }
+}
+
+const SHOTGUNS: Record<'nova' | 'xm1014' | 'mag7' | 'sawedoff', ShotgunSpec> = {
+  nova: {
+    bodyLen: 0.22, bodyH: 0.055, bodyW: 0.045, bodyCol: 0x232629,
+    barrelR: 0.011, barrelLen: 0.40, muzzleZ: -0.62,
+    tubeR: 0.014, tubeLen: 0.34, pumpLen: 0.11, stock: 'full', bead: true,
+  },
+  xm1014: {
+    bodyLen: 0.27, bodyH: 0.065, bodyW: 0.052, bodyCol: 0x2a2d30,
+    barrelR: 0.012, barrelLen: 0.34, muzzleZ: -0.58,
+    tubeR: 0.016, tubeLen: 0.30, pumpLen: 0, stock: 'full',
+    heatShield: true, chargingHandle: true,
+  },
+  mag7: {
+    bodyLen: 0.24, bodyH: 0.07, bodyW: 0.052, bodyCol: 0x2a2d30,
+    barrelR: 0.013, barrelLen: 0.20, muzzleZ: -0.40,
+    tubeR: 0, tubeLen: 0, pumpLen: 0.09, stock: 'compact',
+    boxMag: { w: 0.04, h: 0.09, d: 0.055 },
+  },
+  sawedoff: {
+    bodyLen: 0.17, bodyH: 0.05, bodyW: 0.042, bodyCol: 0x3a2f26,
+    barrelR: 0.011, barrelLen: 0.24, muzzleZ: -0.36,
+    tubeR: 0.013, tubeLen: 0.19, pumpLen: 0.075, stock: 'none',
+    wood: true, bead: true, hammer: true,
+  },
+}
+
+function buildShotgun(id: keyof typeof SHOTGUNS, team: TeamId): ViewModel {
+  const s = SHOTGUNS[id]
+  const g = new THREE.Group()
+  const bodyZ = -s.bodyLen / 2 + 0.03
+  const boreY = 0.02
+  const furn: TexKey = s.wood ? 'wood_laminate' : 'polymer_black'
+  const furnCol = s.wood ? 0x6e4a26 : s.bodyCol
+
+  // receiver
+  P(g, box(s.bodyW, s.bodyH, s.bodyLen), s.wood ? 'metal_dark' : 'polymer_black',
+    { color: s.bodyCol }, 0, boreY, bodyZ)
+  if (s.hammer) {
+    // sawed-off: exposed spur hammer behind the receiver
+    P(g, box(0.012, 0.02, 0.012), 'steel_blued', { roughnessMul: 0.5 }, 0, boreY + s.bodyH / 2 + 0.008, bodyZ + s.bodyLen / 2 + 0.004, -0.5)
+  }
+
+  // barrel
+  P(g, cyl(s.barrelR, s.barrelLen), 'steel_blued', { roughnessMul: 0.6 }, 0, boreY, s.muzzleZ + s.barrelLen / 2, q(90))
+  if (s.heatShield) {
+    // xm1014: ribbed heat shield over the barrel
+    for (let i = 0; i < 5; i++) {
+      P(g, cyl(s.barrelR + 0.004, 0.01, 10), 'metal_dark', { color: 0x1b1e21 }, 0, boreY, s.muzzleZ + 0.08 + i * 0.055, q(90))
+    }
+  }
+  if (s.bead) {
+    basic(0xf4f4f4, g, new THREE.SphereGeometry(0.004, 8, 6), 0, boreY + s.barrelR + 0.004, s.muzzleZ + 0.008)
+  }
+  if (id === 'mag7') {
+    // MAG-7: chunky front sight block + short top rail handle
+    P(g, box(0.014, 0.03, 0.02), 'metal_dark', { color: 0x16181a }, 0, boreY + s.bodyH / 2 + 0.006, s.muzzleZ + 0.05)
+    P(g, box(0.02, 0.014, 0.1), 'metal_dark', { color: 0x1b1e21 }, 0, boreY + s.bodyH / 2 + 0.01, bodyZ - 0.02)
+  }
+
+  // magazine group — under-barrel shell TUBE (fixed) or mag7's BOX mag
+  const mag = new THREE.Group()
+  g.add(mag)
+  if (s.boxMag) {
+    // mag7: 5-rd box below the action, drops like an SMG mag on reload
+    const bm = P(mag, box(s.boxMag.w, s.boxMag.h, s.boxMag.d), 'metal_dark', { color: 0x1b1e21 },
+      0, -0.06, bodyZ - 0.04, -0.12)
+    bm.userData.homeY = -0.06
+    P(mag, box(s.boxMag.w + 0.004, 0.01, s.boxMag.d + 0.004), 'metal_dark', { color: 0x141618 }, 0, -0.06 - s.boxMag.h / 2 - 0.004, bodyZ - 0.04)
+  } else {
+    // shell tube under the barrel, slightly shorter than the barrel
+    const tubeY = boreY - s.barrelR - s.tubeR - 0.004
+    P(mag, cyl(s.tubeR, s.tubeLen, 12), 'metal_dark', { color: s.wood ? 0x2b2f33 : s.bodyCol },
+      0, tubeY, s.muzzleZ + s.tubeLen / 2 + 0.05, q(90))
+    mag.userData.fixed = true
+    mag.userData.homeY = tubeY
+    // tube end cap
+    P(mag, cyl(s.tubeR + 0.002, 0.012, 12), 'metal_dark', { color: 0x141618 }, 0, tubeY, s.muzzleZ + s.tubeLen + 0.05, q(90))
+  }
+
+  // pump fore-end (cycling group) or static handguard (xm1014)
+  let pump: THREE.Group | undefined
+  const handY = s.boxMag ? boreY - 0.03 : boreY - s.barrelR - s.tubeR - 0.004 - 0.012
+  if (s.pumpLen > 0) {
+    pump = new THREE.Group()
+    g.add(pump)
+    const pz = s.muzzleZ + s.tubeLen - s.pumpLen / 2 - 0.02
+    const pumpMesh = P(pump, box(s.tubeR * 2 + 0.02, s.tubeR * 2 + 0.014, s.pumpLen), furn,
+      { color: furnCol }, 0, handY + 0.012, pz)
+    pumpMesh.userData.homeZ = pz
+    // pump grooves
+    for (let i = 0; i < 3; i++) {
+      P(pump, box(s.tubeR * 2 + 0.021, 0.004, s.pumpLen * 0.14), 'metal_dark', { color: 0x16181a },
+        0, handY + 0.012 - s.tubeR - 0.004 + i * 0.008, pz - s.pumpLen * 0.3 + i * s.pumpLen * 0.3)
+    }
+    pump.userData.homeZ = pz
+  } else {
+    // xm1014: full-length vented handguard (static)
+    P(g, box(s.bodyW - 0.004, 0.045, 0.22), 'polymer_black', { color: 0x25282a }, 0, boreY - 0.03, bodyZ - s.bodyLen / 2 - 0.1)
+  }
+  if (s.chargingHandle) {
+    P(g, box(0.02, 0.009, 0.016), 'metal_dark', { color: 0x101214 }, s.bodyW / 2 + 0.006, boreY + 0.012, bodyZ + 0.04)
+  }
+
+  // trigger + grip
+  P(g, box(0.005, 0.028, 0.008), 'metal_dark', { color: 0x101214 }, 0, -0.028, s.stock === 'none' ? bodyZ + 0.02 : -0.01, 0.15)
+  const gripR = s.stock === 'none' ? 0.5 : 0.24
+  P(g, box(0.034, 0.09, 0.05), furn, { color: s.wood ? 0x5a3d1e : 0x1f2224 },
+    0, s.stock === 'none' ? -0.055 : -0.07, s.stock === 'none' ? bodyZ + 0.055 : 0.02, gripR)
+
+  // stock / compact tail
+  if (s.stock === 'full') {
+    P(g, box(0.04, 0.06, 0.16), furn, { color: furnCol }, 0, 0.008, bodyZ + s.bodyLen / 2 + 0.07)
+    P(g, box(0.043, 0.08, 0.014), 'polymer_black', { color: 0x16181a }, 0, -0.002, bodyZ + s.bodyLen / 2 + 0.155)
+  } else if (s.stock === 'compact') {
+    // mag7: thick polymer tail block with sling loop
+    P(g, box(0.042, 0.07, 0.1), 'polymer_black', { color: 0x25282a }, 0, 0.0, bodyZ + s.bodyLen / 2 + 0.05)
+    P(g, box(0.045, 0.085, 0.014), 'polymer_black', { color: 0x16181a }, 0, -0.004, bodyZ + s.bodyLen / 2 + 0.105)
+  }
+  // sawedoff: no stock — bare grip + receiver ring
+
+  buildGloves(g, team,
+    { x: 0, y: s.stock === 'none' ? -0.045 : -0.06, z: s.stock === 'none' ? bodyZ + 0.06 : 0.035, rx: gripR + 0.1 },
+    { x: 0, y: handY - 0.006, z: (pump ? pump.userData.homeZ as number : bodyZ - s.bodyLen / 2 - 0.1), rx: 0.28 })
+
+  return {
+    group: g, tip: new THREE.Vector3(0, boreY, s.muzzleZ), mag, pump,
+    eject: new THREE.Vector3(s.bodyW / 2 + 0.004, boreY + 0.01, bodyZ + 0.03),
+    muzzleLen: -s.muzzleZ + 0.02,
+  }
+}
+
 // ---------------------------------------------------------------- MP5-SD
 function buildMP5(team: TeamId): ViewModel {
   const g = new THREE.Group()
@@ -1104,6 +1263,8 @@ export function buildViewModel(weapon: WeaponId, team: TeamId): ViewModel {
       return buildRifle(weapon, team)
     case 'ssg08': case 'scar20': case 'g3sg1':
       return buildSniper(weapon, team)
+    case 'nova': case 'xm1014': case 'mag7': case 'sawedoff':
+      return buildShotgun(weapon, team)
     case 'mp5': return buildMP5(team)
     case 'mp9': case 'mac10': case 'mp7': case 'ump45':
       return buildSMG(weapon, team)
@@ -1189,6 +1350,31 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
       P(g, cyl(weaponId === 'ssg08' ? 0.015 : 0.018, 0.2, 12), 'metal_dark', { roughnessMul: 0.7 }, 0, 0.065, -0.12, q(90))
       P(g, box(0.03, 0.07, 0.18), 'metal_dark', { color: 0x25282a }, 0, 0.0, 0.16)
       P(g, box(0.03, 0.1, 0.04), 'metal_dark', { color: 0x1b1e21 }, 0, -0.08, -0.02, 0.2)
+      break
+    }
+    // ---- Phase 6 shotguns: barrel-over-tube silhouette; mag7 = box mag,
+    // sawed-off = stubby wood pistol-grip
+    case 'nova': case 'xm1014': {
+      const long = weaponId === 'nova'
+      P(g, box(0.042, 0.05, 0.2), 'polymer_black', { color: 0x232629 }, 0, 0.01, -0.05)
+      P(g, cyl(0.009, long ? 0.3 : 0.24), 'steel_blued', {}, 0, 0.024, long ? -0.3 : -0.24, q(90))
+      P(g, cyl(0.012, long ? 0.26 : 0.2, 10), 'metal_dark', { color: 0x232629 }, 0, -0.004, long ? -0.28 : -0.22, q(90))
+      P(g, box(0.036, 0.045, long ? 0.1 : 0.08), 'polymer_black', { color: 0x25282a }, 0, -0.008, -0.2)
+      P(g, box(0.032, 0.06, 0.12), 'polymer_black', { color: 0x26292c }, 0, 0.005, 0.1)
+      break
+    }
+    case 'mag7': {
+      P(g, box(0.05, 0.06, 0.24), 'polymer_black', { color: 0x2a2d30 }, 0, 0.01, -0.06)
+      P(g, cyl(0.011, 0.16), 'steel_blued', {}, 0, 0.026, -0.26, q(90))
+      P(g, box(0.034, 0.1, 0.05), 'metal_dark', { color: 0x1b1e21 }, 0, -0.07, -0.02, -0.1)
+      P(g, box(0.04, 0.06, 0.09), 'polymer_black', { color: 0x25282a }, 0, 0.0, 0.09)
+      break
+    }
+    case 'sawedoff': {
+      P(g, box(0.038, 0.045, 0.16), 'metal_dark', { color: 0x3a2f26 }, 0, 0.01, -0.02)
+      P(g, cyl(0.009, 0.2), 'steel_blued', {}, 0, 0.022, -0.2, q(90))
+      P(g, cyl(0.011, 0.16, 10), 'metal_dark', { color: 0x2b2f33 }, 0, -0.002, -0.18, q(90))
+      P(g, box(0.03, 0.09, 0.045), 'wood_laminate', { color: 0x5a3d1e }, 0, -0.06, 0.015, 0.45)
       break
     }
     case 'mp5':

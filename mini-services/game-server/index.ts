@@ -1,7 +1,8 @@
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import { WEAPONS, ECONOMY, ROUND, computeDamage, fireModeOf } from './weapons'
+import { WEAPONS, ECONOMY, ROUND, computeDamage, fireModeOf, pelletsOf, pelletSpreadOf } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
+import { pelletDirs, angleDeg } from '../../shared/pellets'
 import { MAPS, MAP_LIST, rayHitsAABB } from './mapdata'
 import type { MapDef, MapId, Box } from './mapdata'
 import type { PlayerState, Match, Phase } from './types'
@@ -207,7 +208,7 @@ function startRound(m: Match) {
     p.alive = true
     p.hp = 100
     p.plantingSince = 0; p.defusingSince = 0
-    p.reloadEndsAt = 0; p.lastShotAt = 0; p.burstShots = 0
+    p.reloadEndsAt = 0; p.lastShotAt = 0; p.burstShots = 0; p.shot = undefined
     p.hasBomb = false
     const spawns = mapOf(m).spawns[p.team]
     const sp = spawns[(m.round + hashId(p.id)) % spawns.length]
@@ -295,6 +296,44 @@ function checkElimination(m: Match) {
 // ---------------------------------------------------------------- damage
 function eyeY(p: PlayerState) { return p.y + (p.crouch ? 1.1 : 1.62) }
 
+/** Death bookkeeping shared by every damage path (single-ray, pellets, bots). */
+function killPlayer(m: Match, victim: PlayerState, attacker: PlayerState | null, weapon: WeaponId, hs: boolean) {
+  victim.alive = false
+  victim.deaths++
+  victim.plantingSince = 0; victim.defusingSince = 0
+  if (victim.hasBomb && !m.bomb.planted) {
+    // drop bomb: give to random alive T
+    victim.hasBomb = false
+    victim.inventory = victim.inventory.filter(w => w !== 'c4')
+    const ts = aliveOf(m, 'T')
+    if (ts.length) {
+      const heir = ts.find(p => !p.bot) ?? ts[0]
+      heir.hasBomb = true
+      if (!heir.inventory.includes('c4')) heir.inventory.push('c4')
+      sendInvSync(heir)
+      broadcast(m, 'toast', { msg: `${heir.name} picked up the bomb` })
+    }
+  }
+  const def = WEAPONS[weapon]
+  if (attacker && attacker.id !== victim.id) {
+    if (attacker.team !== victim.team) {
+      attacker.kills++
+      m.roundKills.set(attacker.id, (m.roundKills.get(attacker.id) ?? 0) + 1)
+      attacker.money = clamp(attacker.money + (def?.killReward ?? 300), 0, ECONOMY.maxMoney)
+    } else {
+      attacker.kills-- // team kill penalty
+    }
+    broadcast(m, 'kill', {
+      killer: attacker.id, victim: victim.id, weapon, headshot: hs,
+      killerName: attacker.name, victimName: victim.name,
+      killerTeam: attacker.team, victimTeam: victim.team,
+    })
+  } else {
+    broadcast(m, 'kill', { killer: null, victim: victim.id, weapon: 'world' as WeaponId, headshot: false, killerName: '', victimName: victim.name, killerTeam: victim.team, victimTeam: victim.team })
+  }
+  checkElimination(m)
+}
+
 function applyDamage(m: Match, victim: PlayerState, attacker: PlayerState | null, weapon: WeaponId, part: HitPart, dist: number, headshot: boolean) {
   if (!victim.alive || m.phase !== 'live') return
   const def = WEAPONS[weapon]
@@ -312,41 +351,97 @@ function applyDamage(m: Match, victim: PlayerState, attacker: PlayerState | null
     dmg, part, hs, hp: victim.hp, victimTeam: victim.team,
   })
 
-  if (victim.hp <= 0) {
-    victim.alive = false
-    victim.deaths++
-    victim.plantingSince = 0; victim.defusingSince = 0
-    if (victim.hasBomb && !m.bomb.planted) {
-      // drop bomb: give to random alive T
-      victim.hasBomb = false
-      victim.inventory = victim.inventory.filter(w => w !== 'c4')
-      const ts = aliveOf(m, 'T')
-      if (ts.length) {
-        const heir = ts.find(p => !p.bot) ?? ts[0]
-        heir.hasBomb = true
-        if (!heir.inventory.includes('c4')) heir.inventory.push('c4')
-        sendInvSync(heir)
-        broadcast(m, 'toast', { msg: `${heir.name} picked up the bomb` })
-      }
+  if (victim.hp <= 0) killPlayer(m, victim, attacker, weapon, hs)
+}
+
+// --------------------------------------------- Phase 6: multi-pellet ballistics
+// Server-authoritative shotgun damage (plan 6.1): the client reports which
+// pellets connected ({target, part} per pellet — the same trust level as the
+// legacy single-ray part claims); the SERVER owns everything numeric —
+// per-pellet distance (live positions, not the client's claim), per-pellet
+// range falloff, per-pellet armor interaction with durability drain (armor
+// broken by pellet k stops protecting pellet k+1), and the aggregation: ONE
+// hitConfirm per victim with summed damage, one kill when the total lands.
+function applyShotgunDamage(
+  m: Match, victim: PlayerState, attacker: PlayerState, weapon: WeaponId,
+  pellets: Array<{ part: HitPart }>, dist: number
+) {
+  if (!victim.alive || m.phase !== 'live') return 0
+  const def = WEAPONS[weapon]
+  if (!def) return 0
+  let total = 0
+  let anyHead = false
+  for (const pel of pellets) {
+    if (!victim.alive) break
+    const { dmg, armorDmg } = computeDamage(def, pel.part, dist, victim.armor, victim.helmet)
+    if (armorDmg > 0) {
+      victim.armor = Math.max(0, victim.armor - armorDmg)
+      if (victim.armor === 0) victim.helmet = false   // armor gone: later pellets hit flesh
     }
-    if (attacker && attacker.id !== victim.id) {
-      if (attacker.team !== victim.team) {
-        attacker.kills++
-        m.roundKills.set(attacker.id, (m.roundKills.get(attacker.id) ?? 0) + 1)
-        attacker.money = clamp(attacker.money + def.killReward, 0, ECONOMY.maxMoney)
-      } else {
-        attacker.kills-- // team kill penalty
-      }
-      broadcast(m, 'kill', {
-        killer: attacker.id, victim: victim.id, weapon, headshot: hs,
-        killerName: attacker.name, victimName: victim.name,
-        killerTeam: attacker.team, victimTeam: victim.team,
-      })
-    } else {
-      broadcast(m, 'kill', { killer: null, victim: victim.id, weapon: 'world' as WeaponId, headshot: false, killerName: '', victimName: victim.name, killerTeam: victim.team, victimTeam: victim.team })
-    }
-    checkElimination(m)
+    victim.hp = Math.max(0, victim.hp - dmg)
+    total += dmg
+    if (pel.part === 'head') anyHead = true
   }
+  if (total <= 0) return 0
+  broadcast(m, 'hitConfirm', {
+    victimId: victim.id, attackerId: attacker.id,
+    dmg: total, part: 'body', hs: anyHead, hp: victim.hp, victimTeam: victim.team,
+  })
+  if (victim.hp <= 0) killPlayer(m, victim, attacker, weapon, anyHead)
+  return total
+}
+
+/**
+ * Validate + apply a shotgun pellet report (plan 6.1 anti-cheat):
+ *  1. freshness — claims must reference a shell fired in the last 1.5 s
+ *  2. budget   — per-shot claimed pellets ≤ w.pellets (split resends counted)
+ *  3. cone     — each victim must sit inside the seeded pellet cone of the
+ *                shot's stored aim dir (margin covers hitbox radius + the
+ *                movement between shot and claim)
+ *  4. LOS      — same eye-to-eye gate as single-ray hits
+ * Damage numbers are 100% server-side (applyShotgunDamage); the tick budget
+ * is O(pellets) arithmetic per shot — no per-tick ray fan.
+ */
+function handleShotgunHit(
+  m: Match, attacker: PlayerState, w: (typeof WEAPONS)[WeaponId],
+  claims: Array<{ target?: string; part?: string }>
+) {
+  const shot = attacker.shot
+  if (!shot || now() - shot.at > 1500) return
+  const pelletCount = pelletsOf(w)
+  const usable = Math.min(claims.length, pelletCount - shot.claims)
+  if (usable <= 0) return
+
+  // group claims by victim, preserving order
+  const byVictim = new Map<PlayerState, Array<{ part: HitPart }>>()
+  let taken = 0
+  for (const c of claims) {
+    if (taken >= usable) break
+    const victim = m.players.get(String(c.target ?? ''))
+    if (!victim || !victim.alive || !attacker.alive) continue
+    if (attacker.team === victim.team && attacker.id !== victim.id) continue
+    const part = (c.part === 'head' || c.part === 'body' || c.part === 'legs') ? c.part as HitPart : 'body'
+    if (!byVictim.has(victim)) byVictim.set(victim, [])
+    byVictim.get(victim)!.push({ part })
+    taken++
+  }
+  if (byVictim.size === 0) return
+
+  const aim = { x: shot.dir[0], y: shot.dir[1], z: shot.dir[2] }
+  // cone margin: hitbox half-width (~0.35m) subtends angle at range, plus
+  // strafe drift over the claim window — 10° keeps honest players honest
+  const coneDeg = pelletSpreadOf(w) + 10
+
+  for (const [victim, pels] of byVictim) {
+    const to = { x: victim.x - attacker.x, y: eyeY(victim) - eyeY(attacker), z: victim.z - attacker.z }
+    const dist = Math.hypot(to.x, to.y, to.z)
+    // cone gate: the victim must be inside the pellet fan (aim + spread + margin)
+    if (angleDeg(aim, to) > coneDeg) continue
+    // LOS gate — walls block pellets like any other hit
+    if (!hasLOS(m, attacker.x, eyeY(attacker), attacker.z, victim.x, eyeY(victim), victim.z) && dist > 3) continue
+    applyShotgunDamage(m, victim, attacker, w.id, pels, dist)
+  }
+  attacker.shot = { ...shot, claims: shot.claims + taken }
 }
 
 // ---------------------------------------------------------------- bomb logic
@@ -684,7 +779,7 @@ io.on('connection', (socket) => {
     p.lastStateAt = now()
   })
 
-  socket.on('shoot', (data: { weapon?: string; origin?: number[]; dir?: number[] }) => {
+  socket.on('shoot', (data: { weapon?: string; origin?: number[]; dir?: number[]; seed?: number }) => {
     if (!joinedRoom) return
     const m = matches.get(joinedRoom)
     const p = m?.players.get(socket.id)
@@ -712,9 +807,24 @@ io.on('connection', (socket) => {
     if (p.reloadEndsAt > t) return
     p.lastShotAt = t
     if (am) am.mag--
+    // Phase 6: shotguns stamp the shell in flight — the client's seed + aim
+    // dir drive pellet-cone validation later, and ride the 'shot' broadcast
+    // so remote clients render the identical deterministic fan
+    let seed: number | undefined
+    if (pelletsOf(w) > 1) {
+      const d = data.dir ?? [0, 0, 1]
+      const dl = Math.hypot(d[0], d[1], d[2]) || 1
+      seed = (Number(data.seed) >>> 0) || 1
+      p.shot = {
+        seed, dir: [d[0] / dl, d[1] / dl, d[2] / dl], at: t, claims: 0,
+      }
+    } else {
+      p.shot = undefined
+    }
     socket.to(m.roomId).emit('shot', {
       id: p.id, weapon: w.id,
       origin: data.origin ?? [p.x, eyeY(p), p.z], dir: data.dir ?? [0, 0, 1],
+      ...(seed !== undefined ? { seed } : {}),
     })
   })
 
@@ -727,6 +837,10 @@ io.on('connection', (socket) => {
     if (attacker.team === victim.team && attacker.id !== victim.id) return
     const w = WEAPONS[(data.weapon ?? '') as WeaponId]
     if (!w) return
+    // Phase 6: shotguns damage exclusively through the 'pellets' report
+    // (per-shot claim budget + cone gates) — the single-ray path would let a
+    // spammer bypass the pellet accounting
+    if (pelletsOf(w) > 1) return
     const part = (data.part === 'head' || data.part === 'body' || data.part === 'legs') ? data.part as HitPart : 'body'
     const dist = clamp(Number(data.dist) || 5, 0, 120)
     // LOS validation (cheat deterrence)
@@ -735,6 +849,21 @@ io.on('connection', (socket) => {
     // zeus: melee-range arc — a "taser hit" from beyond reach is rejected
     if (w.id === 'taser' && dist > 8) return
     applyDamage(m, victim, attacker, w.id, part, dist, part === 'head')
+  })
+
+  // Phase 6: shotgun pellet report — per-pellet {target, part} claims, one
+  // message per shell. Routed by the weapon's pellet count, so a legacy
+  // single-ray 'hit' for a shotgun (no pellets array) is ignored — no double
+  // counting. Validation + damage in handleShotgunHit.
+  socket.on('pellets', (data: { weapon?: string; pellets?: Array<{ target?: string; part?: string }> }) => {
+    if (!joinedRoom) return
+    const m = matches.get(joinedRoom)
+    const attacker = m?.players.get(socket.id)
+    if (!m || !attacker || !attacker.alive) return
+    const w = WEAPONS[(data.weapon ?? '') as WeaponId]
+    if (!w || pelletsOf(w) <= 1) return
+    if (!Array.isArray(data.pellets)) return
+    handleShotgunHit(m, attacker, w, data.pellets)
   })
 
   socket.on('selfdamage', (data: { dmg?: number; reason?: string }) => {
@@ -884,7 +1013,7 @@ httpServer.listen(PORT, () => {
 })
 
 // inject damage/LOS into bot module (avoid circular imports)
-setBotContext({ applyDamage, hasLOS })
+setBotContext({ applyDamage, applyShotgunDamage, hasLOS })
 
 process.on('SIGTERM', () => { httpServer.close(() => process.exit(0)) })
 process.on('SIGINT', () => { httpServer.close(() => process.exit(0)) })

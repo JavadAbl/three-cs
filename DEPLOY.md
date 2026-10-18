@@ -1,7 +1,7 @@
 # DUST2 — CS2-style Web FPS · Deployment Guide
 
 A multiplayer Counter-Strike-style FPS that runs in the browser:
-**Dust2 map · headshot hitboxes (4× damage) · bomb defusal · economy & buy menu · 17-weapon roster (8 base + 9 pistols incl. full-auto CZ75, R8 revolver, Zeus) · bots fill 5v5 · room codes for friends.**
+**Dust2 map · headshot hitboxes (4× damage) · bomb defusal · economy & buy menu · 33-weapon buy roster (pistols incl. CZ75/R8/Zeus · SMGs · burst FAMAS, scoped + auto-snipers, suppressed M4A1-S · 4 shotguns with multi-pellet ballistics) · bots fill 5v5 · room codes for friends.**
 
 This guide gets it running on your own server so you and your friends can play together.
 

@@ -64,6 +64,8 @@ const want = [
   // Phase 5 rifles + snipers (rifle category: 11 entries — buy menu pages)
   'm4a1s:2900@CT', 'galil:1800@T', 'famas:1700@CT', 'sg553:3000@T', 'aug:3300@CT',
   'ssg08:1700', 'scar20:5000@CT', 'g3sg1:5000@T', 'awp:4750',
+  // Phase 6 shotguns (shotgun category: 4 entries, first non-empty page)
+  'nova:1050', 'xm1014:2000', 'mag7:1300@CT', 'sawedoff:1100@T',
   'kevlar:650', 'kevlarhelm:1000',
 ]
 check('BUY_ENTRIES derived set + prices + teams', JSON.stringify(got) === JSON.stringify(want), got.join(', '))
@@ -73,7 +75,7 @@ check('no price-0 starters/knife/c4 in buy list',
 // --- 4. grouping ---
 const groups: Record<string, string[]> = {
   pistol: ['deagle', 'p250', 'fiveseven', 'tec9', 'cz75', 'elites', 'hkp2000', 'revolver', 'taser'],
-  shotgun: [], smg: ['mp5', 'mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'],
+  shotgun: ['nova', 'xm1014', 'mag7', 'sawedoff'], smg: ['mp5', 'mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'],
   rifle: ['ak47', 'm4', 'm4a1s', 'galil', 'famas', 'sg553', 'aug', 'ssg08', 'scar20', 'g3sg1', 'awp'],
   heavy: [], equipment: ['kevlar', 'kevlarhelm'],
 }
@@ -140,12 +142,13 @@ for (const w of Object.values(shared.WEAPONS)) {
     `${w.killRewardClass} → ${shared.KILL_REWARD_BY_CLASS[w.killRewardClass]} vs ${w.killReward}`)
 }
 
-// 7e. future-phase fields stay absent on the current roster (zero gameplay
-//     change: no pellets, no throwables, no recoil seeds yet; burst exists ONLY
-//     on the famas per plan 5.2)
-check('no pellets/throwable/recoilPattern; burst only on famas',
+// 7e. future-phase fields stay absent on the current roster except where a
+//     phase owns them: pellets ONLY on the 4 Phase-6 shotguns; no throwables,
+//     no recoil seeds yet; burst exists ONLY on the famas per plan 5.2
+check('pellets only on the 4 shotguns; no throwable/recoilPattern; burst only on famas',
   Object.values(shared.WEAPONS).every(w =>
-    w.pellets === undefined && w.throwable === undefined &&
+    (['nova', 'xm1014', 'mag7', 'sawedoff'].includes(w.id) ? (w.pellets ?? 0) > 1 : w.pellets === undefined) &&
+    w.throwable === undefined &&
     w.recoilPattern === undefined &&
     (w.id === 'famas' ? w.burstRounds === 3 : w.burstRounds === undefined)))
 
@@ -215,6 +218,35 @@ check('m4a1s vs m4 pairing: same slot + team, cheaper, smaller mag',
   shared.WEAPONS.m4a1s.team === shared.WEAPONS.m4.team &&
   shared.WEAPONS.m4a1s.price < shared.WEAPONS.m4.price &&
   shared.WEAPONS.m4a1s.mag < shared.WEAPONS.m4.mag)
+
+// --- 11. Phase 6 shotgun mechanics (schema-level) ---
+check('pellet counts per plan 6.1: nova 9, xm1014/mag7/sawedoff 8',
+  shared.WEAPONS.nova.pellets === 9 && shared.WEAPONS.xm1014.pellets === 8 &&
+  shared.WEAPONS.mag7.pellets === 8 && shared.WEAPONS.sawedoff.pellets === 8 &&
+  shared.pelletsOf(shared.WEAPONS.nova) === 9 && shared.pelletsOf(shared.WEAPONS.ak47) === 1)
+check('shotgun cone spreads: mag7 tightest, sawedoff wildest',
+  shared.pelletSpreadOf(shared.WEAPONS.mag7) < shared.pelletSpreadOf(shared.WEAPONS.nova) &&
+  shared.pelletSpreadOf(shared.WEAPONS.sawedoff) > shared.pelletSpreadOf(shared.WEAPONS.nova) &&
+  shared.pelletSpreadOf(shared.WEAPONS.ak47) === 0)
+check('team locks: mag7 CT, sawedoff T, nova + xm1014 free',
+  shared.WEAPONS.mag7.team === 'CT' && shared.WEAPONS.sawedoff.team === 'T' &&
+  shared.WEAPONS.nova.team === undefined && shared.WEAPONS.xm1014.team === undefined)
+check('all shotguns are the $900 kill-reward class',
+  ['nova', 'xm1014', 'mag7', 'sawedoff'].every(id => {
+    const w = shared.WEAPONS[id as shared.WeaponId]
+    return w.killReward === 900 && w.killRewardClass === 'shotgun' &&
+      shared.KILL_REWARD_BY_CLASS[w.killRewardClass!] === w.killReward
+  }))
+check('pump guns are semi; xm1014 is the auto shotgun (plan 6.2)',
+  shared.WEAPONS.nova.auto === false && shared.WEAPONS.mag7.auto === false &&
+  shared.WEAPONS.sawedoff.auto === false && shared.WEAPONS.xm1014.auto === true &&
+  shared.fireModeOf(shared.WEAPONS.xm1014) === 'auto')
+check('shotgun falloff is brutal: mag7/sawedoff 0.45, nova/xm 0.70 (close-range only)',
+  shared.WEAPONS.mag7.falloff10m === 0.45 && shared.WEAPONS.sawedoff.falloff10m === 0.45 &&
+  shared.WEAPONS.nova.falloff10m === 0.70 && shared.WEAPONS.xm1014.falloff10m === 0.70 &&
+  Object.values(shared.WEAPONS).filter(w => w.category === 'shotgun').every(w => w.falloff10m <= 0.70))
+check('shotgun category fits one buy page (4 rows, no paging needed)',
+  client.buyEntriesFor('shotgun').length === 4)
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

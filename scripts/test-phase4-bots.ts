@@ -37,13 +37,14 @@ const NEW_SMGS: WeaponId[] = ['mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon']
 const m = mkMatch()
 const TRIALS = 400
 
-// Band table: [money, allowed weapon set] — mirrors the plan-4.4/5.1 ladder
-// (Phase 5 added budget rifles at ≥$1800 T / ≥$1700 CT, so the SMG class is
-// now the $1500-1699 band and rich bots take rifles/budget rifles instead)
+// Band table: [money, allowed weapon set] — mirrors the plan-4.4/5.1/6.2
+// ladder (Phase 5 added budget rifles at ≥$1800 T / ≥$1700 CT; Phase 6 added
+// the shotgun rung — 20% steal of the $1500 SMG class + 30% of the $1250
+// tier + the $1050-1249 force band below it)
 const BANDS: Array<{ money: number; label: string; allowed: WeaponId[] }> = [
-  { money: 2400, label: 'rich-force ($2400, budget rifle + p90 roll)', allowed: ['galil', 'famas', 'ssg08', 'p90'] },
-  { money: 1600, label: 'mid ($1600, $1500 SMG class + bizon)', allowed: ['mp7', 'ump45', 'mp5', 'bizon'] },
-  { money: 1300, label: 'low-mid ($1300, team flavor tier)', allowed: ['mp9', 'mac10'] },
+  { money: 2400, label: 'rich-force ($2400, budget rifle + p90/xm1014 rolls)', allowed: ['galil', 'famas', 'ssg08', 'p90', 'xm1014'] },
+  { money: 1600, label: 'mid ($1600, $1500 SMG class + bizon + shotgun steal)', allowed: ['mp7', 'ump45', 'mp5', 'bizon', 'sawedoff', 'mag7'] },
+  { money: 1300, label: 'low-mid ($1300, team flavor tier + shotgun steal)', allowed: ['mp9', 'mac10', 'sawedoff', 'mag7'] },
 ]
 
 for (const band of BANDS) {
@@ -71,14 +72,15 @@ for (const band of BANDS) {
   }
 }
 
-// Team flavor: at $1300, T NEVER picks mp9 (CT) and CT NEVER picks mac10 (T)
+// Team flavor: at $1300, T NEVER picks mp9 (CT) and CT NEVER picks mac10 (T);
+// Phase 6: T NEVER mag7, CT NEVER sawedoff (the new shotgun team locks)
 {
   let tSawCtGun = false, ctSawTGun = false
   for (let i = 0; i < 200; i++) {
     const t = mkPlayer('T', 1300); botBuy(m, t)
-    if (t.inventory.includes('mp9')) tSawCtGun = true
+    if (t.inventory.includes('mp9') || t.inventory.includes('mag7')) tSawCtGun = true
     const c = mkPlayer('CT', 1300); botBuy(m, c)
-    if (c.inventory.includes('mac10')) ctSawTGun = true
+    if (c.inventory.includes('mac10') || c.inventory.includes('sawedoff')) ctSawTGun = true
   }
   check('team flavor holds: T never buys mp9, CT never buys mac10', !tSawCtGun && !ctSawTGun)
 }

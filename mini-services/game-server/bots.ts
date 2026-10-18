@@ -1,5 +1,6 @@
 import { WEAPONS } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
+import { pelletsOf } from '../../shared/weapons'
 import { MAPS } from './mapdata'
 import type { MapDef, WP } from './mapdata'
 import type { PlayerState, Match, BotBrain } from './types'
@@ -10,7 +11,7 @@ export const BOT_NAMES = [
 ]
 
 interface Diff { reaction: number; aimErr: number; headChance: number; moveJitter: number }
-const DIFFS: Record<string, Diff> = {
+export const DIFFS: Record<string, Diff> = {
   easy: { reaction: 600, aimErr: 0.075, headChance: 0.06, moveJitter: 0.6 },
   normal: { reaction: 330, aimErr: 0.040, headChance: 0.14, moveJitter: 0.35 },
   hard: { reaction: 170, aimErr: 0.022, headChance: 0.26, moveJitter: 0.15 },
@@ -19,6 +20,7 @@ const DIFFS: Record<string, Diff> = {
 // context injected by index.ts to avoid circular imports
 interface BotCtx {
   applyDamage?: (m: Match, victim: PlayerState, attacker: PlayerState | null, weapon: WeaponId, part: HitPart, dist: number, hs: boolean) => void
+  applyShotgunDamage?: (m: Match, victim: PlayerState, attacker: PlayerState, weapon: WeaponId, pellets: Array<{ part: HitPart }>, dist: number) => number
   hasLOS?: (m: Match, ax: number, ay: number, az: number, bx: number, by: number, bz: number) => boolean
 }
 export const botCtx: BotCtx = {}
@@ -241,11 +243,17 @@ export function botBuy(m: Match, p: PlayerState) {
   // CT with $2900-3099: the M4A1-S is the affordable full rifle (m4 is 3100)
   if (p.team === 'CT' && p.money >= 2900) { buy('m4a1s'); if (p.money >= 650) armor(false); return }
   // budget-rifle step (plan 5.1) — between SMG and full rifle: galil T /
-  // famas CT (+ ssg08 scout roll); p90 alternative for spray lovers
+  // famas CT (+ ssg08 scout roll); p90 alternative for spray lovers; the
+  // XM1014 force-buy (plan 6.2) takes the $2000-2349 gap below the p90 tier
   const budgetRifle: WeaponId = p.team === 'T' ? 'galil' : 'famas'
   const budgetPrice = WEAPONS[budgetRifle].price
   if (p.money >= budgetPrice) {
     const roll = Math.random()
+    if (p.money >= 2000 && roll < 0.12) {
+      buy('xm1014')                                  // $2000 auto-shotgun force-buy
+      if (p.money >= 650) armor(false)
+      return
+    }
     if (p.money >= 2350 && roll < 0.25) { buy('p90'); if (p.money >= 650) armor(false); return }
     if (p.team === 'CT' && roll > 0.8 && p.money >= 1700) buy('ssg08')   // scout gambit
     else buy(budgetRifle)
@@ -253,17 +261,39 @@ export function botBuy(m: Match, p: PlayerState) {
     return
   }
   // mid-economy SMG branch (plan 4.4) — $1500 class mixes mp7/ump45/mp5 +
-  // bizon's 64-rd anti-eco spray; below the budget-rifle step.
+  // bizon's 64-rd anti-eco spray; the shotgun rung (plan 6) steals 20% of the
+  // band for close-quarters team flavor (mag7 CT / sawedoff T)
   if (p.money >= 1500) {
     const roll = Math.random()
-    if (roll < 0.30) buy('mp7')            // $1500, 900 RPM, PDW-accurate
-    else if (roll < 0.55) buy('ump45')     // $1500, armor puncher
-    else if (roll < 0.80) buy('mp5')       // $1500, suppressed allrounder
-    else buy('bizon')                      // $1400, 64-round spray
+    if (roll < 0.20) {
+      buy(p.team === 'T' ? 'sawedoff' : 'mag7')
+    } else if (roll < 0.45) buy('mp7')            // $1500, 900 RPM, PDW-accurate
+    else if (roll < 0.70) buy('ump45')            // $1500, armor puncher
+    else if (roll < 0.90) buy('mp5')              // $1500, suppressed allrounder
+    else buy('bizon')                             // $1400, 64-round spray
     if (p.money >= 650) armor(false)
     return
   }
-  if (p.money >= 1250) { buy(p.team === 'T' ? 'mac10' : 'mp9'); return }
+  if (p.money >= 1250) {
+    // $1250-1499: 30% team shotgun steals the mac10/mp9 floor (mag7 needs 1300)
+    const sg: WeaponId = p.team === 'T' ? 'sawedoff' : 'mag7'
+    if (!(Math.random() < 0.30 && buy(sg))) buy(p.team === 'T' ? 'mac10' : 'mp9')
+    return
+  }
+  // shotgun force band (plan 6): $1050-1249 — nova / team cut-down, deagle
+  // fallback on the miss roll; kevlar with the remainder when it fits
+  if (p.money >= 1050) {
+    const roll = Math.random()
+    if (roll < 0.45) {
+      const first: WeaponId = p.team === 'T' ? (Math.random() < 0.6 ? 'sawedoff' : 'nova')
+        : (p.money >= 1300 && Math.random() < 0.6 ? 'mag7' : 'nova')
+      if (!buy(first)) buy('nova')
+    } else if (p.money >= 700) {
+      buy('deagle')
+    }
+    if (p.money >= 650) armor(false)
+    return
+  }
   // eco / force rounds: deagle if they can, p250 if they almost can
   if (p.money >= 700) buy('deagle')
   else if (p.money >= 300 && Math.random() < 0.5) buy('p250')
@@ -512,7 +542,35 @@ function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number) {
   }
 }
 
-function botShoot(m: Match, p: PlayerState, target: PlayerState, w: (typeof WEAPONS)[WeaponId], d: number, diff: Diff, t: number, _ai: BotBrain) {
+// exported for scripts/test-phase6-bots.ts (statistical pellet-count sim)
+export function botShoot(m: Match, p: PlayerState, target: PlayerState, w: (typeof WEAPONS)[WeaponId], d: number, diff: Diff, t: number, _ai: BotBrain) {
+  const pellets = pelletsOf(w)
+  // Phase 6 shotguns: the wide cone + falloff make close-range hits nearly
+  // certain and far hits sparse — model K landed pellets decaying with range,
+  // then feed the SAME server aggregation the human 'pellets' path uses
+  if (pellets > 1) {
+    if (!botCtx.applyShotgunDamage) return
+    const bodyAng = Math.atan2(0.38, d) + (w.pelletSpread ?? 0) * (Math.PI / 180) * 0.8
+    const hitP = Math.max(0.05, Math.min(0.95, bodyAng / Math.max(diff.aimErr, 0.001)))
+    const moving = p.moving || target.moving ? 0.75 : 1
+    if (Math.random() < hitP * moving) {
+      // pellets that connect: most in the victim's grill up close, 1-2 at range
+      const frac = Math.max(0, 1 - d / 28)
+      let k = Math.round(pellets * (0.2 + 0.8 * frac) * (0.55 + Math.random() * 0.45))
+      k = Math.max(1, Math.min(pellets, k))
+      const pels: Array<{ part: HitPart }> = []
+      for (let i = 0; i < k; i++) {
+        const r = Math.random()
+        const headP = diff.headChance * Math.max(0.1, Math.min(1, Math.atan2(0.13, d) / Math.max(diff.aimErr, 0.001)))
+        if (r < headP) pels.push({ part: 'head' })
+        else if (r > 0.86) pels.push({ part: 'legs' })
+        else pels.push({ part: 'body' })
+      }
+      botCtx.applyShotgunDamage(m, target, p, w.id, pels, d)
+    }
+    p.lastShotAt = t
+    return
+  }
   if (!botCtx.applyDamage) return
   // angular size of target body
   const bodyAng = Math.atan2(0.38, d)

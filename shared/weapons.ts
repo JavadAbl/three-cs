@@ -26,6 +26,8 @@ export type WeaponId =
   // Phase 5 rifles + snipers — ids match the staged audio map
   | 'm4a1s' | 'galil' | 'famas' | 'sg553' | 'aug' | 'ssg08'
   | 'scar20' | 'g3sg1'
+  // Phase 6 shotguns — ids match the staged audio map (shared/weapons-audio.ts)
+  | 'nova' | 'xm1014' | 'mag7' | 'sawedoff'
 
 // Menu category. Weapons keep their own class for stats/logic; the buy menu
 // groups them under fixed CS 1.6 numbering. 'grenade' and 'gear' weapons land
@@ -281,6 +283,40 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     armorPen: 1, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
     fireMode: 'semi',
   },
+  // ---------------------------------------------- Phase 6 shotguns (CS:GO values)
+  // Stats per CS:GO wiki (fandom infoboxes, fetched 2026-10): damage/pellets/
+  // armorPen/RPM/mags/speeds, prices + $900 kill-reward class per plan 6.2
+  // (CS:GO lists the XM1014's competitive reward at $600 — the plan pins the
+  // class at $900; Phase 9 balance can revisit). Pellet count per plan 6.1:
+  // (9, 8, 8, 8). falloff10m is deliberately brutal on mag7/sawedoff
+  // (range modifier 0.45) — "shotguns must feel close-range only" (plan 6.2).
+  // Pump guns: fireMode semi + ~68 RPM cycle; the post-shot cock (pump) is the
+  // audio map's bolt slot. XM1014: auto per plan ("auto with 7-shell tube",
+  // 171 RPM ≈ 350ms).
+  nova: {
+    id: 'nova', name: 'Nova', slot: 1, category: 'shotgun', price: 1050, damage: 26, hsMult: 4, legMult: 0.75,
+    fireDelay: 880, mag: 8, reserve: 32, reloadMs: 4200, moveSpeed: 4.4,
+    armorPen: 0.50, falloff10m: 0.70, auto: false, killReward: 900, accurate: 0.70,
+    fireMode: 'semi', pellets: 9, pelletSpread: 4.2, killRewardClass: 'shotgun', // pump, 9-pellet classic
+  },
+  xm1014: {
+    id: 'xm1014', name: 'XM1014', slot: 1, category: 'shotgun', price: 2000, damage: 20, hsMult: 4, legMult: 0.75,
+    fireDelay: 350, mag: 7, reserve: 32, reloadMs: 2800, moveSpeed: 4.8,
+    armorPen: 0.80, falloff10m: 0.70, auto: true, killReward: 900, accurate: 0.85,
+    fireMode: 'auto', pellets: 8, pelletSpread: 4.8, killRewardClass: 'shotgun', // auto shotgun, 7-shell tube
+  },
+  mag7: {
+    id: 'mag7', name: 'MAG-7', slot: 1, category: 'shotgun', price: 1300, team: 'CT', damage: 30, hsMult: 4, legMult: 0.75,
+    fireDelay: 845, mag: 5, reserve: 32, reloadMs: 2700, moveSpeed: 4.8,
+    armorPen: 0.75, falloff10m: 0.45, auto: false, killReward: 900, accurate: 0.60,
+    fireMode: 'semi', pellets: 8, pelletSpread: 3.6, killRewardClass: 'shotgun', // CT pump, 5-rd BOX mag, tight cone
+  },
+  sawedoff: {
+    id: 'sawedoff', name: 'Sawed-Off', slot: 1, category: 'shotgun', price: 1100, team: 'T', damage: 32, hsMult: 4, legMult: 0.75,
+    fireDelay: 845, mag: 7, reserve: 32, reloadMs: 3700, moveSpeed: 4.2,
+    armorPen: 0.75, falloff10m: 0.45, auto: false, killReward: 900, accurate: 1.0,
+    fireMode: 'semi', pellets: 8, pelletSpread: 5.2, killRewardClass: 'shotgun', // T cut-down: hardest falloff, wildest cone
+  },
 }
 
 // ------------------------------------------------------------ buy menu
@@ -383,6 +419,16 @@ export function fireModeOf(w: WeaponDef): FireMode {
 export function scopeLevelsOf(w: WeaponDef): 0 | 1 | 2 {
   if (w.scopeLevels) return w.scopeLevels
   return w.scope ? 1 : 0
+}
+
+/** Pellets per trigger pull; 1 = single-ray ballistics (everything pre-Phase-6). */
+export function pelletsOf(w: WeaponDef): number {
+  return w.pellets && w.pellets > 1 ? w.pellets : 1
+}
+
+/** Shotgun pellet cone half-angle in degrees (0 = single ray). */
+export function pelletSpreadOf(w: WeaponDef): number {
+  return w.pelletSpread ?? 0
 }
 
 /** Scoped camera FOV; 16 preserves the engine's current AWP feel. */
