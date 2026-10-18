@@ -884,3 +884,18 @@ Stage Summary:
 - The buy menu reads correctly now: magazines hang down, muzzle left, 1.6-spirit silhouettes with icons live from /assets/icons (loader's accepted-first branch)
 - New durable guard in the verification bar (check-icon-orientation) pins both the roll and the per-weapon mag anatomy so a future viewmodel or generator change cannot silently re-flip the icons
 - Next: anything beyond the plan — map work, movement feel, polish, deployment hardening — user's call
+
+---
+Task ID: 45
+Agent: Super Z (main agent)
+Task: Record the user's environment-recovery rule (sandbox restart → pull from remote first)
+
+Work Log:
+- User instruction: "when u find that your sandbox environment has restarted and u lost all or some of project data, u should first pull from remote rep. the remote rep is single source of truth."
+- Codified in AGENTS.md as a dedicated "Environment recovery (sandbox restart / data loss) — user rule 2026-10-19" section: remote-first policy (no improvised recovery from mirrors//tmp/memory), a 4-step recovery order (wipe symptoms → credential store re-creation per the Git-rules recipe → fetch + hard-reset to origin/main, surfacing any never-pushed local commits to the user first → gitignored regenerables via committed scripts), and the note that post-9.3 every production asset is committed so a fresh pull restores the complete runnable game
+- Session protocol section now points at the recovery rule so it's seen at session start
+- This supersedes the task-42 improvisation (sound pack restored from a /tmp mirror) — under the new rule the remote would have been first; post-9.3 that path is also complete (the 166 oggs + 42 icons are committed now)
+
+Stage Summary:
+- The wipe-recovery behavior is now a durable, user-issued repo rule instead of session folklore
+- Remote main (745c8f2 + this commit) carries the full production asset set — single-source-of-truth is now literally true

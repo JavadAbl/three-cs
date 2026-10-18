@@ -25,6 +25,28 @@ sessions. When in doubt, ask the user — never assume an exception.
 - Why: large binaries bloat git history permanently; models get swapped often.
   Staging keeps evaluation free and history clean.
 
+## Environment recovery (sandbox restart / data loss) — user rule 2026-10-19
+
+- **If the sandbox has restarted and all or part of the project data is lost:
+  pull from the remote repo FIRST. The remote repo is the single source of
+  truth.** Do not improvise recovery from mirrors, /tmp copies, or memory
+  before syncing with `origin/main`.
+- Recovery order:
+  1. Wipe symptoms: missing `public/staging/`, missing raw packs, mode-flip
+     644→755 diffs, missing `~/.git-credentials`, empty directories.
+  2. Credentials gone too? Re-create the store per the recipe in Git rules
+     below (ask the user for the PAT if it was rotated).
+  3. `git fetch origin` → if `git log origin/main..main` shows local commits
+     that were never pushed, surface them to the user before discarding;
+     otherwise `git reset --hard origin/main` restores the canonical tree.
+     (Verified work is always pushed when done — standing Git rule — so the
+     default expectation is: remote ⊇ local.)
+  4. Anything still missing after the pull is gitignored-by-design (staged
+     binaries, raw packs like `assets/packs/csgo/weapons`). Regenerate from
+     committed scripts where possible; otherwise ask the user. Since the 9.3
+     acceptance, ALL production sounds/icons/models are committed — a fresh
+     pull restores the complete runnable game.
+
 ## Git rules
 
 - Never commit or push binaries (models/sounds/textures/map data) that the user
@@ -90,5 +112,7 @@ sessions. When in doubt, ask the user — never assume an exception.
 ## Session protocol
 
 - Read `worklog.md` FIRST — it carries task history, lessons, and decisions.
+- Sandbox restarted / data missing? Follow "Environment recovery" above —
+  pull from remote first, remote is the single source of truth.
 - Append an entry when done: `---` / `Task ID` / `Agent` / `Task` / `Work Log` /
   `Stage Summary`. Never overwrite existing entries.
