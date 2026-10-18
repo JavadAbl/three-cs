@@ -101,7 +101,8 @@ for (const id of NEW) {
   for (const nm of ['negev_fire', 'negev_distant', 'negev_boxout', 'negev_boxin', 'negev_coverup',
     'm249_fire', 'm249_distant', 'm249_boxout', 'm249_boxin', 'm249_coverup', 'm249_draw']) {
     check(`live preload includes ${nm}`, names.includes(nm))
-    check(`staged file exists: ${nm}.ogg`, existsSync(`${STAGED}/${nm}.ogg`))
+    check(`sample on disk (accepted or staged): ${nm}.ogg`,
+      existsSync(`/home/z/my-project/public/assets/sounds/${nm}.ogg`) || existsSync(`${STAGED}/${nm}.ogg`))
   }
   check('future weapon ids left in the map: zero (full gun roster is live)',
     Object.keys(WEAPON_AUDIO).filter(id => !(id in WEAPONS)).length === 0)

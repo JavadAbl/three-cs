@@ -1,20 +1,22 @@
-# Weapon sound assets — staging & acceptance workflow
+# Weapon sound assets
 
 ## Committed (accepted) — this directory
 
-85 original CS:GO sample `.ogg` files covering the launch-era roster
-(ak47/m4/awp/deagle/mp5/usp … knife, C4, footsteps, UI). Same pipeline as
-everything else: leading-silence strip (shot latency), Vorbis q3, 44.1 kHz.
+**251 `.ogg` files** — the complete weapon-roster sound set (policy v3
+batch acceptance, 2026-10): the original 85 CS:GO samples covering the
+launch-era roster (ak47/m4/awp/deagle/mp5/usp … knife, C4, footsteps, UI)
+plus the 166 Phase 3–8 weapons batch (pistols, SMGs, rifles, shotguns,
+machine guns, all six grenades + generic pinpull/throw/bounce). Same
+pipeline throughout: leading-silence strip (shot latency), Vorbis q3,
+44.1 kHz.
 
-## Pending — `public/staging/sounds/`
+## Staging (for future batches) — `public/staging/sounds/`
 
-166 additional samples for the Phase 3–8 weapons (pistols, SMGs, rifles,
-shotguns, machine guns, all six grenades + generic pinpull/throw/bounce),
-staged by `scripts/stage-weapon-sounds.sh` from the raw pack
-(`assets/packs/csgo/weapons`, gitignored). They are **gitignored but
-web-served**; the audio loader tries `/assets/sounds/<name>.ogg` first and
-falls back to `/staging/sounds/<name>.ogg`, so the game plays the full
-roster's authentic set before acceptance.
+Currently empty. New/regenerated samples land here via
+`scripts/stage-weapon-sounds.sh` from the raw pack
+(`assets/packs/csgo/weapons`, gitignored). Staged files are **gitignored
+but web-served**; the audio loader tries `/assets/sounds/<name>.ogg`
+first and falls back to `/staging/sounds/<name>.ogg`.
 
 ## Accepting (explicit user approval only)
 

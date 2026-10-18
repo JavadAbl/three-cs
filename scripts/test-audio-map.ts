@@ -92,7 +92,8 @@ for (const g of Object.values(GRENADE_AUDIO)) {
 }
 for (const n of Object.values(GRENADE_COMMON)) if (!liveNade.has(n)) futureNames.add(n)
 for (const n of futureNames) {
-  check(`staged: ${n}.ogg`, existsSync(`${STAGED}/${n}.ogg`))
+  check(`resolves (accepted or staged): ${n}.ogg`,
+    existsSync(`${ACCEPTED}/${n}.ogg`) || existsSync(`${STAGED}/${n}.ogg`))
 }
 check('every live grenade sound name resolves (accepted or staged)',
   [...liveNade].every(n => existsSync(`${ACCEPTED}/${n}.ogg`) || existsSync(`${STAGED}/${n}.ogg`)))

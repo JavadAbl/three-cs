@@ -150,8 +150,10 @@ check('cone ordering: mag7 tightest (3.6) < nova (4.2) < xm (4.8) < sawedoff (5.
 for (const id of NEW) {
   const a = WEAPON_AUDIO[id]
   check(`[${id}] audio map entry with fire/distant/out/in/rack`, !!a && !!a.fire && !!a.distant && !!a.out && !!a.in && !!a.rack)
-  check(`[${id}] fire sample staged on disk`, existsSync(`${STAGED}/${a!.fire}.ogg`))
-  check(`[${id}] pump/rack sample staged on disk`, existsSync(`${STAGED}/${a!.rack}.ogg`))
+  check(`[${id}] fire sample on disk (accepted or staged)`,
+    existsSync(`/home/z/my-project/public/assets/sounds/${a!.fire}.ogg`) || existsSync(`${STAGED}/${a!.fire}.ogg`))
+  check(`[${id}] pump/rack sample on disk (accepted or staged)`,
+    existsSync(`/home/z/my-project/public/assets/sounds/${a!.rack}.ogg`) || existsSync(`${STAGED}/${a!.rack}.ogg`))
 }
 check('pump guns carry the post-shot bolt (pump) slot; xm1014 does not (gas-operated)',
   WEAPON_AUDIO.nova.bolt === 'nova_pump' && WEAPON_AUDIO.mag7.bolt === 'mag7_pump' &&

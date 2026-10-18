@@ -232,9 +232,12 @@ check('bot buy ladder stacks grenades (limits) + CT kit purchases',
   bots.includes('p.inventory.filter(x => x === id).length >= (w.maxCarry ?? 1)') && bots.includes('p.hasKit = true'))
 
 // ============================================================ 7. audio disk
-const STAGED = 'public/staging/sounds'
+// (post-9.3 acceptance: samples live in public/assets/sounds; staging still
+// valid for regenerations — like the runtime loader chain)
+const onDisk = (n: string) =>
+  existsSync(`public/assets/sounds/${n}.ogg`) || existsSync(`public/staging/sounds/${n}.ogg`)
 for (const n of liveGrenadeSoundFiles()) {
-  check(`staged sound: ${n}.ogg`, existsSync(`${STAGED}/${n}.ogg`))
+  check(`sound on disk: ${n}.ogg`, onDisk(n))
 }
 
 // ============================================================ 8. constants sanity
