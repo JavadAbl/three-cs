@@ -129,7 +129,7 @@ location / {
 - **Match length**: lobby → "Match format" (first to 4 / 8 / 13 / 16)
 - **Bot difficulty**: lobby → easy / normal / hard
 - **No bots**: lobby → "HUMANS ONLY"
-- **Player speed / damage / prices**: edit `src/game/weapons.ts` (client) and `mini-services/game-server/weapons.ts` (server) — keep them in sync
+- **Player speed / damage / prices**: edit `shared/weapons.ts` (the single source of truth — client and server both derive from it; `src/game/weapons.ts` and `mini-services/game-server/weapons.ts` are re-export shims, never hand-edit those)
 - **Map layout**: `dust2.ts` in both locations (shared format: boxes + spawns + bomb sites + bot waypoints)
 
 ## Tech notes

@@ -1,0 +1,259 @@
+// ============================================================
+// CS2-clone weapon definitions — THE single source of truth
+// ============================================================
+// Phase 1 (WEAPONS_PLAN.md): this shared module is canonical for weapon
+// stats, gear, the buy-menu derivation, economy and round constants on
+// BOTH sides. The old hand-maintained pair (src/game/weapons.ts client +
+// mini-services/game-server/weapons.ts server) dissolved into thin
+// re-export shims so existing relative imports keep working unchanged.
+//
+// RULE: every stat edit lands HERE and nowhere else — the server
+// (validation, economy, bots), the client (prediction, viewmodels, HUD)
+// and the buy menu all read this one table. test-buymenu.ts guards that
+// both shims resolve to THIS module (object identity), so a re-duplicated
+// table fails the build.
+
+export type TeamId = 'CT' | 'T'
+export type HitPart = 'head' | 'body' | 'legs'
+export type WeaponId =
+  | 'knife' | 'glock' | 'usp' | 'deagle' | 'mp5'
+  | 'ak47' | 'm4' | 'awp' | 'c4'
+
+// Menu category. Weapons keep their own class for stats/logic; the buy menu
+// groups them under fixed CS 1.6 numbering. 'grenade' and 'gear' weapons land
+// in the EQUIPMENT (6) menu category, matching 1.6.
+export type WeaponCategory = 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'heavy' | 'grenade' | 'gear'
+
+// --- Phase 1 schema extensions -------------------------------------------
+// All optional and defaulted; later phases (3-8) add weapons carrying these
+// fields without churning this file's consumers. Existing code paths must
+// resolve defaults through the helpers below, never hand-branch on absence.
+
+// Trigger behavior. Default (absent): w.auto ? 'auto' : 'semi' — see fireModeOf().
+export type FireMode = 'semi' | 'auto' | 'burst'
+
+// Class-based kill rewards (Phase 9 balance pass derives from these).
+export type KillRewardClass =
+  | 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'heavy'
+  | 'awp' | 'auto-sniper' | 'knife' | 'grenade'
+
+export interface WeaponDef {
+  id: WeaponId
+  name: string
+  slot: 1 | 2 | 3 | 4 | 5   // 1 primary, 2 pistol, 3 knife, 4 c4
+  category: WeaponCategory
+  price: number
+  team?: TeamId              // restricted
+  damage: number             // base body damage
+  hsMult: number             // headshot multiplier
+  legMult: number
+  fireDelay: number          // ms between shots
+  mag: number
+  reserve: number
+  reloadMs: number
+  moveSpeed: number          // meters/sec while holding
+  armorPen: number           // 0..1 damage multiplier vs armor
+  falloff10m: number         // damage multiplier per 10m distance
+  auto: boolean
+  scope?: boolean
+  killReward: number
+  accurate: number           // base spread degrees standing still
+
+  // --- Phase 1+ extensions (optional; defaults via helpers) ---
+  fireMode?: FireMode        // default: auto ? 'auto' : 'semi' (fireModeOf)
+  burstRounds?: number       // rounds per trigger pull when fireMode 'burst' (famas)
+  burstDelayMs?: number      // cadence inside a burst — server validates (Phase 5)
+  pellets?: number           // >1 = multi-pellet shotgun ballistics (Phase 6)
+  pelletSpread?: number      // pellet cone half-angle, degrees (Phase 6)
+  scopeLevels?: 1 | 2        // zoom steps: awp 2, aug/sg553 1 (Phase 5)
+  zoomFov?: number           // scoped camera FOV; 16 = current AWP feel
+  suppressed?: boolean       // quieter fire, no distant crack/tracer (m4a1-s)
+  recoilPattern?: number     // deterministic recoil seed (Phase 9 parameterization)
+  killRewardClass?: KillRewardClass // class-based rewards for new weapons
+  throwable?: { kind: 'flash' | 'smoke' | 'he' | 'molotov' | 'decoy' } // Phase 8
+}
+
+export const WEAPONS: Record<WeaponId, WeaponDef> = {
+  knife: {
+    id: 'knife', name: 'Knife', slot: 3, category: 'gear', price: 0, damage: 40, hsMult: 1, legMult: 1,
+    fireDelay: 400, mag: Infinity, reserve: Infinity, reloadMs: 0, moveSpeed: 5.0,
+    armorPen: 0.85, falloff10m: 1, auto: true, killReward: 1500, accurate: 0,
+    fireMode: 'auto', killRewardClass: 'knife',
+  },
+  glock: {
+    id: 'glock', name: 'Glock-18', slot: 2, category: 'pistol', price: 0, team: 'T', damage: 30, hsMult: 4, legMult: 0.75,
+    fireDelay: 150, mag: 20, reserve: 120, reloadMs: 2200, moveSpeed: 4.9,
+    armorPen: 0.47, falloff10m: 0.89, auto: false, killReward: 300, accurate: 0.45,
+    fireMode: 'semi', killRewardClass: 'pistol',
+  },
+  usp: {
+    id: 'usp', name: 'USP-S', slot: 2, category: 'pistol', price: 0, team: 'CT', damage: 35, hsMult: 4, legMult: 0.75,
+    fireDelay: 170, mag: 12, reserve: 24, reloadMs: 2200, moveSpeed: 4.9,
+    armorPen: 0.505, falloff10m: 0.91, auto: false, killReward: 300, accurate: 0.38,
+    fireMode: 'semi', suppressed: true, killRewardClass: 'pistol',
+  },
+  deagle: {
+    id: 'deagle', name: 'Desert Eagle', slot: 2, category: 'pistol', price: 700, damage: 53, hsMult: 4, legMult: 0.75,
+    fireDelay: 350, mag: 7, reserve: 35, reloadMs: 2200, moveSpeed: 4.8,
+    armorPen: 0.925, falloff10m: 0.81, auto: false, killReward: 300, accurate: 0.55,
+    fireMode: 'semi', killRewardClass: 'pistol',
+  },
+  mp5: {
+    id: 'mp5', name: 'MP5-SD', slot: 1, category: 'smg', price: 1500, damage: 27, hsMult: 4, legMult: 0.75,
+    fireDelay: 90, mag: 30, reserve: 120, reloadMs: 2600, moveSpeed: 4.7,
+    armorPen: 0.55, falloff10m: 0.84, auto: true, killReward: 600, accurate: 0.55,
+    fireMode: 'auto', suppressed: true, killRewardClass: 'smg',
+  },
+  ak47: {
+    id: 'ak47', name: 'AK-47', slot: 1, category: 'rifle', price: 2700, team: 'T', damage: 36, hsMult: 4, legMult: 0.75,
+    fireDelay: 100, mag: 30, reserve: 90, reloadMs: 2400, moveSpeed: 4.35,
+    armorPen: 0.775, falloff10m: 0.98, auto: true, killReward: 300, accurate: 0.35,
+    fireMode: 'auto', killRewardClass: 'rifle',
+  },
+  m4: {
+    id: 'm4', name: 'M4A4', slot: 1, category: 'rifle', price: 3100, team: 'CT', damage: 33, hsMult: 4, legMult: 0.75,
+    fireDelay: 90, mag: 30, reserve: 90, reloadMs: 3000, moveSpeed: 4.45,
+    armorPen: 0.70, falloff10m: 0.97, auto: true, killReward: 300, accurate: 0.32,
+    fireMode: 'auto', killRewardClass: 'rifle',
+  },
+  awp: {
+    id: 'awp', name: 'AWP', slot: 1, category: 'rifle', price: 4750, damage: 115, hsMult: 4, legMult: 0.75,
+    fireDelay: 1450, mag: 10, reserve: 30, reloadMs: 3600, moveSpeed: 4.0,
+    armorPen: 0.975, falloff10m: 1.0, auto: false, scope: true, killReward: 100, accurate: 0.05,
+    fireMode: 'semi', scopeLevels: 2, zoomFov: 16, killRewardClass: 'awp',
+  },
+  c4: {
+    id: 'c4', name: 'C4 Explosive', slot: 4, category: 'gear', price: 0, team: 'T', damage: 0, hsMult: 1, legMult: 1,
+    fireDelay: 1000, mag: Infinity, reserve: Infinity, reloadMs: 0, moveSpeed: 5.0,
+    armorPen: 1, falloff10m: 1, auto: false, killReward: 300, accurate: 0,
+    fireMode: 'semi',
+  },
+}
+
+// ------------------------------------------------------------ buy menu
+// Non-weapon buyables (armor today; defuse kit and grenades later) live in
+// the EQUIPMENT category, exactly like CS 1.6.
+export interface GearDef {
+  id: string
+  name: string
+  price: number
+  team?: TeamId
+  desc: string
+}
+
+export const GEAR: GearDef[] = [
+  { id: 'kevlar', name: 'Kevlar Vest', price: 650, desc: 'Armor 100' },
+  { id: 'kevlarhelm', name: 'Kevlar + Helmet', price: 1000, desc: 'Armor 100 + helmet' },
+]
+
+// The six fixed CS 1.6 menu slots. Numbering is 1:1 with 1.6 for muscle memory:
+// 1 pistols · 2 shotguns · 3 SMGs · 4 rifles · 5 machine guns · 6 equipment.
+// Ammo categories (1.6's 7/8) intentionally omitted — modern CS refills on buy.
+export type BuyMenuKey = 'pistol' | 'shotgun' | 'smg' | 'rifle' | 'heavy' | 'equipment'
+
+export const BUY_MENU: ReadonlyArray<{ key: BuyMenuKey; label: string }> = [
+  { key: 'pistol', label: 'PISTOLS' },
+  { key: 'shotgun', label: 'SHOTGUNS' },
+  { key: 'smg', label: 'SMGs' },
+  { key: 'rifle', label: 'RIFLES' },
+  { key: 'heavy', label: 'MACHINE GUNS' },
+  { key: 'equipment', label: 'EQUIPMENT' },
+]
+
+const MENU_KEY: Record<WeaponCategory, BuyMenuKey> = {
+  pistol: 'pistol', shotgun: 'shotgun', smg: 'smg', rifle: 'rifle',
+  heavy: 'heavy', grenade: 'equipment', gear: 'equipment',
+}
+
+export interface BuyEntry {
+  id: string
+  kind: 'weapon' | 'gear'
+  name: string
+  price: number
+  team?: TeamId
+  menuKey: BuyMenuKey
+}
+
+// Derived single source for the buy menu: every priced weapon + all gear.
+// Starters (glock/usp), knife and C4 are price 0 and never appear — later
+// phases just add priced weapons and they slot in automatically.
+export const BUY_ENTRIES: BuyEntry[] = [
+  ...Object.values(WEAPONS)
+    .filter(w => w.price > 0)
+    .map(w => ({
+      id: w.id, kind: 'weapon' as const, name: w.name, price: w.price,
+      team: w.team, menuKey: MENU_KEY[w.category],
+    })),
+  ...GEAR.map(g => ({
+    id: g.id, kind: 'gear' as const, name: g.name, price: g.price,
+    team: g.team, menuKey: 'equipment' as const,
+  })),
+]
+
+export function buyEntriesFor(key: BuyMenuKey): BuyEntry[] {
+  return BUY_ENTRIES.filter(e => e.menuKey === key)
+}
+
+export const PART_MULT: Record<HitPart, number> = { head: 4, body: 1, legs: 0.75 }
+
+export const ECONOMY = {
+  startMoney: 16000,
+  maxMoney: 16000,
+  winReward: 3250,
+  lossBase: 1400,
+  lossStep: 500,
+  lossMax: 3400,
+  plantBonus: 300,
+  plantLossBonus: 800,
+}
+
+export const ROUND = {
+  freezeMs: 8000,
+  liveMs: 115000,
+  bombMs: 40000,
+  postMs: 6000,
+  plantMs: 3200,
+  defuseMs: 10000,
+  buyWindowMs: 20000,
+}
+
+// ----------------------------------------------------- extension helpers
+// Single place where Phase-1 optional-field defaults are resolved. Consumers
+// call these instead of branching on field presence.
+
+/** Trigger behavior; absent field falls back to the legacy auto boolean. */
+export function fireModeOf(w: WeaponDef): FireMode {
+  return w.fireMode ?? (w.auto ? 'auto' : 'semi')
+}
+
+/** Zoom steps; absent field falls back to the legacy scope boolean (1 level). */
+export function scopeLevelsOf(w: WeaponDef): 0 | 1 | 2 {
+  if (w.scopeLevels) return w.scopeLevels
+  return w.scope ? 1 : 0
+}
+
+/** Scoped camera FOV; 16 preserves the engine's current AWP feel. */
+export function zoomFovOf(w: WeaponDef): number {
+  return w.zoomFov ?? 16
+}
+
+/** Class-based kill reward lookup (Phase 9 derives new weapons from class). */
+export const KILL_REWARD_BY_CLASS: Record<KillRewardClass, number> = {
+  pistol: 300, smg: 600, rifle: 300, shotgun: 900, heavy: 300,
+  awp: 100, 'auto-sniper': 100, knife: 1500, grenade: 300,
+}
+
+export function computeDamage(
+  w: WeaponDef, part: HitPart, dist: number, victimArmor: number, victimHelmet: boolean
+): { dmg: number; armorDmg: number } {
+  let dmg = w.damage * (part === 'head' ? w.hsMult : part === 'legs' ? w.legMult : 1)
+  // helmet helps only vs head
+  const hasArmor = part === 'head' ? victimArmor > 0 && victimHelmet : victimArmor > 0
+  if (hasArmor) dmg *= w.armorPen
+  // range falloff
+  const steps = dist / 10
+  dmg *= Math.pow(w.falloff10m, Math.floor(steps))
+  if (part === 'head' && !hasArmor) dmg = Math.max(dmg, 100) // unarmored headshot with any gun is deadly-ish
+  const armorDmg = hasArmor ? Math.min(victimArmor, dmg * 0.5) : 0
+  return { dmg: Math.round(dmg), armorDmg: Math.round(armorDmg) }
+}

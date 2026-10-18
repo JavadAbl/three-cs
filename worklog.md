@@ -627,3 +627,22 @@ Stage Summary:
 - Remote now carries exactly: source + production assets — nothing else
 - Gotcha for future sessions: adding an ignore rule does NOT untrack already-tracked files; run git rm --cached for legacy strays
 - User's 3-line rule is the canonical summary of AGENTS.md asset policy v3
+
+---
+Task ID: 33
+Agent: Super Z (main agent)
+Task: WEAPONS_PLAN.md Phase 1 — single source of truth for weapon stats + schema extensions
+
+Work Log:
+- UNIFY (1.1): created shared/weapons.ts at repo root = canonical table (stats, GEAR, BUY_MENU/BUY_ENTRIES derivation, ECONOMY, ROUND, computeDamage). src/game/weapons.ts + mini-services/game-server/weapons.ts dissolved into 2-line re-export shims (export * from '../../shared/weapons') — all existing './weapons' relative imports unchanged, zero consumer churn. Import strategy verified against: root tsconfig (**/*.ts covers shared/), bun runtime (relative resolution), Next dev bundling (webpack follows out-of-src relative import), deployment (DEPLOY flow clones whole repo so shared/ ships with it). Plan's generator-script fallback not needed.
+- SCHEMA (1.2), all optional + helper-resolved defaults: fireMode ('semi'|'auto'|'burst') + burstRounds + burstDelayMs; pellets + pelletSpread; scopeLevels (1|2); zoomFov; suppressed; recoilPattern (seed); killRewardClass + KILL_REWARD_BY_CLASS table; throwable {kind}. Helpers: fireModeOf (falls back to legacy auto bool), scopeLevelsOf (falls back to legacy scope bool), zoomFovOf (16 = engine's current AWP hardcode). Backfill: fireMode on all 9, suppressed usp+mp5 (USP-S/MP5-SD are integrally suppressed), awp scopeLevels 2 + zoomFov 16, killRewardClass where clean (c4 stays explicit).
+- TEST: test-buymenu upgraded 31→53 checks — section 5 is now OBJECT-IDENTITY (client/server/shared WEAPONS/BUY_ENTRIES/GEAR/ECONOMY === same objects; re-duplicating either shim fails the build) + section 7 schema guards (fireMode⇔auto consistency, suppressed pair, AWP scope values, kill-reward class↔explicit-value agreement, future-phase fields absent).
+- VERIFIED: test-buymenu 53/53; E2E test-aimhead 4/4 + test-bugfixes 3/3 (after clean game-server restart on the shim — task-29 --hot lesson); tsc clean (only pre-existing scripts/examples/skills errors); browser via :81 with agent-browser: page loads, buy menu opens, rifles level renders shared-table data ($2700/$3100/$4750 + stat lines), keyboard B→4→2 bought M4A4 live ($16,000→$12,900, OWNED tag, inventory 1 M4A4/2 USP-S/3 Knife).
+- DEBUGGED en route: initial "buy didn't land" scare was test-harness timing, not code — separate agent-browser CLI calls each cost ~1s, round transitions close the menu, and untrusted synthetic KeyB doesn't reach page.tsx's B-toggle (non-window listener) while synthetic Digits DO reach BuyMenu's window handler. Single-eval sequenced dispatch + trusted press-b proved the full round-trip. Also: buy-window rejections during warmup (round 0) are correct server behavior.
+- DEPLOY.md updated: stats edits now point at shared/weapons.ts (shims never hand-edited).
+
+Stage Summary:
+- The 2× stat-table duplication is DEAD — one table, three import sites, identity-tested; at 41 weapons there is nothing to drift
+- Schema is future-proofed: phases 3-8 add weapons with fireMode/burst/pellets/scopeLevels/suppressed/throwable/killRewardClass without touching consumers
+- Zero gameplay change (all 53 checks + E2E + live browser buy confirm byte-equivalent behavior)
+- Next: Phase 2 (data-driven audio map + stage all new-weapon samples per policy v3)
