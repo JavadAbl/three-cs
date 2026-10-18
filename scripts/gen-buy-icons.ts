@@ -74,12 +74,17 @@ const SW = W * SS, SH = H * SS, SPAD = PAD * SS
 // hand-material colors (glove_fabric + team cuffs) — excluded from icons
 const HAND_HEX = new Set([0x1a1c1f, 0x232527, 0x1d1f21, 0x9a7f4e, 0x2c4a6e])
 
-/** View matrices: guns 3/4 side (muzzle right); throwables angled so the
- *  pin ring + spoon lever read (edge-on they vanish); gear flat FRONT view —
- *  vests/helmets/kits are frontal icons by nature. */
+/** View matrices: guns 3/4 side, then a 180° roll about the view axis — the
+ *  first-person viewmodel pose renders magazine-UP in profile (user
+ *  acceptance feedback: "the weapons magazine are in top"), so every gun
+ *  class is rolled 180° to hang the mag DOWN like a grounded weapon photo
+ *  (muzzle ends up pointing left). Throwables angled so the pin ring + spoon
+ *  lever read (edge-on they vanish, and they are NOT rolled — the pin would
+ *  end up at the bottom); gear flat FRONT view — frontal icons by nature. */
 function viewMatrix(kind: 'gun' | 'nade' | 'gear'): THREE.Matrix4 {
   const R = THREE.MathUtils.degToRad
-  if (kind === 'gun') return new THREE.Matrix4().makeRotationX(R(10)).multiply(new THREE.Matrix4().makeRotationY(R(-70)))
+  if (kind === 'gun') return new THREE.Matrix4().makeRotationZ(R(180))
+    .multiply(new THREE.Matrix4().makeRotationX(R(10)).multiply(new THREE.Matrix4().makeRotationY(R(-70))))
   if (kind === 'nade') return new THREE.Matrix4().makeRotationX(R(18)).multiply(new THREE.Matrix4().makeRotationY(R(-35)))
   return new THREE.Matrix4() // gear: identity front view
 }

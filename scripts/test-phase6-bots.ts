@@ -175,8 +175,13 @@ function tally(team: TeamId, money: number, trials = 500): Record<string, number
   check('botShoot stamps lastShotAt for the rate gate', shooter.lastShotAt === 0 || true)
 
   // sanity: non-shotgun bot fire still routes through applyDamage
+  // (deterministic: the single-ray path gates on a hit roll — Math.random()=0
+  //  always passes hitP*moving, which is capped at 0.9 for real rolls)
   calls.length = 0
+  const realRandom = Math.random
+  Math.random = () => 0
   botShoot(m, shooter, target, WEAPONS.ak47, 10, diff, 0, ai)
+  Math.random = realRandom
   check('non-shotgun bot fire unchanged (single-ray applyDamage)',
     calls.length === 1 && calls[0].weapon === 'ak47')
 }

@@ -60,6 +60,9 @@ sessions. When in doubt, ask the user — never assume an exception.
 - Full-roster regression: `bun scripts/test-phase9.ts` + `scripts/run-phase9-e2e.sh`
   (data-driven buy/fire/reload/throw over every BUY_ENTRY + 10×MG tick-budget
   load sanity). Phase suites 3–8 + bots are the per-mechanic detail layers.
+- Buy-icon orientation: `bun scripts/check-icon-orientation.ts` (35 checks —
+  pins the gun view matrix's 180° acceptance roll and the per-weapon
+  magazine-below-barrel anatomy; the p90's top mag is the one exemption).
 - Model: `POST /api/assets/human` → 200; in-browser `model=READY`, players N/N
   `onRig`.
 - VLM screenshot checks: only judge character models while ALIVE (the spectate

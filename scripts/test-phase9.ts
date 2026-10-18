@@ -228,10 +228,13 @@ console.log('  20-round team-average money curve:')
 console.log('  ' + curve.map(v => '$' + Math.round(v / 100) / 10 + 'k').join(' '))
 
 // ============================================================ 3. staged icons
-const ICON_DIR = 'public/staging/icons'
+// (post-9.3 acceptance: icons live in public/assets/icons — the generator
+// still regenerates into staging, so both locations are valid)
 let iconBad = 0, iconCount = 0
 for (const e of BUY_ENTRIES) {
-  const f = `${ICON_DIR}/${e.id}.png`
+  const f = existsSync(`public/assets/icons/${e.id}.png`)
+    ? `public/assets/icons/${e.id}.png`
+    : `public/staging/icons/${e.id}.png`
   iconCount++
   if (!existsSync(f)) { iconBad++; console.log(`  missing icon: ${e.id}`); continue }
   const buf = readFileSync(f)
@@ -239,7 +242,7 @@ for (const e of BUY_ENTRIES) {
   const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20)
   if (!sigOk || w !== 240 || h !== 96) { iconBad++; console.log(`  bad png: ${e.id} ${w}x${h}`) }
 }
-check('every BUY_ENTRY has a staged 240x96 PNG icon', iconBad === 0, `${iconCount} entries`)
+check('every BUY_ENTRY has an accepted-or-staged 240x96 PNG icon', iconBad === 0, `${iconCount} entries`)
 
 // generator + HUD wiring source checks
 const genSrc = readFileSync('scripts/gen-buy-icons.ts', 'utf8')
