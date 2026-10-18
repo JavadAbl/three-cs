@@ -846,3 +846,19 @@ Stage Summary:
 - Three new E2E harness invariants recorded in AGENTS.md (anti-teleport hops, snapshot-sync-before-hop, live-phase damage/throw gates) — these were silent-failure traps that cost the first two E2E runs
 - 9.3 ASSET ACCEPTANCE (the v3 moment) still pending explicit user OK — prepared list: 166 staged oggs (public/staging/sounds) + 42 staged icons (public/staging/icons); acceptance = mv + git add per batch, then a single acceptance commit each
 - Next: user decision on the staged asset batches; after acceptance, the repo carries the full authentic sound set + icons and the plan is fully closed
+
+---
+Task ID: 43
+Agent: Super Z (main agent)
+Task: Re-provision push credentials (platform wipe deleted ~/.git-credentials) and push the unpushed Phase 9 commit
+
+Work Log:
+- State audit: origin/main was at ffde95a (Phase 8) — Phase 9 commit 71cdc28 was local-only; working tree clean; public/staging/ confirmed gitignored (.gitignore:78) so the push is source-only per policy v3
+- Credential store re-created per the task-34 recipe: ~/.git-credentials (outside the repo, mode 600, helper already configured in ~/.gitconfig); PAT supplied by user this session, value NOT recorded anywhere in the repo or this log
+- git push -u origin main: ffde95a..71cdc28 accepted; upstream tracking restored (## main...origin/main, ahead/behind empty)
+- worklog entry committed and pushed as its own commit (established 62c7d2b / 7b67d32 pattern)
+
+Stage Summary:
+- All WEAPONS_PLAN.md phases 0-9 are now committed AND pushed; GitHub remote fully in sync
+- Remaining open item is 9.3 asset acceptance: 166 staged oggs (public/staging/sounds) + 42 staged buy-menu icons (public/staging/icons), gitignored until explicit user OK; acceptance = mv + git add per batch + one acceptance commit each
+- Next: user decision on the staged asset batches (or direction beyond the plan)
