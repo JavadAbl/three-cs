@@ -29,6 +29,7 @@ export interface PlayerState {
   ammo: Partial<Record<WeaponId, Ammo>>
   lastShotAt: number
   reloadEndsAt: number
+  burstShots: number    // Phase 5: shots fired in the current burst window (famas anti-cheat)
   lastSelfDmgAt?: number
   // objective
   hasBomb: boolean

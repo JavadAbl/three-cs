@@ -175,10 +175,13 @@ export class GameAudio {
   gunshot(weapon: string, pos?: Vec3, self?: Vec3) {
     const s = this.spatial(pos, self)
     const wa = WEAPON_AUDIO[weapon]
+    // suppressed shooters (m4a1s/usp/mp5): no distant crack + quieter report —
+    // you simply cannot locate them by ear (plan 5.4)
+    const sup = !!WEAPONS[weapon as keyof typeof WEAPONS]?.suppressed
     if (wa?.fire) {
       let name = wa.fire
-      if (s.far && wa.distant) name = wa.distant
-      const gain = pos ? 0.48 * s.gain : 0.5
+      if (s.far && wa.distant && !sup) name = wa.distant
+      const gain = (pos ? 0.48 * s.gain : 0.5) * (sup ? 0.55 : 1)
       if (this.play(name, { gain, pan: s.pan, variance: 0.04 })) {
         // rechamber audibly after every nearby shot (awp-style)
         if (wa.bolt && !s.far) {

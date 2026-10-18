@@ -14,7 +14,10 @@ set -u
 ROW="${1:-6}"
 SHOTS=/tmp/p4-shots
 mkdir -p "$SHOTS"
-cd /home/z/my-project/mini-services/game-server
+cd /home/z/my-project
+pkill -f "bun index\.ts" 2>/dev/null   # stale server would serve old weapon tables
+sleep 0.5
+cd mini-services/game-server
 bun index.ts > /tmp/gs-browser.log 2>&1 &
 GS=$!
 cd /home/z/my-project

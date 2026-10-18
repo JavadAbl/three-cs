@@ -23,6 +23,9 @@ export type WeaponId =
   | 'hkp2000' | 'revolver' | 'taser'
   // Phase 4 SMGs — ids match the staged audio map (shared/weapons-audio.ts)
   | 'mp9' | 'mac10' | 'mp7' | 'ump45' | 'p90' | 'bizon'
+  // Phase 5 rifles + snipers — ids match the staged audio map
+  | 'm4a1s' | 'galil' | 'famas' | 'sg553' | 'aug' | 'ssg08'
+  | 'scar20' | 'g3sg1'
 
 // Menu category. Weapons keep their own class for stats/logic; the buy menu
 // groups them under fixed CS 1.6 numbering. 'grenade' and 'gear' weapons land
@@ -40,7 +43,7 @@ export type FireMode = 'semi' | 'auto' | 'burst'
 // Class-based kill rewards (Phase 9 balance pass derives from these).
 export type KillRewardClass =
   | 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'heavy'
-  | 'awp' | 'auto-sniper' | 'knife' | 'grenade'
+  | 'awp' | 'auto-sniper' | 'scout' | 'knife' | 'grenade'
 
 export interface WeaponDef {
   id: WeaponId
@@ -213,6 +216,59 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     armorPen: 0.70, falloff10m: 0.97, auto: true, killReward: 300, accurate: 0.32,
     fireMode: 'auto', killRewardClass: 'rifle',
   },
+  // ---------------------------------------------- Phase 5 rifles + snipers (CS:GO values)
+  // Prices per plan 5.1-5.4; damage/armorPen/RPM/mags per CS:GO wiki
+  // (fandom stats tables). fireDelay is the RETRIGGER gate for burst guns
+  // (famas: 3-rd burst, 0.4s between pulls); scopeLevels per plan; snipers
+  // keep 2-level scopes, scoped rifles 1 level.
+  m4a1s: {
+    id: 'm4a1s', name: 'M4A1-S', slot: 1, category: 'rifle', price: 2900, team: 'CT', damage: 38, hsMult: 4, legMult: 0.75,
+    fireDelay: 100, mag: 20, reserve: 80, reloadMs: 3100, moveSpeed: 4.5,
+    armorPen: 0.70, falloff10m: 0.97, auto: true, killReward: 300, accurate: 0.28,
+    fireMode: 'auto', suppressed: true, killRewardClass: 'rifle', // CT silenced alternative to M4A4
+  },
+  galil: {
+    id: 'galil', name: 'Galil AR', slot: 1, category: 'rifle', price: 1800, team: 'T', damage: 30, hsMult: 4, legMult: 0.75,
+    fireDelay: 90, mag: 35, reserve: 90, reloadMs: 3000, moveSpeed: 4.8,
+    armorPen: 0.775, falloff10m: 0.98, auto: true, killReward: 300, accurate: 0.55,
+    fireMode: 'auto', killRewardClass: 'rifle', // T budget rifle, 35-rd mag
+  },
+  famas: {
+    id: 'famas', name: 'FAMAS', slot: 1, category: 'rifle', price: 1700, team: 'CT', damage: 30, hsMult: 4, legMult: 0.75,
+    fireDelay: 400, mag: 25, reserve: 90, reloadMs: 3300, moveSpeed: 4.8,
+    armorPen: 0.70, falloff10m: 0.97, auto: false, killReward: 300, accurate: 0.45,
+    fireMode: 'burst', burstRounds: 3, burstDelayMs: 75, killRewardClass: 'rifle', // 3-rd burst, 0.4s between pulls
+  },
+  sg553: {
+    id: 'sg553', name: 'SG 553', slot: 1, category: 'rifle', price: 3000, team: 'T', damage: 30, hsMult: 4, legMult: 0.75,
+    fireDelay: 110, mag: 30, reserve: 90, reloadMs: 2800, moveSpeed: 4.2,
+    armorPen: 1.0, falloff10m: 0.98, auto: true, killReward: 300, accurate: 0.30,
+    fireMode: 'auto', scopeLevels: 1, zoomFov: 25, killRewardClass: 'rifle', // 100% pen: helmet one-taps
+  },
+  aug: {
+    id: 'aug', name: 'AUG', slot: 1, category: 'rifle', price: 3300, team: 'CT', damage: 28, hsMult: 4, legMult: 0.75,
+    fireDelay: 100, mag: 30, reserve: 90, reloadMs: 3200, moveSpeed: 4.4,
+    armorPen: 0.90, falloff10m: 0.97, auto: true, killReward: 300, accurate: 0.28,
+    fireMode: 'auto', scopeLevels: 1, zoomFov: 25, killRewardClass: 'rifle', // bullpup + integrated optic
+  },
+  ssg08: {
+    id: 'ssg08', name: 'SSG 08', slot: 1, category: 'rifle', price: 1700, damage: 88, hsMult: 4, legMult: 0.75,
+    fireDelay: 1250, mag: 10, reserve: 90, reloadMs: 3700, moveSpeed: 4.6,
+    armorPen: 0.85, falloff10m: 0.98, auto: false, killReward: 300, accurate: 0.05,
+    fireMode: 'semi', scope: true, scopeLevels: 2, zoomFov: 16, killRewardClass: 'scout', // light bolt scout, 230 speed
+  },
+  scar20: {
+    id: 'scar20', name: 'SCAR-20', slot: 1, category: 'rifle', price: 5000, team: 'CT', damage: 80, hsMult: 4, legMult: 0.75,
+    fireDelay: 250, mag: 20, reserve: 90, reloadMs: 3100, moveSpeed: 4.3,
+    armorPen: 0.825, falloff10m: 0.98, auto: true, killReward: 100, accurate: 0.12,
+    fireMode: 'auto', scope: true, scopeLevels: 2, zoomFov: 16, killRewardClass: 'auto-sniper', // CT auto-sniper
+  },
+  g3sg1: {
+    id: 'g3sg1', name: 'G3SG1', slot: 1, category: 'rifle', price: 5000, team: 'T', damage: 80, hsMult: 4, legMult: 0.75,
+    fireDelay: 250, mag: 20, reserve: 90, reloadMs: 4700, moveSpeed: 4.3,
+    armorPen: 0.825, falloff10m: 0.98, auto: true, killReward: 100, accurate: 0.12,
+    fireMode: 'auto', scope: true, scopeLevels: 2, zoomFov: 16, killRewardClass: 'auto-sniper', // T auto-sniper
+  },
   awp: {
     id: 'awp', name: 'AWP', slot: 1, category: 'rifle', price: 4750, damage: 115, hsMult: 4, legMult: 0.75,
     fireDelay: 1450, mag: 10, reserve: 30, reloadMs: 3600, moveSpeed: 4.0,
@@ -337,7 +393,7 @@ export function zoomFovOf(w: WeaponDef): number {
 /** Class-based kill reward lookup (Phase 9 derives new weapons from class). */
 export const KILL_REWARD_BY_CLASS: Record<KillRewardClass, number> = {
   pistol: 300, smg: 600, rifle: 300, shotgun: 900, heavy: 300,
-  awp: 100, 'auto-sniper': 100, knife: 1500, grenade: 300,
+  awp: 100, 'auto-sniper': 100, scout: 300, knife: 1500, grenade: 300,
 }
 
 export function computeDamage(

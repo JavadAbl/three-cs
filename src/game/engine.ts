@@ -2,7 +2,7 @@
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { io } from 'socket.io-client'
-import { WEAPONS, ECONOMY, ROUND, GEAR } from './weapons'
+import { WEAPONS, ECONOMY, ROUND, GEAR, fireModeOf, scopeLevelsOf, zoomFovOf } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { MAPS } from './mapdata'
 import type { MapDef, MapId } from './mapdata'
@@ -98,6 +98,9 @@ const KICK: Partial<Record<WeaponId, number>> = {
   hkp2000: 0.55, revolver: 2.0, taser: 0.8,
   // Phase 4 SMGs
   mp9: 0.2, mac10: 0.3, mp7: 0.2, ump45: 0.35, p90: 0.25, bizon: 0.22,
+  // Phase 5 rifles + snipers
+  m4a1s: 0.38, galil: 0.6, famas: 0.45, sg553: 0.55, aug: 0.5,
+  ssg08: 1.6, scar20: 1.8, g3sg1: 1.9,
 }
 
 export class Engine {
@@ -131,7 +134,9 @@ export class Engine {
   private lastFallAt = 0
   private keys = new Set<string>()
   private firing = false
-  private wantScope = false
+  // Phase 5 multi-level scope: 0 = hip, 1..scopeLevels = zoom steps
+  // (awp/ssg08/scar20/g3sg1: 0→1→2→0; sg553/aug: 0→1→0)
+  private scopeLevel = 0
   private lastC4StageSfx = 0 // debounce for plant/defuse start sounds
   private sndFwd = new THREE.Vector3()
 
@@ -154,6 +159,8 @@ export class Engine {
   private slashAt = -1e9
   private slideLeft = false   // dual berettas: which gun fires next
   private vmKick = 0
+  // Phase 5 burst fire: queued rounds of the current burst (famas)
+  private burstRemaining = 0
   private bobPhase = 0
   private lastW = 0
   // v5 feel: viewmodel sway + camera shake + landing dip
@@ -297,7 +304,7 @@ export class Engine {
           this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.eyeY = y
           if (typeof yaw === 'number') { this.yaw = yaw; this.pitch = 0 }
         },
-        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, map: this.mapDef.id, mapv: this.mapDef.version, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen }),
+        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, map: this.mapDef.id, mapv: this.mapDef.version, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen, weapon: this.inventory[this.wIdx], scopeLevel: this.scopeLevel, fov: Math.round(this.camera.fov * 100) / 100, scoped: this.scoped }),
         ammo: () => ({ weapon: this.inventory[this.wIdx], ammo: this.ammo[this.inventory[this.wIdx]], all: { ...this.ammo }, reloadEndsIn: Math.max(0, this.reloadEndsAt - performance.now()) }),
         reload: () => this.tryReload(),
         fire: () => this.tryFire(),
@@ -501,7 +508,7 @@ export class Engine {
 
   private onMouseMove = (e: MouseEvent) => {
     if (!this.pointerLocked || !this.running) return
-    const sens = this.opts.sensitivity * (this.scoped ? 0.28 : 1) * 0.0022
+    const sens = this.opts.sensitivity * (this.scoped ? Math.max(0.08, this.camera.fov / this.opts.fov) : 1) * 0.0022
     this.yaw -= e.movementX * sens
     this.pitch -= e.movementY * sens
     this.pitch = Math.max(-1.53, Math.min(1.53, this.pitch))
@@ -515,9 +522,9 @@ export class Engine {
       this.tryFire()
     } else if (e.button === 2) {
       const w = this.currentWeapon()
-      if (w.scope && this.alive) {
-        this.wantScope = !this.wantScope
-        this.setScoped(this.wantScope)
+      if (scopeLevelsOf(w) > 0 && this.alive) {
+        // cycle zoom steps: 2-level snipers 0→1→2→0, scoped rifles 0→1→0
+        this.setScopeLevel((this.scopeLevel + 1) % (scopeLevelsOf(w) + 1))
         audio.zoom()
       }
     }
@@ -668,8 +675,9 @@ export class Engine {
         audio.roundStart()
         // round reset
         this.recoil = 0
-        this.scoped = false; this.wantScope = false
-        this.setScoped(false)
+        this.scopeLevel = 0
+        this.scoped = false
+        this.setScopeLevel(0)
         this.deathBy = null
         this.spectating = false
         this.specIdx = 0
@@ -725,9 +733,10 @@ export class Engine {
     })
 
     socket.on('shot', (d: { id: string; weapon: string; origin: number[]; dir: number[] }) => {
-      // remote shot fx
+      // remote shot fx (suppressed shooters keep their tracer/flash hidden)
       const o = new THREE.Vector3(d.origin[0], d.origin[1], d.origin[2])
       const dir = new THREE.Vector3(d.dir[0], d.dir[1], d.dir[2])
+      const sup = !!WEAPONS[d.weapon as WeaponId]?.suppressed
       // find map hit for tracer end + impact fx
       this.raycaster.set(o, dir)
       this.raycaster.far = 150
@@ -738,8 +747,8 @@ export class Engine {
         const surf = (h0.object.userData as { surf?: string }).surf
         this.fx.impact(h0.point, h0.face ? h0.face.normal.clone().transformDirection(h0.object.matrixWorld) : undefined, surf)
       }
-      this.fx.tracer(o.clone().addScaledVector(dir, 0.8), end)
-      this.fx.muzzleFlash(o.clone().addScaledVector(dir, 0.5))
+      if (!sup) this.fx.tracer(o.clone().addScaledVector(dir, 0.8), end)
+      this.fx.muzzleFlash(o.clone().addScaledVector(dir, 0.5), sup)
       const myEye = this.camera.position
       audio.gunshot(d.weapon, d.origin as [number, number, number], [myEye.x, myEye.y, myEye.z])
     })
@@ -871,10 +880,10 @@ export class Engine {
     this.alive = false
     this.deathBy = by
     this.firing = false
+    this.burstRemaining = 0
     this.reloadEndsAt = 0
     this.cancelReloadSfx()
-    this.setScoped(false)
-    this.scoped = false; this.wantScope = false
+    this.setScopeLevel(0)
     audio.death()
     this.spectating = true
     this.specIdx = 0
@@ -912,8 +921,8 @@ export class Engine {
       this.reloadEndsAt = 0
       this.cancelReloadSfx()
       this.recoil = 0
-      this.setScoped(false)
-      this.wantScope = false
+      this.burstRemaining = 0
+      this.setScopeLevel(0)
       this.rebuildViewmodel()
       this.socket?.emit('switch', { wIdx: this.wIdx })
       audio.draw(this.inventory[this.wIdx])
@@ -927,17 +936,22 @@ export class Engine {
       this.lastW = t
       this.reloadEndsAt = 0
       this.cancelReloadSfx()
+      this.burstRemaining = 0
+      this.setScopeLevel(0)
       this.rebuildViewmodel()
       this.socket?.emit('switch', { wIdx: this.wIdx })
       audio.draw(this.inventory[this.wIdx])
     }
   }
 
-  private setScoped(v: boolean) {
-    this.scoped = v
-    this.camera.fov = v ? 16 : this.opts.fov
+  /** Phase 5 multi-level scope: level 0 = hip; 1 = zoomFov; 2 = zoomFov/2. */
+  private setScopeLevel(n: number) {
+    const w = this.currentWeapon()
+    this.scopeLevel = n
+    this.scoped = n > 0
+    this.camera.fov = n === 0 ? this.opts.fov : Math.max(6, zoomFovOf(w) / (n === 2 ? 2 : 1))
     this.camera.updateProjectionMatrix()
-    if (this.vmGroup) this.vmGroup.visible = !v
+    if (this.vmGroup) this.vmGroup.visible = n === 0
   }
 
   private rebuildViewmodel() {
@@ -1001,7 +1015,10 @@ export class Engine {
     s += (hSpeed / w.moveSpeed) * 1.9
     if (!this.onGround) s += 4.5
     if (this.crouchAmt > 0.5) s *= 0.78
-    if (w.scope && !this.scoped) s = 5.2
+    // unscoped sniper penalty (2-level) is crippling; scoped rifles (1-level) milder
+    const lvls = scopeLevelsOf(w)
+    if (lvls === 2 && !this.scoped) s = 5.2
+    else if (lvls === 1 && !this.scoped) s += 1.6
     if (this.scoped) s *= 0.12
     return s
   }
@@ -1011,7 +1028,20 @@ export class Engine {
     const w = this.currentWeapon()
     if (w.id === 'c4') return // planting is via E
     const now = performance.now()
-    if (now - this.lastShotAt < w.fireDelay) return
+    const fm = fireModeOf(w)
+    if (fm === 'burst') {
+      // Phase 5 burst: in-burst cadence gate + retrigger gate (fireDelay).
+      // The burst completes itself once triggered, even after mouse-up.
+      const gap = now - this.lastShotAt
+      if (this.burstRemaining > 0) {
+        if (gap < (w.burstDelayMs ?? 75)) return
+      } else {
+        if (gap < w.fireDelay) return
+        this.burstRemaining = w.burstRounds ?? 3
+      }
+    } else if (now - this.lastShotAt < w.fireDelay) {
+      return
+    }
     if (this.reloadEndsAt > now) return
     const am = this.ammo[w.id]
     if (w.id === 'knife') {
@@ -1022,10 +1052,12 @@ export class Engine {
     if (!am || am.mag <= 0) {
       audio.dryFire(w.id)
       this.lastShotAt = now
+      this.burstRemaining = 0 // dry mid-burst: stop the queue
       if (am && am.reserve > 0) this.tryReload()
       return
     }
     this.lastShotAt = now
+    if (fm === 'burst') this.burstRemaining--
     am.mag--
 
     // direction with spread
@@ -1080,8 +1112,10 @@ export class Engine {
       audio.gunshot(w.id)
     }
 
-    this.fx.tracer(muzzle, end)
-    this.fx.muzzleFlash(muzzle)
+    // suppressed guns (m4a1s / usp / mp5): no tracer, small flash — hiding
+    // the shooter is the point of the suppressor
+    if (!w.suppressed) this.fx.tracer(muzzle, end)
+    this.fx.muzzleFlash(muzzle, !!w.suppressed)
     // eject the casing from the actual ejection port, not the muzzle
     if (this.vmGroup && this.vm?.eject) {
       this.fx.shell(this.vmGroup.localToWorld(this.vm.eject.clone()), right)
@@ -1100,7 +1134,9 @@ export class Engine {
     if (this.vm?.slideL) this.slideLeft = !this.slideLeft
     if (this.vm?.slide || this.vm?.slideL) this.slideKickAt = now
     if (this.vm?.bolt) this.boltCycleAt = now
-    if (w.scope && this.scoped) { this.setScoped(false); this.wantScope = false }
+    // bolt-action guns (semi + bolt rechamber) unscope per shot (existing AWP
+    // feel); auto scoped guns (sg553/aug/scar20/g3sg1) stay scoped while firing
+    if (this.scoped && !w.auto) { this.setScopeLevel(0) }
 
     this.socket?.emit('shoot', {
       weapon: w.id,
@@ -1343,6 +1379,10 @@ export class Engine {
 
     // auto fire
     if (this.firing && this.currentWeapon().auto && this.alive) this.tryFire()
+    // Phase 5: a triggered burst runs to completion even after mouse-up;
+    // holding a burst gun retriggers bursts at the fireDelay gate
+    const cw = this.currentWeapon()
+    if (this.alive && (this.burstRemaining > 0 || (this.firing && fireModeOf(cw) === 'burst'))) this.tryFire()
 
     // slow cloud drift + skybox follows camera (never clips through far plane)
     if (this.map.sky) {

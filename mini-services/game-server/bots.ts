@@ -212,18 +212,48 @@ export function botBuy(m: Match, p: PlayerState) {
     return
   }
   const awpChance = m.round > 2 ? 0.15 : 0
-  if (awpChance > 0 && Math.random() < awpChance && p.money >= 4750) { buy('awp'); armor(true); return }
-  const rifle: WeaponId = p.team === 'T' ? 'ak47' : 'm4'
-  if (p.money >= WEAPONS[rifle].price + 650) { buy(rifle); armor(true); return }
-  if (p.money >= WEAPONS[rifle].price) { buy(rifle); return }
-  // mid-economy SMG branch (plan 4.4) — replaces the single mp5 fallback.
-  // p90 for the rich; $1500 class mixes mp7/ump45/mp5 + bizon's 64-rd anti-eco
-  // spray; team flavor at the $1250 step (mac-10 T / mp9 CT).
-  if (p.money >= 2350) {
-    buy('p90')
-    if (p.money >= 650) armor(false)      // plain kevlar if the remainder fits
+  if (awpChance > 0 && Math.random() < awpChance && p.money >= 4750) {
+    // rich snipers split between the AWP and the team auto-sniper (plan 5.3)
+    const auto = p.money >= 6000 && Math.random() < 0.4
+    buy(auto ? (p.team === 'T' ? 'g3sg1' : 'scar20') : 'awp')
+    armor(true)
     return
   }
+  const rifle: WeaponId = p.team === 'T' ? 'ak47' : 'm4'
+  if (p.money >= WEAPONS[rifle].price + 650) {
+    // full-buy flavor (plan 5.1/5.4): scoped rifles + the CT M4A1-S roll
+    const roll = Math.random()
+    if (p.team === 'T' && roll < 0.15 && p.money >= 3650) buy('sg553')
+    else if (p.team === 'CT' && roll < 0.15 && p.money >= 3950) buy('aug')
+    else if (p.team === 'CT' && roll < 0.35 && p.money >= 3550) buy('m4a1s')
+    else buy(rifle)
+    armor(true)
+    return
+  }
+  if (p.money >= WEAPONS[rifle].price) {
+    const roll = Math.random()
+    if (p.team === 'T' && roll < 0.15 && p.money >= 3000) buy('sg553')
+    else if (p.team === 'CT' && roll < 0.15 && p.money >= 3300) buy('aug')
+    else if (p.team === 'CT' && roll < 0.4 && p.money >= 2900) buy('m4a1s') // cheaper full rifle
+    else buy(rifle)
+    return
+  }
+  // CT with $2900-3099: the M4A1-S is the affordable full rifle (m4 is 3100)
+  if (p.team === 'CT' && p.money >= 2900) { buy('m4a1s'); if (p.money >= 650) armor(false); return }
+  // budget-rifle step (plan 5.1) — between SMG and full rifle: galil T /
+  // famas CT (+ ssg08 scout roll); p90 alternative for spray lovers
+  const budgetRifle: WeaponId = p.team === 'T' ? 'galil' : 'famas'
+  const budgetPrice = WEAPONS[budgetRifle].price
+  if (p.money >= budgetPrice) {
+    const roll = Math.random()
+    if (p.money >= 2350 && roll < 0.25) { buy('p90'); if (p.money >= 650) armor(false); return }
+    if (p.team === 'CT' && roll > 0.8 && p.money >= 1700) buy('ssg08')   // scout gambit
+    else buy(budgetRifle)
+    if (p.money >= 650) armor(false)
+    return
+  }
+  // mid-economy SMG branch (plan 4.4) — $1500 class mixes mp7/ump45/mp5 +
+  // bizon's 64-rd anti-eco spray; below the budget-rifle step.
   if (p.money >= 1500) {
     const roll = Math.random()
     if (roll < 0.30) buy('mp7')            // $1500, 900 RPM, PDW-accurate

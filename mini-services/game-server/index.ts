@@ -1,6 +1,6 @@
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import { WEAPONS, ECONOMY, ROUND, computeDamage } from './weapons'
+import { WEAPONS, ECONOMY, ROUND, computeDamage, fireModeOf } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { MAPS, MAP_LIST, rayHitsAABB } from './mapdata'
 import type { MapDef, MapId, Box } from './mapdata'
@@ -138,7 +138,7 @@ function makePlayer(id: string, name: string, team: TeamId, bot: boolean): Playe
     hp: 100, armor: 0, helmet: false, money: ECONOMY.startMoney,
     kills: 0, deaths: 0, alive: false,
     inventory: team === 'T' ? ['glock', 'knife'] : ['usp', 'knife'],
-    wIdx: 0, ammo: {}, lastShotAt: 0, reloadEndsAt: 0,
+    wIdx: 0, ammo: {}, lastShotAt: 0, reloadEndsAt: 0, burstShots: 0,
     hasBomb: false, plantingSince: 0, defusingSince: 0, lastStateAt: now(),
   }
   refillAmmo(p)
@@ -207,7 +207,7 @@ function startRound(m: Match) {
     p.alive = true
     p.hp = 100
     p.plantingSince = 0; p.defusingSince = 0
-    p.reloadEndsAt = 0; p.lastShotAt = 0
+    p.reloadEndsAt = 0; p.lastShotAt = 0; p.burstShots = 0
     p.hasBomb = false
     const spawns = mapOf(m).spawns[p.team]
     const sp = spawns[(m.round + hashId(p.id)) % spawns.length]
@@ -692,8 +692,21 @@ io.on('connection', (socket) => {
     const w = WEAPONS[(data.weapon ?? '') as WeaponId]
     if (!w) return
     const t = now()
-    // fire rate + ammo validation
-    if (t - p.lastShotAt < w.fireDelay - 12) return
+    // fire rate + ammo validation. Burst guns (plan 5.2): in-burst shots are
+    // gated by burstDelayMs and capped at burstRounds per window; the next
+    // burst needs a fireDelay gap — the anti-cheat lives HERE, not client-side
+    if (fireModeOf(w) === 'burst') {
+      const gap = t - p.lastShotAt
+      if (gap >= w.fireDelay - 12) {
+        p.burstShots = 1                        // burst opens
+      } else {
+        const cadence = (w.burstDelayMs ?? 75) - 10
+        if (gap < cadence || p.burstShots >= (w.burstRounds ?? 3)) return
+        p.burstShots++
+      }
+    } else if (t - p.lastShotAt < w.fireDelay - 12) {
+      return
+    }
     const am = p.ammo[w.id]
     if (am && am.mag <= 0) return
     if (p.reloadEndsAt > t) return

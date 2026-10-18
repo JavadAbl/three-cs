@@ -27,6 +27,9 @@ const WEAPON_SHORT: Record<string, string> = {
   hkp2000: 'P2000', revolver: 'R8', taser: 'Zeus',
   // Phase 4 SMGs
   mp9: 'MP9', mac10: 'MAC-10', mp7: 'MP7', ump45: 'UMP', p90: 'P90', bizon: 'Bizon',
+  // Phase 5 rifles + snipers
+  m4a1s: 'M4A1-S', galil: 'Galil', famas: 'FAMAS', sg553: 'SG 553', aug: 'AUG',
+  ssg08: 'SSG 08', scar20: 'SCAR-20', g3sg1: 'G3SG1',
 }
 
 // ============================================================
@@ -36,35 +39,41 @@ const WEAPON_SHORT: Record<string, string> = {
 // root = exit, exactly like 1.6), B/ESC closes. Mouse works too.
 // Money/team/window validation lives in engine.buy() + the server;
 // rows stay clickable so rejected buys surface as toast feedback.
-// NOTE: categories cap at 9 entries (digit keys); Phase 5 (rifles)
-// will need paging or letter keys if a category exceeds that.
+// NOTE: categories over 9 entries page CS 1.6-style — 8 rows per page,
+// 0 = NEXT (cycles), last page's 0 = BACK. Phase 5 (rifles: 11 entries)
+// is the first category to need it.
+const PAGE = 8
+
 function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
   const [cat, setCat] = useState<BuyMenuKey | null>(null)
+  const [page, setPage] = useState(0)
   // live ref so the window-level key handler never sees stale state
-  const live = useRef({ cat, s, cb })
-  live.current = { cat, s, cb }
+  const live = useRef({ cat, page, s, cb })
+  live.current = { cat, page, s, cb }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { cat, cb } = live.current
+      const { cat, page, cb } = live.current
       if (e.code === 'Escape') { e.preventDefault(); cb.onOpenBuy(false); return }
-      if (e.code === 'Backspace') { e.preventDefault(); setCat(null); return }
+      if (e.code === 'Backspace') { e.preventDefault(); setCat(null); setPage(0); return }
       // KeyB is handled by page.tsx (toggle) — never double-handle here
       const m = /^(?:Digit|Numpad)([0-9])$/.exec(e.code)
       if (!m) return
       e.preventDefault()
       const n = +m[1]
       if (n === 0) {
-        if (cat === null) cb.onOpenBuy(false) // 0. EXIT at root, 1.6-style
-        else setCat(null)                      // 0. BACK one level up
+        if (cat === null) { cb.onOpenBuy(false); return }   // 0. EXIT at root, 1.6-style
+        const pages = Math.ceil(buyEntriesFor(cat).length / PAGE)
+        if (pages > 1 && page < pages - 1) setPage(page + 1) // 0. NEXT page
+        else { setCat(null); setPage(0) }                    // last page: 0. BACK up
         return
       }
       if (cat === null) {
         const c = BUY_MENU[n - 1]
-        if (c && buyEntriesFor(c.key).length > 0) setCat(c.key)
+        if (c && buyEntriesFor(c.key).length > 0) { setCat(c.key); setPage(0) }
         return
       }
-      const entry = buyEntriesFor(cat)[n - 1]
+      const entry = buyEntriesFor(cat)[page * PAGE + n - 1]
       if (entry) cb.onBuy(entry.id)
     }
     window.addEventListener('keydown', onKey)
@@ -72,6 +81,9 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
   }, [])
 
   const catDef = cat ? BUY_MENU.find(c => c.key === cat)! : null
+  const entries = cat ? buyEntriesFor(cat) : []
+  const pages = Math.ceil(entries.length / PAGE)
+  const shown = entries.slice(page * PAGE, page * PAGE + PAGE)
 
   // per-entry display state
   const rowState = (it: BuyEntry) => {
@@ -115,10 +127,10 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
           </div>
         )}
 
-        {/* level 2: weapons in category (digits 1..N) */}
+        {/* level 2: weapons in category (8 rows per page, 0 = NEXT) */}
         {cat && (
           <div className="flex flex-col gap-1.5">
-            {buyEntriesFor(cat).map((it, i) => {
+            {shown.map((it, i) => {
               const st = rowState(it)
               const stats = st.w
                 ? `${st.w.damage} dmg · ${st.w.fireDelay}ms · ${st.w.mag === Infinity ? '∞' : st.w.mag} rds`
@@ -148,12 +160,18 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
         )}
 
         <div className="mt-4 flex items-center justify-between text-[10px] tracking-widest text-white/40">
-          <span>{cat ? 'DIGITS BUY · 0 BACK' : '1-6 CATEGORIES · 0 EXIT'}</span>
+          <span>
+            {cat
+              ? pages > 1
+                ? `PAGE ${page + 1}/${pages} · DIGITS BUY · ${page < pages - 1 ? '0 NEXT' : '0 BACK'}`
+                : 'DIGITS BUY · 0 BACK'
+              : '1-6 CATEGORIES · 0 EXIT'}
+          </span>
           <span>B / ESC CLOSE</span>
         </div>
-        <button onClick={() => { if (cat) setCat(null); else cb.onOpenBuy(false) }}
+        <button onClick={() => { if (cat) { setCat(null); setPage(0) } else cb.onOpenBuy(false) }}
           className="mt-2 w-full rounded-lg bg-orange-600 py-2 font-bold tracking-wider text-white transition hover:bg-orange-500">
-          {cat ? 'BACK (0)' : 'CLOSE (B) — BACK TO GAME'}
+          {cat ? (pages > 1 && page < pages - 1 ? 'NEXT PAGE (0)' : 'BACK (0)') : 'CLOSE (B) — BACK TO GAME'}
         </button>
       </div>
     </div>

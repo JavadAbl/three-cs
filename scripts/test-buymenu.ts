@@ -14,6 +14,7 @@ import * as client from '../src/game/weapons'
 import * as server from '../mini-services/game-server/weapons'
 import * as shared from '../shared/weapons'
 import type { WeaponCategory } from '../src/game/weapons'
+import { readFileSync } from 'fs'
 
 let pass = 0
 let fail = 0
@@ -31,6 +32,9 @@ const EXPECTED_CAT: Record<string, WeaponCategory> = {
   elites: 'pistol', hkp2000: 'pistol', revolver: 'pistol', taser: 'pistol',
   // Phase 4 SMGs
   mp9: 'smg', mac10: 'smg', mp7: 'smg', ump45: 'smg', p90: 'smg', bizon: 'smg',
+  // Phase 5 rifles + snipers
+  m4a1s: 'rifle', galil: 'rifle', famas: 'rifle', sg553: 'rifle', aug: 'rifle',
+  ssg08: 'rifle', scar20: 'rifle', g3sg1: 'rifle',
 }
 
 // --- 1. category backfill ---
@@ -56,7 +60,10 @@ const want = [
   'mp5:1500',
   // Phase 4 SMGs
   'mp9:1250@CT', 'mac10:1250@T', 'mp7:1500', 'ump45:1500', 'p90:2350', 'bizon:1400',
-  'ak47:2700@T', 'm4:3100@CT', 'awp:4750',
+  'ak47:2700@T', 'm4:3100@CT',
+  // Phase 5 rifles + snipers (rifle category: 11 entries — buy menu pages)
+  'm4a1s:2900@CT', 'galil:1800@T', 'famas:1700@CT', 'sg553:3000@T', 'aug:3300@CT',
+  'ssg08:1700', 'scar20:5000@CT', 'g3sg1:5000@T', 'awp:4750',
   'kevlar:650', 'kevlarhelm:1000',
 ]
 check('BUY_ENTRIES derived set + prices + teams', JSON.stringify(got) === JSON.stringify(want), got.join(', '))
@@ -66,7 +73,8 @@ check('no price-0 starters/knife/c4 in buy list',
 // --- 4. grouping ---
 const groups: Record<string, string[]> = {
   pistol: ['deagle', 'p250', 'fiveseven', 'tec9', 'cz75', 'elites', 'hkp2000', 'revolver', 'taser'],
-  shotgun: [], smg: ['mp5', 'mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'], rifle: ['ak47', 'm4', 'awp'],
+  shotgun: [], smg: ['mp5', 'mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'],
+  rifle: ['ak47', 'm4', 'm4a1s', 'galil', 'famas', 'sg553', 'aug', 'ssg08', 'scar20', 'g3sg1', 'awp'],
   heavy: [], equipment: ['kevlar', 'kevlarhelm'],
 }
 check('pistol category fits the 9-digit buy menu cap', groups.pistol.length <= 9)
@@ -109,16 +117,19 @@ for (const w of Object.values(shared.WEAPONS)) {
 check('fireMode backfilled on all weapons',
   Object.values(shared.WEAPONS).every(w => w.fireMode !== undefined))
 
-// 7b. suppressed: USP-S and MP5-SD are the integrally suppressed pair today
-check('suppressed flags: usp + mp5 only',
+// 7b. suppressed: usp/mp5 (integral) + Phase-5 m4a1s
+check('suppressed flags: usp + mp5 + m4a1s only',
   shared.WEAPONS.usp.suppressed === true && shared.WEAPONS.mp5.suppressed === true &&
-  Object.values(shared.WEAPONS).filter(w => w.suppressed).length === 2)
+  shared.WEAPONS.m4a1s.suppressed === true &&
+  Object.values(shared.WEAPONS).filter(w => w.suppressed).length === 3)
 
-// 7c. scope: AWP = 2 levels, fov 16 (matches engine's current hardcode); others 0
-check('AWP scopeLevels=2 zoomFov=16, others unsoped',
-  shared.WEAPONS.awp.scopeLevels === 2 && shared.WEAPONS.awp.zoomFov === 16 &&
-  shared.scopeLevelsOf(shared.WEAPONS.awp) === 2 && shared.zoomFovOf(shared.WEAPONS.awp) === 16 &&
-  Object.values(shared.WEAPONS).every(w => w.id === 'awp' ? true : shared.scopeLevelsOf(w) === 0))
+// 7c. scopes: 2-level snipers (awp/ssg08/scar20/g3sg1), 1-level scoped
+// rifles (sg553/aug), everything else 0
+check('scope levels: snipers 2, scoped rifles 1, rest 0',
+  ['awp', 'ssg08', 'scar20', 'g3sg1'].every(id => shared.scopeLevelsOf(shared.WEAPONS[id as shared.WeaponId]) === 2) &&
+  ['sg553', 'aug'].every(id => shared.scopeLevelsOf(shared.WEAPONS[id as shared.WeaponId]) === 1) &&
+  Object.values(shared.WEAPONS).every(w =>
+    ['awp', 'ssg08', 'scar20', 'g3sg1', 'sg553', 'aug'].includes(w.id) ? true : shared.scopeLevelsOf(w) === 0))
 
 // 7d. kill-reward classes: where set, the class table value must equal the
 //     weapon's explicit killReward (no drift between the two representations)
@@ -130,11 +141,13 @@ for (const w of Object.values(shared.WEAPONS)) {
 }
 
 // 7e. future-phase fields stay absent on the current roster (zero gameplay
-//     change: no burst, no pellets, no throwables, no recoil seeds yet)
-check('no burst/pellets/throwable/recoilPattern on current roster',
+//     change: no pellets, no throwables, no recoil seeds yet; burst exists ONLY
+//     on the famas per plan 5.2)
+check('no pellets/throwable/recoilPattern; burst only on famas',
   Object.values(shared.WEAPONS).every(w =>
     w.pellets === undefined && w.throwable === undefined &&
-    w.burstRounds === undefined && w.recoilPattern === undefined))
+    w.recoilPattern === undefined &&
+    (w.id === 'famas' ? w.burstRounds === 3 : w.burstRounds === undefined)))
 
 // --- 8. Phase 3 pistol mechanics (schema-level) ---
 check('cz75 is the only full-auto pistol (800 RPM)',
@@ -181,6 +194,27 @@ check('ump45 has the heaviest SMG damage + armor-punch quirk (p90 tops pen)',
 check('UMP is the slowest-moving SMG (230/250 speed scale)',
   Object.values(shared.WEAPONS).filter(w => w.category === 'smg').every(w =>
     w.id === 'ump45' || w.moveSpeed >= shared.WEAPONS.ump45.moveSpeed))
+
+// --- 10. Phase 5 rifle mechanics (schema-level) ---
+check('rifle category exceeds 9 rows → buy menu paging is required and wired',
+  client.buyEntriesFor('rifle').length === 11 &&
+  readFileSync('src/game/hud.tsx', 'utf8').includes('const PAGE = 8'))
+check('famas: 3-round burst + 400ms retrigger + 75ms cadence',
+  shared.WEAPONS.famas.fireMode === 'burst' && shared.WEAPONS.famas.burstRounds === 3 &&
+  shared.WEAPONS.famas.burstDelayMs === 75 && shared.WEAPONS.famas.fireDelay === 400 &&
+  shared.fireModeOf(shared.WEAPONS.famas) === 'burst')
+check('sg553 armorPen 1.0 (helmet one-tap quirk); m4a1s suppressed',
+  shared.WEAPONS.sg553.armorPen === 1.0 && shared.WEAPONS.m4a1s.suppressed === true)
+check('auto-snipers: auto + $100; ssg08 scout: $300 + semi',
+  shared.WEAPONS.scar20.auto === true && shared.WEAPONS.scar20.killReward === 100 &&
+  shared.WEAPONS.g3sg1.auto === true && shared.WEAPONS.g3sg1.killReward === 100 &&
+  shared.WEAPONS.ssg08.auto === false && shared.WEAPONS.ssg08.killReward === 300 &&
+  shared.WEAPONS.ssg08.killRewardClass === 'scout')
+check('m4a1s vs m4 pairing: same slot + team, cheaper, smaller mag',
+  shared.WEAPONS.m4a1s.slot === shared.WEAPONS.m4.slot &&
+  shared.WEAPONS.m4a1s.team === shared.WEAPONS.m4.team &&
+  shared.WEAPONS.m4a1s.price < shared.WEAPONS.m4.price &&
+  shared.WEAPONS.m4a1s.mag < shared.WEAPONS.m4.mag)
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

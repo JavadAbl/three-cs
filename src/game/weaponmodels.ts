@@ -374,6 +374,210 @@ function buildAWP(team: TeamId): ViewModel {
   return { group: g, tip: new THREE.Vector3(0, 0.02, -0.84), mag, bolt, eject: new THREE.Vector3(0.034, 0.035, -0.1), muzzleLen: 0.86 }
 }
 
+// ---------------------------------------------------------------- Phase 5 rifles
+// Parametric rifle family (plan 5.5): the ak/m4 builders generalize —
+// conventional layout (galil/sg553/m4a1s) + bullpup layout (famas/aug).
+// Sniper family (ssg08/scar20/g3sg1) lives below with the AWP glass pattern.
+
+interface RifleSpec {
+  layout: 'conv' | 'bullpup'
+  bodyLen: number; bodyH: number; bodyW: number; bodyCol: number
+  handLen: number; handCol: number     // handguard (conv) / front shell taper
+  barrelR: number; barrelLen: number; muzzleZ: number
+  magLen: number; magSegs: number      // curved-mag segment count
+  stockCol: number
+  rail?: boolean                       // flat-top rail + notches
+  suppressor?: boolean                 // m4a1s integral can
+  optic?: 'small' | 'scope'            // sg553 compact optic / aug forward tube
+  carryHandle?: boolean                // famas
+  magBehindGrip?: boolean              // aug bullpup mag position
+}
+
+const RIFLES: Record<'galil' | 'famas' | 'sg553' | 'aug' | 'm4a1s', RifleSpec> = {
+  // T budget rifle: polymer AK-ish, tall front sight, long 35-rd curved mag
+  galil: { layout: 'conv', bodyLen: 0.26, bodyH: 0.07, bodyW: 0.05, bodyCol: 0x25282a, handLen: 0.15, handCol: 0x25282a, barrelR: 0.010, barrelLen: 0.13, muzzleZ: -0.50, magLen: 0.20, magSegs: 4, stockCol: 0x25282a },
+  // CT bullpup: carry handle, mag ahead of the grip, 3-round burst
+  famas: { layout: 'bullpup', bodyLen: 0.34, bodyH: 0.06, bodyW: 0.048, bodyCol: 0x2a2d30, handLen: 0.16, handCol: 0x25282a, barrelR: 0.009, barrelLen: 0.08, muzzleZ: -0.42, magLen: 0.13, magSegs: 2, stockCol: 0x1f2224, carryHandle: true },
+  // T scoped: compact optic, 100% armor pen, skeleton stock
+  sg553: { layout: 'conv', bodyLen: 0.24, bodyH: 0.06, bodyW: 0.05, bodyCol: 0x232629, handLen: 0.16, handCol: 0x25282a, barrelR: 0.010, barrelLen: 0.12, muzzleZ: -0.48, magLen: 0.17, magSegs: 3, stockCol: 0x25282a, optic: 'small' },
+  // CT bullpup: integrated forward scope, mag behind the grip
+  aug: { layout: 'bullpup', bodyLen: 0.36, bodyH: 0.075, bodyW: 0.048, bodyCol: 0x2d7d4f, handLen: 0.18, handCol: 0x2d7d4f, barrelR: 0.009, barrelLen: 0.09, muzzleZ: -0.44, magLen: 0.12, magSegs: 2, stockCol: 0x2d7d4f, optic: 'scope', magBehindGrip: true },
+  // CT silenced M4: rail + integral suppressor + short 20-rd mag
+  m4a1s: { layout: 'conv', bodyLen: 0.24, bodyH: 0.05, bodyW: 0.05, bodyCol: 0x26292c, handLen: 0.22, handCol: 0x25282a, barrelR: 0.009, barrelLen: 0.10, muzzleZ: -0.62, magLen: 0.11, magSegs: 2, stockCol: 0x26292c, rail: true, suppressor: true },
+}
+
+function buildRifle(id: keyof typeof RIFLES, team: TeamId): ViewModel {
+  const s = RIFLES[id]
+  const g = new THREE.Group()
+  const bodyZ = -s.bodyLen / 2 + 0.03
+  // receiver
+  P(g, box(s.bodyW, s.bodyH, s.bodyLen), 'polymer_black', { color: s.bodyCol }, 0, 0.02, bodyZ)
+  if (s.rail) {
+    P(g, box(s.bodyW - 0.014, 0.01, s.bodyLen * 0.95), 'polymer_black', { color: 0x2a2d30 }, 0, 0.02 + s.bodyH / 2 + 0.005, bodyZ - 0.01)
+    for (let i = 0; i < 7; i++) {
+      P(g, box(s.bodyW - 0.012, 0.006, 0.012), 'metal_dark', { color: 0x101214 }, 0, 0.02 + s.bodyH / 2 + 0.007, bodyZ + 0.03 - i * (s.bodyLen / 7.5))
+    }
+  }
+  if (s.carryHandle) {
+    // famas: full-length carry handle over the receiver
+    P(g, box(0.02, 0.03, s.bodyLen * 0.8), 'polymer_black', { color: s.bodyCol }, 0, 0.02 + s.bodyH / 2 + 0.015, bodyZ)
+    P(g, box(0.014, 0.018, 0.03), 'metal_dark', { color: 0x16181a }, 0, 0.062, bodyZ + s.bodyLen * 0.78)
+    P(g, box(0.014, 0.018, 0.03), 'metal_dark', { color: 0x16181a }, 0, 0.062, bodyZ - s.bodyLen * 0.28)
+  }
+  if (s.optic === 'small') {
+    // sg553: compact tube optic + dark lens
+    P(g, cyl(0.016, 0.08, 12), 'metal_dark', { roughnessMul: 0.7 }, 0, 0.075, bodyZ + 0.02, q(90))
+    basic(0x24384a, g, cyl(0.013, 0.003, 12), 0, 0.075, bodyZ - 0.021, q(90))
+    P(g, box(0.018, 0.03, 0.02), 'metal_dark', {}, 0, 0.058, bodyZ + 0.02)
+  }
+  if (s.optic === 'scope') {
+    // aug: integrated forward scope above the handguard half
+    P(g, cyl(0.02, 0.16, 14), 'metal_dark', { roughnessMul: 0.7 }, 0, 0.085, bodyZ - 0.04, q(90))
+    P(g, cyl(0.026, 0.04, 14), 'metal_dark', { roughnessMul: 0.7 }, 0, 0.085, bodyZ - 0.125, q(90))
+    basic(0x24384a, g, cyl(0.023, 0.003, 14), 0, 0.085, bodyZ - 0.147, q(90))
+    P(g, box(0.02, 0.035, 0.022), 'metal_dark', {}, 0, 0.062, bodyZ - 0.02)
+  }
+  // barrel / suppressor
+  if (s.suppressor) {
+    // m4a1s: short barrel stub + fat integral can with vent rings
+    P(g, cyl(s.barrelR, 0.05), 'steel_blued', { roughnessMul: 0.6 }, 0, 0.02, s.muzzleZ + 0.17, q(90))
+    P(g, cyl(0.0165, 0.15, 14), 'metal_dark', { roughnessMul: 0.75 }, 0, 0.02, s.muzzleZ + 0.075, q(90))
+    for (let i = 0; i < 3; i++) {
+      P(g, cyl(0.0175, 0.008, 14), 'metal_dark', { color: 0x16181a }, 0, 0.02, s.muzzleZ + 0.03 + i * 0.05, q(90))
+    }
+  } else {
+    P(g, cyl(s.barrelR, s.barrelLen), 'steel_blued', { roughnessMul: 0.6 }, 0, 0.02, s.muzzleZ + s.barrelLen / 2, q(90))
+    // tall front sight (galil) / slim A2 post (others)
+    if (id === 'galil') {
+      P(g, box(0.006, 0.045, 0.006), 'metal_dark', { color: 0x16181a }, 0, 0.05, s.muzzleZ + 0.03)
+      P(g, box(0.02, 0.008, 0.014), 'metal_dark', { color: 0x16181a }, 0, 0.072, s.muzzleZ + 0.03)
+    } else {
+      P(g, box(0.005, 0.026, 0.006), 'metal_dark', { color: 0x16181a }, 0, 0.045, s.muzzleZ + 0.035)
+    }
+  }
+  // charging handle
+  P(g, box(0.02, 0.009, 0.016), 'metal_dark', { color: 0x101214 }, s.bodyW / 2 + 0.006, 0.03, bodyZ + 0.03)
+  // handguard / front shell
+  if (s.layout === 'conv') {
+    P(g, box(s.bodyW - 0.004, s.bodyH - 0.012, s.handLen), 'polymer_black', { color: s.handCol }, 0, 0.02, bodyZ - s.bodyLen / 2 - s.handLen / 2 + 0.02)
+    if (s.rail) {
+      for (let i = 0; i < 5; i++) {
+        P(g, box(s.bodyW, 0.006, 0.014), 'metal_dark', { color: 0x101214 }, 0, 0.02 + (s.bodyH - 0.012) / 2 + 0.006, bodyZ - s.bodyLen / 2 - i * 0.035 + 0.01)
+      }
+    }
+  } else {
+    // bullpup: front shell taper + foregrip stub
+    P(g, box(s.bodyW - 0.006, s.bodyH - 0.018, s.handLen), 'polymer_black', { color: s.handCol }, 0, 0.014, bodyZ - s.bodyLen / 2 - s.handLen / 2 + 0.02)
+    P(g, box(0.028, 0.055, 0.05), 'polymer_black', { color: s.stockCol }, 0, -0.03, bodyZ - s.bodyLen / 2 - 0.06, -0.3)
+  }
+  // trigger + grip
+  P(g, box(0.005, 0.028, 0.008), 'metal_dark', { color: 0x101214 }, 0, -0.028, s.layout === 'bullpup' ? -0.06 : -0.015, 0.15)
+  P(g, box(0.034, 0.095, 0.05), 'polymer_black', { density: 9, color: 0x1f2224 }, 0, -0.07, s.layout === 'bullpup' ? -0.03 : 0.015, s.layout === 'bullpup' ? 0.28 : 0.24)
+  // magazine (curved segments, count scaled to capacity)
+  const mag = new THREE.Group()
+  g.add(mag)
+  const magZ = s.magBehindGrip ? bodyZ + 0.08 : (s.layout === 'bullpup' ? bodyZ - 0.02 : -0.09)
+  const segH = s.magLen / s.magSegs
+  for (let i = 0; i < s.magSegs; i++) {
+    P(mag, box(0.036, segH, 0.055), 'metal_dark', { color: 0x1b1e21 },
+      0, -0.05 - i * segH, magZ - i * 0.016, -0.22 * i)
+  }
+  P(mag, box(0.04, 0.012, 0.062), 'metal_dark', { color: 0x141618 }, 0, -0.05 - s.magLen - 0.004, magZ - s.magSegs * 0.016, -0.35)
+  // stock
+  if (s.layout === 'conv') {
+    if (id === 'sg553') {
+      // skeleton: twin bars + butt
+      P(g, cyl(0.008, 0.16, 8), 'polymer_black', { color: s.stockCol }, 0.01, 0.026, 0.13, q(90))
+      P(g, box(0.03, 0.05, 0.09), 'polymer_black', { color: s.stockCol }, 0, 0.0, 0.19)
+      P(g, box(0.033, 0.08, 0.014), 'polymer_black', { color: 0x16181a }, 0, -0.005, 0.235)
+    } else {
+      P(g, box(0.04, 0.062, 0.18), 'polymer_black', { color: s.stockCol }, 0, 0.006, 0.14)
+      P(g, box(0.043, 0.085, 0.015), 'polymer_black', { color: 0x16181a }, 0, -0.002, 0.238)
+    }
+  } else {
+    // bullpup: rear shell is the stock — cheek riser + butt pad
+    P(g, box(s.bodyW - 0.004, s.bodyH - 0.008, 0.12), 'polymer_black', { color: s.stockCol }, 0, 0.012, bodyZ + s.bodyLen / 2 + 0.05)
+    P(g, box(s.bodyW, 0.08, 0.014), 'polymer_black', { color: 0x16181a }, 0, -0.002, bodyZ + s.bodyLen / 2 + 0.115)
+  }
+  buildGloves(g, team,
+    { x: 0, y: -0.065, z: s.layout === 'bullpup' ? -0.015 : 0.03, rx: 0.3 },
+    { x: 0, y: -0.03, z: s.layout === 'bullpup' ? bodyZ - s.bodyLen / 2 - 0.05 : bodyZ - s.bodyLen / 2 - s.handLen / 2, rx: 0.3 })
+  return { group: g, tip: new THREE.Vector3(0, 0.02, s.muzzleZ), mag, eject: new THREE.Vector3(s.bodyW / 2 + 0.004, 0.04, bodyZ + 0.04) }
+}
+
+// ---------------------------------------------------------------- Phase 5 snipers
+// Parametric sniper family — reuses the AWP's glass/turret pattern (plan 5.5).
+// ssg08 is bolt-action (bolt group animates); scar20/g3sg1 are semi-auto
+// (no bolt cycle anim — shells eject each shot).
+
+interface SniperSpec {
+  bodyLen: number; bodyH: number; bodyW: number; bodyCol: number
+  barrelR: number; barrelLen: number; muzzleZ: number
+  scopeR: number; scopeLen: number; scopeZ: number
+  stockCol: number; woodGrip?: boolean
+  magH: number
+  bolt: boolean
+  brakeR: number
+}
+
+const SNIPERS: Record<'ssg08' | 'scar20' | 'g3sg1', SniperSpec> = {
+  // light scout: slim everything, fast handling
+  ssg08: { bodyLen: 0.24, bodyH: 0.05, bodyW: 0.045, bodyCol: 0x232629, barrelR: 0.010, barrelLen: 0.36, muzzleZ: -0.66, scopeR: 0.017, scopeLen: 0.22, scopeZ: -0.17, stockCol: 0x1f2224, magH: 0.06, bolt: true, brakeR: 0.013 },
+  // CT auto-sniper: chunky black body, big glass
+  scar20: { bodyLen: 0.30, bodyH: 0.07, bodyW: 0.055, bodyCol: 0x232629, barrelR: 0.011, barrelLen: 0.34, muzzleZ: -0.66, scopeR: 0.021, scopeLen: 0.26, scopeZ: -0.20, stockCol: 0x25282a, magH: 0.08, bolt: false, brakeR: 0.015 },
+  // T auto-sniper: olive receiver + wood grip accents
+  g3sg1: { bodyLen: 0.30, bodyH: 0.07, bodyW: 0.052, bodyCol: 0x2d3326, barrelR: 0.011, barrelLen: 0.38, muzzleZ: -0.70, scopeR: 0.021, scopeLen: 0.26, scopeZ: -0.20, stockCol: 0x2d3326, woodGrip: true, magH: 0.08, bolt: false, brakeR: 0.015 },
+}
+
+function buildSniper(id: keyof typeof SNIPERS, team: TeamId): ViewModel {
+  const s = SNIPERS[id]
+  const g = new THREE.Group()
+  const bodyZ = -s.bodyLen / 2 + 0.05
+  // receiver
+  P(g, box(s.bodyW, s.bodyH, s.bodyLen), 'metal_dark', { color: s.bodyCol }, 0, 0.015, bodyZ)
+  // barrel + muzzle brake
+  P(g, cyl(s.barrelR, s.barrelLen), 'steel_blued', { roughnessMul: 0.6 }, 0, 0.022, s.muzzleZ + s.barrelLen / 2, q(90))
+  P(g, cyl(s.brakeR, 0.05, 12), 'metal_dark', { color: 0x101214 }, 0, 0.022, s.muzzleZ + 0.025, q(90))
+  // scope: tube + bells + lenses + turrets + rings (AWP glass pattern)
+  const sy = 0.015 + s.bodyH / 2 + s.scopeR + 0.006
+  P(g, cyl(s.scopeR, s.scopeLen, 16), 'metal_dark', { roughnessMul: 0.7 }, 0, sy, s.scopeZ, q(90))
+  P(g, cyl(s.scopeR + 0.009, 0.05, 16), 'metal_dark', { roughnessMul: 0.7 }, 0, sy, s.scopeZ - s.scopeLen / 2 - 0.02, q(90))
+  P(g, cyl(s.scopeR + 0.004, 0.04, 16), 'metal_dark', { roughnessMul: 0.7 }, 0, sy, s.scopeZ + s.scopeLen / 2 + 0.015, q(90))
+  basic(0x24384a, g, cyl(s.scopeR + 0.007, 0.003, 16), 0, sy, s.scopeZ - s.scopeLen / 2 - 0.046, q(90))
+  basic(0x2c3a2a, g, cyl(s.scopeR + 0.002, 0.003, 16), 0, sy, s.scopeZ + s.scopeLen / 2 + 0.036, q(90))
+  P(g, cyl(0.008, 0.016, 12), 'metal_dark', {}, 0, sy + s.scopeR + 0.008, s.scopeZ)
+  P(g, cyl(0.008, 0.016, 12), 'metal_dark', {}, s.scopeR + 0.008, sy, s.scopeZ, 0, 0, q(90))
+  P(g, box(0.018, 0.03, 0.022), 'metal_dark', {}, 0, 0.015 + s.bodyH / 2 + 0.014, s.scopeZ + 0.06)
+  P(g, box(0.018, 0.03, 0.022), 'metal_dark', {}, 0, 0.015 + s.bodyH / 2 + 0.014, s.scopeZ - 0.07)
+  // stock (skeleton with cheek riser) + butt pad
+  P(g, box(s.bodyW - 0.006, s.bodyH - 0.008, 0.20), 'metal_dark', { color: s.stockCol }, 0, 0.008, bodyZ + s.bodyLen / 2 + 0.10)
+  P(g, box(s.bodyW, 0.02, 0.12), 'polymer_black', { color: s.stockCol }, 0, 0.038, bodyZ + s.bodyLen / 2 + 0.08)
+  P(g, box(s.bodyW, 0.09, 0.016), 'polymer_black', { color: 0x16181a }, 0, -0.005, bodyZ + s.bodyLen / 2 + 0.205)
+  // grip + trigger
+  P(g, box(0.034, 0.09, 0.05), 'polymer_black', { density: 9, color: s.woodGrip ? 0x6b4520 : 0x1f2224 }, 0, -0.06, 0.03, 0.26)
+  P(g, box(0.005, 0.026, 0.008), 'metal_dark', { color: 0x101214 }, 0, -0.026, -0.005, 0.15)
+  // magazine box
+  const mag = new THREE.Group()
+  g.add(mag)
+  P(mag, box(0.036, s.magH, 0.085), 'metal_dark', { color: 0x1b1e21 }, 0, -0.04 - s.magH / 2, -0.06, -0.06)
+  P(mag, box(0.04, 0.012, 0.09), 'metal_dark', { color: 0x141618 }, 0, -0.04 - s.magH + 0.006, -0.065, -0.06)
+  // bolt assembly (bolt-action only — animates on fire)
+  let bolt: THREE.Group | undefined
+  if (s.bolt) {
+    bolt = new THREE.Group()
+    g.add(bolt)
+    P(bolt, cyl(0.007, 0.075, 10), 'steel_blued', { roughnessMul: 0.5 }, 0.028, 0.04, 0.03, q(90))
+    P(bolt, cyl(0.005, 0.032, 8), 'steel_blued', {}, 0.052, 0.02, 0.03, 0, 0, q(60))
+    P(bolt, new THREE.SphereGeometry(0.009, 10, 8), 'steel_blued', { roughnessMul: 0.5 }, 0.066, 0.003, 0.03)
+  }
+  buildGloves(g, team, { x: 0, y: -0.06, z: 0.04, rx: 0.3 }, { x: 0, y: -0.03, z: bodyZ - s.bodyLen / 2 - 0.06, rx: 0.28 })
+  return {
+    group: g, tip: new THREE.Vector3(0, 0.022, s.muzzleZ), mag, bolt,
+    eject: new THREE.Vector3(s.bodyW / 2 + 0.004, 0.04, bodyZ + 0.05),
+    muzzleLen: -s.muzzleZ + 0.02,
+  }
+}
+
 // ---------------------------------------------------------------- MP5-SD
 function buildMP5(team: TeamId): ViewModel {
   const g = new THREE.Group()
@@ -896,6 +1100,10 @@ export function buildViewModel(weapon: WeaponId, team: TeamId): ViewModel {
     case 'ak47': return buildAK(team)
     case 'm4': return buildM4(team)
     case 'awp': return buildAWP(team)
+    case 'galil': case 'famas': case 'sg553': case 'aug': case 'm4a1s':
+      return buildRifle(weapon, team)
+    case 'ssg08': case 'scar20': case 'g3sg1':
+      return buildSniper(weapon, team)
     case 'mp5': return buildMP5(team)
     case 'mp9': case 'mac10': case 'mp7': case 'ump45':
       return buildSMG(weapon, team)
@@ -952,6 +1160,37 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
       P(g, box(0.045, 0.08, 0.24), 'enamel_od', {}, 0, -0.01, 0.18)
       P(g, box(0.035, 0.07, 0.08), 'polymer_black', { color: 0x1f2224 }, 0, -0.06, -0.02, -0.06)
       break
+    // ---- Phase 5 rifles: low-detail silhouettes, scoped/optic/suppressor flavor
+    case 'galil': case 'sg553': case 'm4a1s': {
+      P(g, box(0.045, 0.055, 0.26), 'polymer_black', { color: 0x26292c }, 0, 0.01, -0.06)
+      P(g, box(0.04, 0.045, 0.16), 'polymer_black', { color: 0x25282a }, 0, 0.01, -0.24)
+      P(g, cyl(0.008, 0.2), 'steel_blued', {}, 0, 0.014, -0.38, q(90))
+      if (weaponId === 'm4a1s') {
+        P(g, cyl(0.014, 0.12, 12), 'metal_dark', { roughnessMul: 0.75 }, 0, 0.014, -0.5, q(90))
+      }
+      if (weaponId === 'sg553') P(g, cyl(0.014, 0.07, 10), 'metal_dark', { roughnessMul: 0.7 }, 0, 0.065, -0.1, q(90))
+      P(g, box(0.03, 0.14, 0.04), 'metal_dark', { color: 0x1b1e21 }, 0, -0.1, -0.08, -0.08)
+      P(g, box(0.032, 0.05, 0.12), 'polymer_black', { color: 0x25282a }, 0, 0.005, 0.12)
+      break
+    }
+    case 'famas': case 'aug': {
+      P(g, box(0.042, 0.06, 0.34), 'polymer_black', { color: weaponId === 'aug' ? 0x2d7d4f : 0x2a2d30 }, 0, 0.01, -0.08)
+      P(g, cyl(0.008, 0.12), 'steel_blued', {}, 0, 0.012, -0.3, q(90))
+      if (weaponId === 'aug') P(g, cyl(0.016, 0.13, 10), 'metal_dark', { roughnessMul: 0.7 }, 0, 0.07, -0.14, q(90))
+      else P(g, box(0.02, 0.026, 0.2), 'polymer_black', { color: 0x2a2d30 }, 0, 0.055, -0.08)
+      P(g, box(0.03, 0.11, 0.04), 'metal_dark', { color: 0x1b1e21 }, 0, -0.09, weaponId === 'aug' ? 0.0 : -0.1, -0.06)
+      break
+    }
+    case 'ssg08': case 'scar20': case 'g3sg1': {
+      const chunky = weaponId !== 'ssg08'
+      P(g, box(chunky ? 0.05 : 0.04, chunky ? 0.06 : 0.045, 0.28), 'metal_dark',
+        { color: weaponId === 'g3sg1' ? 0x2d3326 : 0x232629 }, 0, 0.01, -0.08)
+      P(g, cyl(0.01, 0.34), 'steel_blued', {}, 0, 0.018, -0.36, q(90))
+      P(g, cyl(weaponId === 'ssg08' ? 0.015 : 0.018, 0.2, 12), 'metal_dark', { roughnessMul: 0.7 }, 0, 0.065, -0.12, q(90))
+      P(g, box(0.03, 0.07, 0.18), 'metal_dark', { color: 0x25282a }, 0, 0.0, 0.16)
+      P(g, box(0.03, 0.1, 0.04), 'metal_dark', { color: 0x1b1e21 }, 0, -0.08, -0.02, 0.2)
+      break
+    }
     case 'mp5':
       P(g, cyl(0.022, 0.22, 12), 'metal_dark', { color: 0x232629 }, 0, 0.01, -0.02, q(90))
       P(g, cyl(0.02, 0.16, 12), 'metal_dark', {}, 0, 0.01, -0.2, q(90))

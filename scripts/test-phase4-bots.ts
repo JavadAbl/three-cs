@@ -37,10 +37,12 @@ const NEW_SMGS: WeaponId[] = ['mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon']
 const m = mkMatch()
 const TRIALS = 400
 
-// Band table: [money, allowed weapon set] — mirrors the plan-4.4 ladder
+// Band table: [money, allowed weapon set] — mirrors the plan-4.4/5.1 ladder
+// (Phase 5 added budget rifles at ≥$1800 T / ≥$1700 CT, so the SMG class is
+// now the $1500-1699 band and rich bots take rifles/budget rifles instead)
 const BANDS: Array<{ money: number; label: string; allowed: WeaponId[] }> = [
-  { money: 2500, label: 'rich ($2500, p90 tier)', allowed: ['p90'] },
-  { money: 2000, label: 'mid ($2000, $1500 class + bizon)', allowed: ['mp7', 'ump45', 'mp5', 'bizon'] },
+  { money: 2400, label: 'rich-force ($2400, budget rifle + p90 roll)', allowed: ['galil', 'famas', 'ssg08', 'p90'] },
+  { money: 1600, label: 'mid ($1600, $1500 SMG class + bizon)', allowed: ['mp7', 'ump45', 'mp5', 'bizon'] },
   { money: 1300, label: 'low-mid ($1300, team flavor tier)', allowed: ['mp9', 'mac10'] },
 ]
 
@@ -81,12 +83,13 @@ for (const band of BANDS) {
   check('team flavor holds: T never buys mp9, CT never buys mac10', !tSawCtGun && !ctSawTGun)
 }
 
-// Coverage: with enough trials, every one of the 6 new SMGs appears somewhere
+// Coverage: with enough trials, every one of the 6 SMGs appears somewhere
+// (SMG class at $1500-1699 + team SMG at $1300)
 {
   const seen = new Set<WeaponId>()
   for (let i = 0; i < 2000; i++) {
     const team: TeamId = Math.random() < 0.5 ? 'T' : 'CT'
-    const money = [2500, 2000, 1300, 1500][Math.floor(Math.random() * 4)]
+    const money = [1600, 1300, 1500, 2400][Math.floor(Math.random() * 4)]
     const p = mkPlayer(team, money)
     botBuy(m, p)
     for (const w of p.inventory) if (NEW_SMGS.includes(w)) seen.add(w)
@@ -96,22 +99,26 @@ for (const band of BANDS) {
     `missing: ${missing.join(',') || 'none'}`)
 }
 
-// p90 tier is REACHABLE only below the rifle branches (T < $2700, CT < $3100);
-// max remainder (CT 3099-2350=749) never fits helm — kevlar only, or bare
+// p90 tier is now a 25% roll inside the budget-rifle band (≥$2350 below the
+// team-rifle price); rifle precedence above it is unchanged
 {
-  const p = mkPlayer('CT', 3050); botBuy(m, p)
-  check('$3050 CT bot takes p90 + plain kevlar (remainder 700 ≥ 650)',
-    p.inventory.includes('p90') && p.armor === 100 && p.helmet === false,
-    `inv=${p.inventory.join(',')} armor=${p.armor} helm=${p.helmet}`)
-  const p2 = mkPlayer('T', 2400); botBuy(m, p2)
-  check('$2400 T bot takes p90 bare (armor does not fit)', p2.inventory.includes('p90') && p2.armor === 0,
-    `inv=${p2.inventory.join(',')} armor=${p2.armor}`)
+  let sawP90 = 0, sawBudget = 0
+  for (let i = 0; i < 300; i++) {
+    const p = mkPlayer('T', 2400); botBuy(m, p)
+    if (p.inventory.includes('p90')) sawP90++
+    if (p.inventory.includes('galil')) sawBudget++
+  }
+  check('$2400 T bots mix p90 (~25%) with galil (~75%)', sawP90 > 20 && sawBudget > 150, `p90=${sawP90} galil=${sawBudget}`)
   const p3 = mkPlayer('T', 2800); botBuy(m, p3)
-  check('rifle precedence intact: $2800 T bot still buys ak47 over p90',
+  check('rifle precedence intact: $2800 T bot still buys ak47 over SMGs/budget',
     p3.inventory.includes('ak47') && !p3.inventory.includes('p90'), `inv=${p3.inventory.join(',')}`)
-  const p4 = mkPlayer('CT', 3500); botBuy(m, p4)
-  check('rifle precedence intact: $3500 CT bot still buys m4 over p90',
-    p4.inventory.includes('m4') && !p4.inventory.includes('p90'), `inv=${p4.inventory.join(',')}`)
+  let legalFull = true
+  for (let i = 0; i < 50; i++) {
+    const p = mkPlayer('CT', 3500); botBuy(m, p)
+    const prim = p.inventory.find(w => WEAPONS[w]?.slot === 1)
+    if (prim && !['m4', 'm4a1s', 'aug'].includes(prim)) legalFull = false
+  }
+  check('rifle precedence intact: $3500 CT bots take full rifles (m4/m4a1s/aug)', legalFull)
 }
 
 // Eco floor intact: below $1250 still falls through to deagle/p250/kevlar

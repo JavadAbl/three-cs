@@ -286,24 +286,25 @@ export class Effects {
     this.items.push({ obj: m, born: performance.now(), life: 0.075, kind: 'tracer' })
   }
 
-  muzzleFlash(at: THREE.Vector3) {
+  /** small=true: suppressed muzzle (m4a1s/usp/mp5) — tiny star, dim glow, no light punch */
+  muzzleFlash(at: THREE.Vector3, small = false) {
     // hot star core
     const s = this.sprite(this.starSpriteTex, at, true)
-    s.scale.set(0.22, 0.22, 0.22)
+    s.scale.set(0.22, 0.22, 0.22).multiplyScalar(small ? 0.4 : 1)
     this.items.push({ obj: s, born: performance.now(), life: 0.055, kind: 'flash' })
     // wide glow
     const g = this.sprite(this.flashSpriteTex, at, true)
-    g.scale.set(0.4, 0.4, 0.4)
+    g.scale.set(0.4, 0.4, 0.4).multiplyScalar(small ? 0.35 : 1)
     this.items.push({ obj: g, born: performance.now(), life: 0.08, kind: 'flash' })
     // smoke wisp
     const sm = this.sprite(this.smokeSpriteTex, at, false, 0xcbb693)
-    sm.scale.set(0.1, 0.1, 0.1)
+    sm.scale.set(0.1, 0.1, 0.1).multiplyScalar(small ? 0.5 : 1)
     this.items.push({
       obj: sm, born: performance.now(), life: 0.6, kind: 'smoke',
       vel: new THREE.Vector3(0, 0.7, 0),
     })
     this.flashLight.position.copy(at)
-    this.flashLight.intensity = 3.2
+    this.flashLight.intensity = small ? 0.9 : 3.2
   }
 
   impact(at: THREE.Vector3, normal?: THREE.Vector3, surf?: string) {
