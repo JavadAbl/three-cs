@@ -862,3 +862,25 @@ Stage Summary:
 - All WEAPONS_PLAN.md phases 0-9 are now committed AND pushed; GitHub remote fully in sync
 - Remaining open item is 9.3 asset acceptance: 166 staged oggs (public/staging/sounds) + 42 staged buy-menu icons (public/staging/icons), gitignored until explicit user OK; acceptance = mv + git add per batch + one acceptance commit each
 - Next: user decision on the staged asset batches (or direction beyond the plan)
+
+---
+Task ID: 44
+Agent: Super Z (main agent)
+Task: 9.3 asset acceptance (user: "ok they are good") + the icon-orientation fix (user: "buy icons should rotate 180 degree. the weapons magazine are in top.")
+
+Work Log:
+- USER FEEDBACK TRIAGE: "they are good" = both staged batches accepted; the mag-on-top complaint needed a fix BEFORE the icons landed. Root-cause hunt: the icon rasterizer maps view-space +y to INCREASING image row, so the un-rolled gun view matrix (RotX(10)·RotY(-70)) projected every weapon vertically mirrored — mags up, muzzle right. Confirmed by 2x-zoom VLM probe on old-vs-new ak47 (old: "magazine above, muzzle right"; new: "magazine below, muzzle left").
+- FIX: gen-buy-icons.ts viewMatrix('gun') rolled 180° about the view axis (RotZ(180)·RotX(10)·RotY(-70)). Nades NOT rolled (pin ring must read at top), gear NOT rolled (frontal icons). Regenerated 42 icons; deterministic pixel-diff vs old-rotated-180: every diff pixel within distance 0-1 of the silhouette boundary (rasterizer corner-vs-center conventions wobble ≤1px under negation), nade/gear byte-identical.
+- VLM LESSON (recorded): 1x contact-sheet reads are unreliable for orientation ("m4/mp9 upside-down" were hallucinations); 2x-zoom single-pair probes are decisive. Geometry is the ground truth: every gun mag has localY < 0 except p90 (+0.056, anatomically top-mounted — exempted in the invariant).
+- NEW DURABLE CHECK: scripts/check-icon-orientation.ts (35 checks) — source-pins the roll (RotZ present, nade/gear lines unrolled) + per-weapon magazine-below-BARREL-LINE anatomy (tube-mag shotguns measure against the muzzle-tip height, not the stock-dragged body center — that reference produced false failures for nova/xm1014/sawedoff). Added to the AGENTS.md verification bar.
+- ACCEPTANCE EXECUTION (plan 9.3 recipe): 0 filename collisions; mv staging/sounds/*.ogg → assets (251 total committed) + mv staging/icons/*.png → assets (42); both READMEs updated to accepted status (2026-10, orientation fix noted); staging dirs left empty for future batches.
+- TEST UPDATES for post-acceptance locations: audio-map futureNames → accepted-or-staged; phase 6/7/8 sample-on-disk → accepted-or-staged; phase9 icon-dir → accepted-or-staged (generator still regenerates into staging).
+- FLAKE FIX: test-phase6-bots "non-shotgun bot fire unchanged" was ~10% flaky (botShoot single-ray path gates on a real Math.random() hit roll, hitP capped 0.9) — seeded Math.random()=0 around the call; 8/8 stable after.
+- REGRESSION BATTERY: audio-map 329, phase9 21 + NEW check-icon-orientation 35, buymenu 214, phase3 130 / phase4 125 / phase4-bots 25 / phase5 182 / phase5-bots 11 / phase6 109 / phase6-bots 18 / phase7 98 / phase7-bots 22 / phase8 81 / phase8-bots 15, money green; E2E phases 3-9 (phase9 119/119) + aimhead + bugfixes ALL PASS; tsc clean on touched scope (pre-existing legacy errors untouched); accepted assets serve HTTP 200 through :3000.
+- COMMITS: 799367b (sounds acceptance, 166 oggs) + 062845a (icons acceptance + orientation fix + verification tooling).
+
+Stage Summary:
+- WEAPONS_PLAN.md is now FULLY closed: phases 0-9 complete AND 9.3 asset acceptance landed — the repo carries the complete 251-file authentic sound set and the 42-entry buy-menu icon set as production assets
+- The buy menu reads correctly now: magazines hang down, muzzle left, 1.6-spirit silhouettes with icons live from /assets/icons (loader's accepted-first branch)
+- New durable guard in the verification bar (check-icon-orientation) pins both the roll and the per-weapon mag anatomy so a future viewmodel or generator change cannot silently re-flip the icons
+- Next: anything beyond the plan — map work, movement feel, polish, deployment hardening — user's call
