@@ -28,6 +28,8 @@ export type WeaponId =
   | 'scar20' | 'g3sg1'
   // Phase 6 shotguns — ids match the staged audio map (shared/weapons-audio.ts)
   | 'nova' | 'xm1014' | 'mag7' | 'sawedoff'
+  // Phase 7 machine guns — ids match the staged audio map (shared/weapons-audio.ts)
+  | 'm249' | 'negev'
 
 // Menu category. Weapons keep their own class for stats/logic; the buy menu
 // groups them under fixed CS 1.6 numbering. 'grenade' and 'gear' weapons land
@@ -81,6 +83,7 @@ export interface WeaponDef {
   recoilPattern?: number     // deterministic recoil seed (Phase 9 parameterization)
   killRewardClass?: KillRewardClass // class-based rewards for new weapons
   throwable?: { kind: 'flash' | 'smoke' | 'he' | 'molotov' | 'decoy' } // Phase 8
+  accuracyRamp?: { startSpread: number; shots: number } // Phase 7 spool: consecutive shots settle spread from startSpread to accurate (negev)
 }
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
@@ -317,6 +320,31 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     armorPen: 0.75, falloff10m: 0.45, auto: false, killReward: 900, accurate: 1.0,
     fireMode: 'semi', pellets: 8, pelletSpread: 5.2, killRewardClass: 'shotgun', // T cut-down: hardest falloff, wildest cone
   },
+  // ---------------------------------------------- Phase 7 machine guns (CS:GO values)
+  // Stats per CS:GO wiki (fandom infoboxes, fetched 2026-10): m249 31 dmg /
+  // 80% pen / 750 RPM (80ms) / 100+200 / 195 speed (3.9 m/s) / $5200;
+  // negev 35 dmg / 71% pen / 800 RPM (75ms) / 150+300 / 150 speed (3.0 m/s —
+  // the slowest weapon in the game, slower than the AWP) / $1700
+  // post-rebalance price per plan 7. Both: $300 'heavy' kill-reward class,
+  // 5.7s box reload, auto. The negev carries the Phase 7 accuracy ramp
+  // (plan 7: "first bullets wild, settles while firing"): the first ~15
+  // consecutive shots spray off a 4.4-degree cone, then the spread settles
+  // to laser accuracy — the spool IS the weapon identity, and holding the
+  // trigger is the skill. m249 trades rate for a steadier base spread.
+  // Bots never buy MGs (CS-realistic, plan 7.4) — the ladder in bots.ts
+  // never references these ids.
+  negev: {
+    id: 'negev', name: 'Negev', slot: 1, category: 'heavy', price: 1700, damage: 35, hsMult: 4, legMult: 0.75,
+    fireDelay: 75, mag: 150, reserve: 300, reloadMs: 5700, moveSpeed: 3.0,
+    armorPen: 0.71, falloff10m: 0.98, auto: true, killReward: 300, accurate: 0.10,
+    fireMode: 'auto', accuracyRamp: { startSpread: 4.4, shots: 15 }, killRewardClass: 'heavy', // 150-rd belt box, accuracy-ramp spool
+  },
+  m249: {
+    id: 'm249', name: 'M249', slot: 1, category: 'heavy', price: 5200, damage: 31, hsMult: 4, legMult: 0.75,
+    fireDelay: 80, mag: 100, reserve: 200, reloadMs: 5700, moveSpeed: 3.9,
+    armorPen: 0.80, falloff10m: 0.98, auto: true, killReward: 300, accurate: 0.55,
+    fireMode: 'auto', killRewardClass: 'heavy', // belt-fed SAW, 100-rd box mag
+  },
 }
 
 // ------------------------------------------------------------ buy menu
@@ -434,6 +462,11 @@ export function pelletSpreadOf(w: WeaponDef): number {
 /** Scoped camera FOV; 16 preserves the engine's current AWP feel. */
 export function zoomFovOf(w: WeaponDef): number {
   return w.zoomFov ?? 16
+}
+
+/** Negev-style spool (Phase 7): null = no ramp — spread is just `accurate`. */
+export function accuracyRampOf(w: WeaponDef): { startSpread: number; shots: number } | null {
+  return w.accuracyRamp ?? null
 }
 
 /** Class-based kill reward lookup (Phase 9 derives new weapons from class). */

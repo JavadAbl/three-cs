@@ -789,7 +789,15 @@ io.on('connection', (socket) => {
     const t = now()
     // fire rate + ammo validation. Burst guns (plan 5.2): in-burst shots are
     // gated by burstDelayMs and capped at burstRounds per window; the next
-    // burst needs a fireDelay gap — the anti-cheat lives HERE, not client-side
+    // burst needs a fireDelay gap — the anti-cheat lives HERE, not client-side.
+    //
+    // Machine guns (plan 7.1, m249/negev): sustained ~13 rps needs NO batch
+    // validation and puts ZERO pressure on the 20 Hz tick — this gate is two
+    // subtractions and a compare per claim, the ray/LOS work happens on the
+    // claim event itself (never per-tick), and weapons never appear in the
+    // tick loop. The MGs ride this exact same gate: 80ms/75ms fireDelay with
+    // the -12ms jitter tolerance (see test-phase7-e2e: 25 sustained claims
+    // all accepted, 40ms spam rejected).
     if (fireModeOf(w) === 'burst') {
       const gap = t - p.lastShotAt
       if (gap >= w.fireDelay - 12) {

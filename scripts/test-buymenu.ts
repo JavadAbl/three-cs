@@ -2,7 +2,8 @@
 // 1. every weapon has a category (backfill complete)
 // 2. BUY_MENU = the six fixed 1.6 slots, numbering 1-6
 // 3. BUY_ENTRIES derived from WEAPONS + GEAR (old flat BUY_ITEMS dissolved)
-// 4. per-category grouping is correct (incl. empty shotgun/heavy today)
+// 4. per-category grouping is correct (all six categories live — Phase 7
+//    filled the heavy/MACHINE GUNS slot with negev + m249)
 // 5. single source of truth: client and server shims resolve to the SAME
 //    module (object identity) — Phase 1 killed the duplicated tables; this
 //    catches anyone re-duplicating stats into either shim
@@ -35,6 +36,8 @@ const EXPECTED_CAT: Record<string, WeaponCategory> = {
   // Phase 5 rifles + snipers
   m4a1s: 'rifle', galil: 'rifle', famas: 'rifle', sg553: 'rifle', aug: 'rifle',
   ssg08: 'rifle', scar20: 'rifle', g3sg1: 'rifle',
+  // Phase 7 machine guns
+  negev: 'heavy', m249: 'heavy',
 }
 
 // --- 1. category backfill ---
@@ -66,6 +69,8 @@ const want = [
   'ssg08:1700', 'scar20:5000@CT', 'g3sg1:5000@T', 'awp:4750',
   // Phase 6 shotguns (shotgun category: 4 entries, first non-empty page)
   'nova:1050', 'xm1014:2000', 'mag7:1300@CT', 'sawedoff:1100@T',
+  // Phase 7 machine guns (heavy category goes live)
+  'negev:1700', 'm249:5200',
   'kevlar:650', 'kevlarhelm:1000',
 ]
 check('BUY_ENTRIES derived set + prices + teams', JSON.stringify(got) === JSON.stringify(want), got.join(', '))
@@ -77,7 +82,7 @@ const groups: Record<string, string[]> = {
   pistol: ['deagle', 'p250', 'fiveseven', 'tec9', 'cz75', 'elites', 'hkp2000', 'revolver', 'taser'],
   shotgun: ['nova', 'xm1014', 'mag7', 'sawedoff'], smg: ['mp5', 'mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'],
   rifle: ['ak47', 'm4', 'm4a1s', 'galil', 'famas', 'sg553', 'aug', 'ssg08', 'scar20', 'g3sg1', 'awp'],
-  heavy: [], equipment: ['kevlar', 'kevlarhelm'],
+  heavy: ['negev', 'm249'], equipment: ['kevlar', 'kevlarhelm'],
 }
 check('pistol category fits the 9-digit buy menu cap', groups.pistol.length <= 9)
 for (const [key, ids] of Object.entries(groups)) {

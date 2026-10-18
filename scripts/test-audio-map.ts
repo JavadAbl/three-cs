@@ -35,9 +35,11 @@ const futureIds = Object.keys(WEAPON_AUDIO).filter(id => !(id in WEAPONS))
 for (const id of liveIds) {
   check(`WEAPON_AUDIO covers live weapon ${id}`, !!WEAPON_AUDIO[id])
 }
-// Phase 6 live: future roster shrank to the Phase 7-8 remainder (2 MGs,
-// grenades via GRENADE_AUDIO) — recalibrate the floor.
-check('future roster mapped (>= 2 entries — phases 7-8 remain)', futureIds.length >= 2, `${futureIds.length} future ids`)
+// Phase 7 live: the future weapon roster is now EMPTY — all 37 guns (incl.
+// the m249/negev MGs) are live weapons; the only future names left are the
+// Phase 8 grenade samples via GRENADE_AUDIO/GRENADE_COMMON.
+check('future weapon roster empty (all 37 guns live — Phase 7 closed the MG gap)',
+  futureIds.length === 0, `${futureIds.length} future ids`)
 check('no future id collides with a live WEAPONS id',
   futureIds.every(id => !(id in WEAPONS)))
 

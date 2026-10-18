@@ -2,7 +2,7 @@
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { io } from 'socket.io-client'
-import { WEAPONS, ECONOMY, ROUND, GEAR, fireModeOf, scopeLevelsOf, zoomFovOf, pelletsOf, pelletSpreadOf } from './weapons'
+import { WEAPONS, ECONOMY, ROUND, GEAR, fireModeOf, scopeLevelsOf, zoomFovOf, pelletsOf, pelletSpreadOf, accuracyRampOf } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { pelletDirs } from '../../shared/pellets'
 import { MAPS } from './mapdata'
@@ -104,6 +104,9 @@ const KICK: Partial<Record<WeaponId, number>> = {
   ssg08: 1.6, scar20: 1.8, g3sg1: 1.9,
   // Phase 6 shotguns — a shell kicks like a mule
   nova: 2.4, xm1014: 1.5, mag7: 2.6, sawedoff: 2.8,
+  // Phase 7 machine guns — heavy platforms, moderate per-shot kick; the
+  // negev's kick fades with the spool (see fireShot ramp scaling)
+  m249: 0.5, negev: 0.55,
 }
 
 export class Engine {
@@ -151,6 +154,11 @@ export class Engine {
   private reloadEndsAt = 0
   private reloadSfxTimers: ReturnType<typeof setTimeout>[] = []
   private recoil = 0
+  // Phase 7 accuracy-ramp spool (negev): consecutive-shot counter. Grows
+  // with every sustained shot, hard-resets on a >400ms firing pause, weapon
+  // switch, reload, round start or death. spreadDeg() lerps the negev's
+  // spread from the wild startSpread down to laser `accurate` as it rises.
+  private sustained = 0
   private scoped = false
   private vmGroup: THREE.Group | null = null
   private vmCache = new Map<string, ViewModel>()
@@ -308,7 +316,7 @@ export class Engine {
           this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.eyeY = y
           if (typeof yaw === 'number') { this.yaw = yaw; this.pitch = 0 }
         },
-        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, map: this.mapDef.id, mapv: this.mapDef.version, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen, weapon: this.inventory[this.wIdx], scopeLevel: this.scopeLevel, fov: Math.round(this.camera.fov * 100) / 100, scoped: this.scoped }),
+        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, map: this.mapDef.id, mapv: this.mapDef.version, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen, weapon: this.inventory[this.wIdx], scopeLevel: this.scopeLevel, fov: Math.round(this.camera.fov * 100) / 100, scoped: this.scoped, spread: Math.round(this.spreadDeg() * 100) / 100, sustained: this.sustained }),
         ammo: () => ({ weapon: this.inventory[this.wIdx], ammo: this.ammo[this.inventory[this.wIdx]], all: { ...this.ammo }, reloadEndsIn: Math.max(0, this.reloadEndsAt - performance.now()) }),
         reload: () => this.tryReload(),
         fire: () => this.tryFire(),
@@ -679,6 +687,7 @@ export class Engine {
         audio.roundStart()
         // round reset
         this.recoil = 0
+        this.sustained = 0
         this.scopeLevel = 0
         this.scoped = false
         this.setScopeLevel(0)
@@ -950,6 +959,7 @@ export class Engine {
       this.cancelReloadSfx()
       this.recoil = 0
       this.burstRemaining = 0
+      this.sustained = 0
       this.setScopeLevel(0)
       this.rebuildViewmodel()
       this.socket?.emit('switch', { wIdx: this.wIdx })
@@ -1038,7 +1048,17 @@ export class Engine {
   private spreadDeg(): number {
     const w = this.currentWeapon()
     let s = w.accurate
-    s += this.recoil * (w.auto ? 0.3 : 0.55)
+    // Phase 7 spool (negev): cold start sprays a wild cone, consecutive shots
+    // settle it linearly to base accuracy; recoil's spread contribution
+    // fades with the same ramp ("recoil eliminated after spool" — wiki)
+    let recoilMul = 1
+    const ramp = accuracyRampOf(w)
+    if (ramp) {
+      const t = Math.min(this.sustained / ramp.shots, 1)
+      s = ramp.startSpread + (w.accurate - ramp.startSpread) * t
+      recoilMul = 1 - 0.8 * t
+    }
+    s += this.recoil * (w.auto ? 0.3 : 0.55) * recoilMul
     const hSpeed = Math.hypot(this.vel.x, this.vel.z)
     s += (hSpeed / w.moveSpeed) * 1.9
     if (!this.onGround) s += 4.5
@@ -1084,9 +1104,15 @@ export class Engine {
       if (am && am.reserve > 0) this.tryReload()
       return
     }
+    const prevShotAt = this.lastShotAt
     this.lastShotAt = now
     if (fm === 'burst') this.burstRemaining--
     am.mag--
+    // Phase 7 spool (negev accuracy ramp): consecutive-shot counter — a
+    // >400ms firing pause (trigger release, reload, desync) drops the gun
+    // back to its cold wild cone; switch/round/death reset it explicitly
+    if (now - prevShotAt > 400) this.sustained = 0
+    this.sustained++
 
     // direction with spread
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion)
@@ -1158,9 +1184,12 @@ export class Engine {
       this.fx.shell(muzzle, right)
     }
 
-    // recoil
+    // recoil — ramped guns (negev) fade the kick with the spool: "recoil
+    // is eliminated after sustained fire" (CS:GO wiki) — the laser settles
     this.recoil = Math.min(this.recoil + 1, 18)
-    const kick = (KICK[w.id] ?? 0.5) * (Math.PI / 180)
+    const ramp = accuracyRampOf(w)
+    const spoolT = ramp ? Math.min(this.sustained / ramp.shots, 1) : 0
+    const kick = (KICK[w.id] ?? 0.5) * (Math.PI / 180) * (ramp ? 1 - 0.75 * spoolT : 1)
     this.pitch += kick
     this.yaw += (Math.random() - 0.5) * kick * 0.6 + Math.sin(this.recoil * 2.1) * 0.00035
     this.vmKick = 1

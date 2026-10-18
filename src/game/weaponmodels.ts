@@ -737,6 +737,103 @@ function buildShotgun(id: keyof typeof SHOTGUNS, team: TeamId): ViewModel {
   }
 }
 
+// ---------------------------------------------------------------- Phase 7 MGs
+// Machine-gun family (plan 7.3: "belt/mag box on the rifle family"). Both are
+// belt-fed box-mag heavies: fat receiver, vented barrel shroud, bipod folded
+// under the front, and a solid under-receiver ammo BOX as the mag group (it
+// drops on reload like mag7's box mag — real MGs swap the whole box).
+// m249 = conventional long SAW: carry handle, gas block, fixed stock.
+// negev = compact IMI design: stubby chunky shroud with vent holes, slightly
+// raked box, shorter everything. No bolt group — full-auto guns eject shells
+// without a rechamber cycle.
+
+interface MGSpec {
+  bodyLen: number; bodyH: number; bodyW: number; bodyCol: number
+  barrelR: number; barrelLen: number; muzzleZ: number
+  shroudR: number; shroudLen: number        // perforated barrel shroud
+  boxW: number; boxH: number; boxD: number; boxCol: number
+  stockLen: number; stockCol: number
+  carryHandle: boolean
+  gasBlock: boolean                          // m249 front gas system
+  boxRake: number                            // negev box sits slightly angled
+}
+
+const MGS: Record<'m249' | 'negev', MGSpec> = {
+  m249: {
+    bodyLen: 0.34, bodyH: 0.085, bodyW: 0.055, bodyCol: 0x2b3428,
+    barrelR: 0.011, barrelLen: 0.30, muzzleZ: -0.72,
+    shroudR: 0.017, shroudLen: 0.22,
+    boxW: 0.055, boxH: 0.13, boxD: 0.075, boxCol: 0x1e2124,
+    stockLen: 0.24, stockCol: 0x2b3428,
+    carryHandle: true, gasBlock: true, boxRake: 0,
+  },
+  negev: {
+    bodyLen: 0.30, bodyH: 0.09, bodyW: 0.058, bodyCol: 0x2a2d30,
+    barrelR: 0.012, barrelLen: 0.24, muzzleZ: -0.60,
+    shroudR: 0.023, shroudLen: 0.24,
+    boxW: 0.06, boxH: 0.12, boxD: 0.082, boxCol: 0x232629,
+    stockLen: 0.19, stockCol: 0x25282a,
+    carryHandle: true, gasBlock: false, boxRake: 0.12,
+  },
+}
+
+function buildMG(id: keyof typeof MGS, team: TeamId): ViewModel {
+  const s = MGS[id]
+  const g = new THREE.Group()
+  const bodyZ = -s.bodyLen / 2 + 0.03
+  const frontZ = bodyZ - s.bodyLen / 2
+  // receiver — tall slab + top cover seam
+  P(g, box(s.bodyW, s.bodyH, s.bodyLen), 'metal_dark', { color: s.bodyCol }, 0, 0.02, bodyZ)
+  P(g, box(s.bodyW - 0.008, 0.012, s.bodyLen * 0.92), 'metal_dark', { color: 0x1a1d20 }, 0, 0.02 + s.bodyH / 2 + 0.004, bodyZ)
+  // feed-tray cover hinge + side charging handle
+  P(g, box(0.024, 0.009, 0.05), 'metal_dark', { color: 0x101214 }, s.bodyW / 2 + 0.005, 0.032, bodyZ + 0.05)
+  P(g, box(0.006, 0.03, 0.014), 'metal_dark', { color: 0x101214 }, s.bodyW / 2 + 0.004, 0.028, bodyZ + 0.02)
+  // carry handle over the top cover (both MGs — lugging weight is the look)
+  if (s.carryHandle) {
+    P(g, box(0.016, 0.024, id === 'negev' ? 0.13 : 0.10), 'metal_dark', { color: 0x1a1d20 }, 0, 0.02 + s.bodyH / 2 + 0.028, bodyZ + 0.02)
+    P(g, box(0.012, 0.018, 0.012), 'metal_dark', { color: 0x101214 }, 0, 0.02 + s.bodyH / 2 + 0.016, bodyZ + (id === 'negev' ? 0.08 : 0.06))
+    P(g, box(0.012, 0.018, 0.012), 'metal_dark', { color: 0x101214 }, 0, 0.02 + s.bodyH / 2 + 0.016, bodyZ - 0.03)
+  }
+  // barrel + perforated shroud + muzzle
+  P(g, cyl(s.barrelR, s.barrelLen), 'steel_blued', { roughnessMul: 0.6 }, 0, 0.02, s.muzzleZ + s.barrelLen / 2, q(90))
+  P(g, cyl(s.shroudR, s.shroudLen, 14), 'metal_dark', { roughnessMul: 0.75, color: s.bodyCol }, 0, 0.02, s.muzzleZ + s.shroudLen / 2 + 0.02, q(90))
+  for (let i = 0; i < 4; i++) {
+    P(g, cyl(s.shroudR + 0.0015, 0.006, 14), 'metal_dark', { color: 0x16181a }, 0, 0.02, s.muzzleZ + 0.05 + i * (s.shroudLen / 4.4), q(90))
+  }
+  // bipod folded forward under the shroud (legs parallel to the barrel)
+  P(g, cyl(0.004, 0.1, 8), 'metal_dark', { color: 0x16181a }, 0.012, 0.02 - s.shroudR - 0.013, s.muzzleZ + s.shroudLen / 2 + 0.045, q(90), q(9))
+  P(g, cyl(0.004, 0.1, 8), 'metal_dark', { color: 0x16181a }, -0.012, 0.02 - s.shroudR - 0.013, s.muzzleZ + s.shroudLen / 2 + 0.045, q(90), -q(9))
+  // m249 gas block + front sight / negev raised front sight
+  if (s.gasBlock) {
+    P(g, box(0.018, 0.028, 0.022), 'metal_dark', { color: 0x1a1d20 }, 0, 0.03, s.muzzleZ + s.shroudLen + 0.015)
+    P(g, cyl(0.004, 0.05, 8), 'steel_blued', {}, 0, 0.038, s.muzzleZ + s.shroudLen - 0.02, 0, 0, q(90))
+  }
+  P(g, box(0.006, 0.034, 0.006), 'metal_dark', { color: 0x16181a }, 0, 0.05, s.muzzleZ + 0.028)
+  // handguard shroud taper into the receiver
+  P(g, box(s.bodyW - 0.006, s.bodyH - 0.024, 0.05), 'metal_dark', { color: s.bodyCol }, 0, 0.012, frontZ + 0.01)
+  // grip + trigger
+  P(g, box(0.005, 0.028, 0.008), 'metal_dark', { color: 0x101214 }, 0, -0.03, -0.02, 0.15)
+  P(g, box(0.034, 0.095, 0.05), 'polymer_black', { density: 9, color: 0x1f2224 }, 0, -0.072, 0.02, 0.24)
+  // ammo box (mag group — drops on reload): top latch ridge + front stub
+  const mag = new THREE.Group()
+  g.add(mag)
+  P(mag, box(s.boxW, s.boxH, s.boxD), 'polymer_black', { color: s.boxCol }, 0, -0.045 - s.boxH / 2, frontZ + 0.075, s.boxRake)
+  P(mag, box(s.boxW + 0.004, 0.014, s.boxD + 0.006), 'metal_dark', { color: 0x141618 }, 0, -0.045 - 0.007, frontZ + 0.075, s.boxRake)
+  P(mag, box(s.boxW - 0.02, 0.02, 0.012), 'metal_dark', { color: 0x101214 }, 0, -0.045 - 0.02, frontZ + 0.075 + s.boxD / 2 + 0.004, s.boxRake)
+  // belt of rounds feeding out of the tray into the receiver front
+  P(g, box(0.03, 0.012, 0.03), 'metal_dark', { color: 0x4a3b22 }, 0, -0.034, frontZ + 0.02)
+  // stock: fixed polymer + butt pad (m249 long, negev stubby)
+  P(g, box(s.bodyW - 0.004, 0.062, s.stockLen), 'polymer_black', { color: s.stockCol }, 0, 0.006, bodyZ + s.bodyLen / 2 + s.stockLen / 2 - 0.01)
+  P(g, box(s.bodyW, 0.085, 0.015), 'polymer_black', { color: 0x16181a }, 0, -0.004, bodyZ + s.bodyLen / 2 + s.stockLen - 0.012)
+  buildGloves(g, team,
+    { x: 0, y: -0.068, z: 0.0, rx: 0.3 },
+    { x: 0, y: -0.028, z: frontZ - 0.05, rx: 0.34 })
+  return {
+    group: g, tip: new THREE.Vector3(0, 0.02, s.muzzleZ), mag,
+    eject: new THREE.Vector3(s.bodyW / 2 + 0.004, 0.045, bodyZ + 0.06),
+  }
+}
+
 // ---------------------------------------------------------------- MP5-SD
 function buildMP5(team: TeamId): ViewModel {
   const g = new THREE.Group()
@@ -1265,6 +1362,8 @@ export function buildViewModel(weapon: WeaponId, team: TeamId): ViewModel {
       return buildSniper(weapon, team)
     case 'nova': case 'xm1014': case 'mag7': case 'sawedoff':
       return buildShotgun(weapon, team)
+    case 'm249': case 'negev':
+      return buildMG(weapon, team)
     case 'mp5': return buildMP5(team)
     case 'mp9': case 'mac10': case 'mp7': case 'ump45':
       return buildSMG(weapon, team)
@@ -1361,6 +1460,24 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
       P(g, cyl(0.012, long ? 0.26 : 0.2, 10), 'metal_dark', { color: 0x232629 }, 0, -0.004, long ? -0.28 : -0.22, q(90))
       P(g, box(0.036, 0.045, long ? 0.1 : 0.08), 'polymer_black', { color: 0x25282a }, 0, -0.008, -0.2)
       P(g, box(0.032, 0.06, 0.12), 'polymer_black', { color: 0x26292c }, 0, 0.005, 0.1)
+      break
+    }
+    // ---- Phase 7 MGs: heavy silhouette — long receiver, shrouded barrel,
+    // under-box mag, bipod legs under the front
+    case 'm249': case 'negev': {
+      const long = weaponId === 'm249'
+      P(g, box(0.052, 0.065, long ? 0.32 : 0.28), 'metal_dark',
+        { color: long ? 0x2b3428 : 0x2a2d30 }, 0, 0.01, long ? -0.08 : -0.06)
+      P(g, cyl(0.011, long ? 0.26 : 0.2), 'steel_blued', {}, 0, 0.018, long ? -0.36 : -0.29, q(90))
+      P(g, cyl(long ? 0.017 : 0.023, 0.2, 12), 'metal_dark', { roughnessMul: 0.75, color: long ? 0x2b3428 : 0x2a2d30 }, 0, 0.018, long ? -0.31 : -0.26, q(90))
+      // ammo box under the receiver front + latch ridge
+      P(g, box(0.05, 0.11, 0.07), 'polymer_black', { color: long ? 0x1e2124 : 0x232629 }, 0, -0.06, long ? -0.16 : -0.13, long ? 0 : 0.1)
+      P(g, box(0.054, 0.014, 0.076), 'metal_dark', { color: 0x141618 }, 0, -0.012, long ? -0.16 : -0.13, long ? 0 : 0.1)
+      // folded bipod legs + top carry hint
+      P(g, cyl(0.004, 0.09, 8), 'metal_dark', { color: 0x16181a }, 0.012, -0.03, long ? -0.38 : -0.31, q(90), q(9))
+      P(g, cyl(0.004, 0.09, 8), 'metal_dark', { color: 0x16181a }, -0.012, -0.03, long ? -0.38 : -0.31, q(90), -q(9))
+      P(g, box(0.014, 0.02, 0.1), 'metal_dark', { color: 0x1a1d20 }, 0, 0.058, long ? -0.1 : -0.08)
+      P(g, box(0.034, 0.05, 0.13), 'polymer_black', { color: long ? 0x2b3428 : 0x25282a }, 0, 0.006, 0.1)
       break
     }
     case 'mag7': {
