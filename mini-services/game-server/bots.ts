@@ -196,9 +196,19 @@ export function botBuy(m: Match, p: PlayerState) {
     return true
   }
   if (m.round === 1) {
-    // pistol round
-    if (p.money >= 700 && Math.random() < 0.5) buy('deagle')
-    if (p.money >= 650) armor(false)
+    // pistol round: team-flavored sidearm table (plan 3.4) — replaces the old
+    // `Math.random() < 0.5 → deagle` hack. $800 start: upgrade pistol OR
+    // kevlar + stock starter, never deagle (CS pistol rounds don't deagle).
+    const roll = Math.random()
+    if (p.team === 'T') {
+      if (roll < 0.35) buy('tec9')            // $500, aggressive T sidearm
+      else if (roll < 0.55) buy('p250')       // $300
+    } else {
+      if (roll < 0.30) buy('fiveseven')       // $500, CT armor-puncher
+      else if (roll < 0.45) buy('cz75')       // $500, full-auto gambit
+      else if (roll < 0.55) buy('p250')       // $300
+    }
+    if (p.money >= 650) armor(false)          // else: kevlar + stock starter
     return
   }
   const awpChance = m.round > 2 ? 0.15 : 0
@@ -207,7 +217,9 @@ export function botBuy(m: Match, p: PlayerState) {
   if (p.money >= WEAPONS[rifle].price + 650) { buy(rifle); armor(true); return }
   if (p.money >= WEAPONS[rifle].price) { buy(rifle); return }
   if (p.money >= 1500) { buy('mp5'); if (p.money >= 650) armor(false); return }
+  // eco / force rounds: deagle if they can, p250 if they almost can
   if (p.money >= 700) buy('deagle')
+  else if (p.money >= 300 && Math.random() < 0.5) buy('p250')
   if (p.money >= 650) armor(false)
 }
 

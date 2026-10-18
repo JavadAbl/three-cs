@@ -26,6 +26,9 @@ const VALID_CATS: WeaponCategory[] = ['pistol', 'smg', 'shotgun', 'rifle', 'heav
 const EXPECTED_CAT: Record<string, WeaponCategory> = {
   knife: 'gear', glock: 'pistol', usp: 'pistol', deagle: 'pistol',
   mp5: 'smg', ak47: 'rifle', m4: 'rifle', awp: 'rifle', c4: 'gear',
+  // Phase 3 pistols
+  p250: 'pistol', fiveseven: 'pistol', tec9: 'pistol', cz75: 'pistol',
+  elites: 'pistol', hkp2000: 'pistol', revolver: 'pistol', taser: 'pistol',
 }
 
 // --- 1. category backfill ---
@@ -43,16 +46,25 @@ check('BUY_MENU keys unique', new Set(client.BUY_MENU.map(c => c.key)).size === 
 
 // --- 3. derived buy list (BUY_ITEMS dissolved) ---
 const got = client.BUY_ENTRIES.map(e => `${e.id}:${e.price}${e.team ? '@' + e.team : ''}`)
-const want = ['deagle:700', 'mp5:1500', 'ak47:2700@T', 'm4:3100@CT', 'awp:4750', 'kevlar:650', 'kevlarhelm:1000']
+const want = [
+  'deagle:700',
+  // Phase 3 pistols
+  'p250:300', 'fiveseven:500@CT', 'tec9:500@T', 'cz75:500', 'elites:500',
+  'hkp2000:200@CT', 'revolver:600', 'taser:200',
+  'mp5:1500', 'ak47:2700@T', 'm4:3100@CT', 'awp:4750',
+  'kevlar:650', 'kevlarhelm:1000',
+]
 check('BUY_ENTRIES derived set + prices + teams', JSON.stringify(got) === JSON.stringify(want), got.join(', '))
 check('no price-0 starters/knife/c4 in buy list',
   !client.BUY_ENTRIES.some(e => ['knife', 'glock', 'usp', 'c4'].includes(e.id)))
 
 // --- 4. grouping ---
 const groups: Record<string, string[]> = {
-  pistol: ['deagle'], shotgun: [], smg: ['mp5'], rifle: ['ak47', 'm4', 'awp'],
+  pistol: ['deagle', 'p250', 'fiveseven', 'tec9', 'cz75', 'elites', 'hkp2000', 'revolver', 'taser'],
+  shotgun: [], smg: ['mp5'], rifle: ['ak47', 'm4', 'awp'],
   heavy: [], equipment: ['kevlar', 'kevlarhelm'],
 }
+check('pistol category fits the 9-digit buy menu cap', groups.pistol.length <= 9)
 for (const [key, ids] of Object.entries(groups)) {
   const gotIds = client.buyEntriesFor(key as client.BuyMenuKey).map(e => e.id)
   check(`group[${key}]`, JSON.stringify(gotIds) === JSON.stringify(ids), gotIds.join(',') || '(empty)')
@@ -89,7 +101,7 @@ for (const w of Object.values(shared.WEAPONS)) {
     (shared.fireModeOf(w) === 'auto') === w.auto,
     `${shared.fireModeOf(w)} vs auto=${w.auto}`)
 }
-check('fireMode backfilled on all 9 weapons',
+check('fireMode backfilled on all weapons',
   Object.values(shared.WEAPONS).every(w => w.fireMode !== undefined))
 
 // 7b. suppressed: USP-S and MP5-SD are the integrally suppressed pair today
@@ -118,6 +130,28 @@ check('no burst/pellets/throwable/recoilPattern on current roster',
   Object.values(shared.WEAPONS).every(w =>
     w.pellets === undefined && w.throwable === undefined &&
     w.burstRounds === undefined && w.recoilPattern === undefined))
+
+// --- 8. Phase 3 pistol mechanics (schema-level) ---
+check('cz75 is the only full-auto pistol (800 RPM)',
+  shared.fireModeOf(shared.WEAPONS.cz75) === 'auto' && shared.WEAPONS.cz75.auto === true &&
+  shared.WEAPONS.cz75.fireDelay === 75 &&
+  Object.values(shared.WEAPONS).filter(w => w.category === 'pistol' && w.auto).length === 1)
+check('team-restricted pistols: fiveseven/hkp2000 CT, tec9 T, rest free',
+  shared.WEAPONS.fiveseven.team === 'CT' && shared.WEAPONS.hkp2000.team === 'CT' &&
+  shared.WEAPONS.tec9.team === 'T' &&
+  ['p250', 'cz75', 'elites', 'revolver', 'taser'].every(id => shared.WEAPONS[id as shared.WeaponId].team === undefined))
+check('taser: single shot, no reserve, no kill reward',
+  shared.WEAPONS.taser.mag === 1 && shared.WEAPONS.taser.reserve === 0 &&
+  shared.WEAPONS.taser.killReward === 0)
+check('zeus one-shots an armored+helmet victim at close range',
+  shared.computeDamage(shared.WEAPONS.taser, 'body', 4, 100, true).dmg >= 100)
+check('revolver: slow trigger (>= 800ms) + heavy damage',
+  shared.WEAPONS.revolver.fireDelay >= 800 && shared.WEAPONS.revolver.damage >= 80)
+for (const id of ['p250', 'cz75', 'elites', 'taser'] as const) {
+  const w = shared.WEAPONS[id]
+  check(`[${id}] one-shots an unarmored head (pistol class)`,
+    shared.computeDamage(w, 'head', 5, 0, false).dmg >= 100)
+}
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

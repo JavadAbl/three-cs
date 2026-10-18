@@ -18,6 +18,9 @@ export type HitPart = 'head' | 'body' | 'legs'
 export type WeaponId =
   | 'knife' | 'glock' | 'usp' | 'deagle' | 'mp5'
   | 'ak47' | 'm4' | 'awp' | 'c4'
+  // Phase 3 pistols — ids match the staged audio map (shared/weapons-audio.ts)
+  | 'p250' | 'fiveseven' | 'tec9' | 'cz75' | 'elites'
+  | 'hkp2000' | 'revolver' | 'taser'
 
 // Menu category. Weapons keep their own class for stats/logic; the buy menu
 // groups them under fixed CS 1.6 numbering. 'grenade' and 'gear' weapons land
@@ -97,6 +100,57 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     fireDelay: 350, mag: 7, reserve: 35, reloadMs: 2200, moveSpeed: 4.8,
     armorPen: 0.925, falloff10m: 0.81, auto: false, killReward: 300, accurate: 0.55,
     fireMode: 'semi', killRewardClass: 'pistol',
+  },
+  // ---------------------------------------------- Phase 3 pistols (CS:GO values)
+  // Prices per plan 3.1; damage/armorPen/falloff/mags per CS:GO wiki, scaled
+  // to our schema (falloff per 10m, armorPen as the 0..1 multiplier).
+  p250: {
+    id: 'p250', name: 'P250', slot: 2, category: 'pistol', price: 300, damage: 38, hsMult: 4, legMult: 0.75,
+    fireDelay: 150, mag: 13, reserve: 26, reloadMs: 2200, moveSpeed: 4.9,
+    armorPen: 0.645, falloff10m: 0.85, auto: false, killReward: 300, accurate: 0.45,
+    fireMode: 'semi', killRewardClass: 'pistol',
+  },
+  fiveseven: {
+    id: 'fiveseven', name: 'Five-SeveN', slot: 2, category: 'pistol', price: 500, team: 'CT', damage: 32, hsMult: 4, legMult: 0.75,
+    fireDelay: 150, mag: 20, reserve: 100, reloadMs: 2200, moveSpeed: 4.9,
+    armorPen: 0.9075, falloff10m: 0.87, auto: false, killReward: 300, accurate: 0.40,
+    fireMode: 'semi', killRewardClass: 'pistol', // SS190s: famous armor punch
+  },
+  tec9: {
+    id: 'tec9', name: 'Tec-9', slot: 2, category: 'pistol', price: 500, team: 'T', damage: 33, hsMult: 4, legMult: 0.75,
+    fireDelay: 120, mag: 18, reserve: 90, reloadMs: 2200, moveSpeed: 4.9,
+    armorPen: 0.9075, falloff10m: 0.87, auto: false, killReward: 300, accurate: 0.62,
+    fireMode: 'semi', killRewardClass: 'pistol', // fast + wild spray
+  },
+  cz75: {
+    id: 'cz75', name: 'CZ75-Auto', slot: 2, category: 'pistol', price: 500, damage: 31, hsMult: 4, legMult: 0.75,
+    fireDelay: 75, mag: 12, reserve: 24, reloadMs: 2200, moveSpeed: 4.9,
+    armorPen: 0.775, falloff10m: 0.85, auto: true, killReward: 300, accurate: 0.58,
+    fireMode: 'auto', killRewardClass: 'pistol', // full-auto machine pistol, 800 RPM
+  },
+  elites: {
+    id: 'elites', name: 'Dual Berettas', slot: 2, category: 'pistol', price: 500, damage: 38, hsMult: 4, legMult: 0.75,
+    fireDelay: 120, mag: 30, reserve: 120, reloadMs: 2600, moveSpeed: 4.9,
+    armorPen: 0.5225, falloff10m: 0.85, auto: false, killReward: 300, accurate: 0.50,
+    fireMode: 'semi', killRewardClass: 'pistol', // alternating hands, 15+15
+  },
+  hkp2000: {
+    id: 'hkp2000', name: 'P2000', slot: 2, category: 'pistol', price: 200, team: 'CT', damage: 35, hsMult: 4, legMult: 0.75,
+    fireDelay: 170, mag: 13, reserve: 52, reloadMs: 2200, moveSpeed: 4.9,
+    armorPen: 0.505, falloff10m: 0.91, auto: false, killReward: 300, accurate: 0.38,
+    fireMode: 'semi', killRewardClass: 'pistol', // CT budget buy
+  },
+  revolver: {
+    id: 'revolver', name: 'R8 Revolver', slot: 2, category: 'pistol', price: 600, damage: 86, hsMult: 4, legMult: 0.75,
+    fireDelay: 1000, mag: 8, reserve: 8, reloadMs: 3600, moveSpeed: 4.8,
+    armorPen: 0.9314, falloff10m: 0.98, auto: false, killReward: 300, accurate: 0.15,
+    fireMode: 'semi', killRewardClass: 'pistol', // slow trigger, hits like a truck
+  },
+  taser: {
+    id: 'taser', name: 'Zeus x27', slot: 2, category: 'pistol', price: 200, damage: 500, hsMult: 1, legMult: 1,
+    fireDelay: 400, mag: 1, reserve: 0, reloadMs: 0, moveSpeed: 4.95,
+    armorPen: 1, falloff10m: 1, auto: false, killReward: 0, accurate: 0.9,
+    fireMode: 'semi', // one use per buy, melee-range arc, no kill reward
   },
   mp5: {
     id: 'mp5', name: 'MP5-SD', slot: 1, category: 'smg', price: 1500, damage: 27, hsMult: 4, legMult: 0.75,

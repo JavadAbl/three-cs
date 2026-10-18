@@ -18,7 +18,17 @@ function fakeCtx(): Record<string, unknown> {
   }) as Record<string, unknown>
 }
 function fakeCanvas(): Record<string, unknown> {
-  return { width: 0, height: 0, style: {}, getContext: () => fakeCtx() }
+  return {
+    width: 0, height: 0, style: {},
+    getContext: () => fakeCtx(),
+    // three's ImageLoader wires onload/onerror via these on the fake <img>
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    src: '',
+  }
 }
 ;(globalThis as Record<string, unknown>).document = { createElement: () => fakeCanvas() }
+// three's ImageLoader.load() creates its <img> via createElementNS — stub it too
+const doc = (globalThis as Record<string, unknown>).document as Record<string, unknown>
+doc.createElementNS = (_ns: string, _tag: string) => fakeCanvas()
 ;(globalThis as Record<string, unknown>).window = { devicePixelRatio: 1 }

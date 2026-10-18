@@ -719,6 +719,8 @@ io.on('connection', (socket) => {
     // LOS validation (cheat deterrence)
     const losOK = hasLOS(m, attacker.x, eyeY(attacker), attacker.z, victim.x, eyeY(victim), victim.z)
     if (!losOK && dist > 3) return
+    // zeus: melee-range arc — a "taser hit" from beyond reach is rejected
+    if (w.id === 'taser' && dist > 8) return
     applyDamage(m, victim, attacker, w.id, part, dist, part === 'head')
   })
 

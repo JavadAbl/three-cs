@@ -22,6 +22,9 @@ const WEAPON_SHORT: Record<string, string> = {
   ak47: 'AK-47', m4: 'M4A4', awp: 'AWP', deagle: 'Deagle', glock: 'Glock', usp: 'USP-S',
   mp5: 'MP5', knife: 'Knife', c4: 'C4', kevlar: 'Kevlar', kevlarhelm: 'Kevlar+Helm',
   world: 'C4', fall: 'Gravity',
+  // Phase 3 pistols
+  p250: 'P250', fiveseven: 'Five-Seven', tec9: 'Tec-9', cz75: 'CZ75', elites: 'Dualies',
+  hkp2000: 'P2000', revolver: 'R8', taser: 'Zeus',
 }
 
 // ============================================================

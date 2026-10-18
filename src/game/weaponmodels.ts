@@ -20,6 +20,8 @@ export interface ViewModel {
   mag?: THREE.Group
   /** pistol slide (blowback anim) */
   slide?: THREE.Mesh
+  /** second slide for dual berettas — engine alternates fire left/right */
+  slideL?: THREE.Mesh
   /** AWP bolt assembly (cycle anim) */
   bolt?: THREE.Group
   /** shell ejection port, local to group */
@@ -208,35 +210,38 @@ const CUFF: Record<TeamId, number> = { T: 0x9a7f4e, CT: 0x2c4a6e }
 /**
  * Right hand + forearm wrapped around a grip point (local gun coords),
  * plus optional left support hand at a foregrip.
+ * mirror=true flips everything across x — used by the dual berettas to
+ * build a proper LEFT hand on the left-hand gun.
  */
 function buildGloves(g: THREE.Object3D, team: TeamId,
   grip: { x: number; y: number; z: number; rx?: number },
-  left?: { x: number; y: number; z: number; rx?: number }) {
+  left?: { x: number; y: number; z: number; rx?: number }, mirror = false) {
+  const s = mirror ? -1 : 1
   const rx = grip.rx ?? 0.25
   // palm wraps the grip
-  P(g, box(0.055, 0.075, 0.105), 'glove_fabric', { color: 0x232527 }, grip.x + 0.012, grip.y - 0.01, grip.z + 0.01, rx)
+  P(g, box(0.055, 0.075, 0.105), 'glove_fabric', { color: 0x232527 }, grip.x + s * 0.012, grip.y - 0.01, grip.z + 0.01, rx)
   // fingers over the front strap
   for (let i = 0; i < 3; i++) {
     P(g, box(0.05, 0.017, 0.028), 'glove_fabric', { color: 0x1d1f21 },
-      grip.x + 0.014, grip.y - 0.031 - i * 0.02, grip.z - 0.028 - i * 0.004, rx)
+      grip.x + s * 0.014, grip.y - 0.031 - i * 0.02, grip.z - 0.028 - i * 0.004, rx)
   }
-  // thumb on the left/rear
-  P(g, box(0.017, 0.045, 0.022), 'glove_fabric', { color: 0x1d1f21 }, grip.x - 0.012, grip.y - 0.012, grip.z + 0.04, 0.1)
+  // thumb on the left/rear (mirrored: right/rear)
+  P(g, box(0.017, 0.045, 0.022), 'glove_fabric', { color: 0x1d1f21 }, grip.x - s * 0.012, grip.y - 0.012, grip.z + 0.04, s * 0.1)
   // cuff band (team color)
   P(g, box(0.075, 0.075, 0.045), 'polymer_black', { color: CUFF[team], density: 2 },
-    grip.x + 0.028, grip.y - 0.06, grip.z + 0.075, rx)
-  // forearm running down-back-right toward the camera
+    grip.x + s * 0.028, grip.y - 0.06, grip.z + 0.075, rx)
+  // forearm running down-back toward the camera
   P(g, box(0.07, 0.072, 0.32), 'glove_fabric', {},
-    grip.x + 0.052, grip.y - 0.145, grip.z + 0.235, 0.52, -0.22, -0.08)
+    grip.x + s * 0.052, grip.y - 0.145, grip.z + 0.235, 0.52, -s * 0.22, -s * 0.08)
 
   if (left) {
     const lrx = left.rx ?? 0.3
-    P(g, box(0.055, 0.075, 0.1), 'glove_fabric', { color: 0x232527 }, left.x - 0.006, left.y - 0.015, left.z, lrx)
-    P(g, box(0.05, 0.016, 0.03), 'glove_fabric', { color: 0x1d1f21 }, left.x - 0.004, left.y - 0.04, left.z + 0.005, lrx)
+    P(g, box(0.055, 0.075, 0.1), 'glove_fabric', { color: 0x232527 }, left.x - s * 0.006, left.y - 0.015, left.z, lrx)
+    P(g, box(0.05, 0.016, 0.03), 'glove_fabric', { color: 0x1d1f21 }, left.x - s * 0.004, left.y - 0.04, left.z + 0.005, lrx)
     P(g, box(0.075, 0.075, 0.045), 'polymer_black', { color: CUFF[team], density: 2 },
-      left.x - 0.026, left.y - 0.07, left.z + 0.08, lrx)
+      left.x - s * 0.026, left.y - 0.07, left.z + 0.08, lrx)
     P(g, box(0.07, 0.072, 0.3), 'glove_fabric', {},
-      left.x - 0.045, left.y - 0.16, left.z + 0.23, 0.5, 0.24, 0.08)
+      left.x - s * 0.045, left.y - 0.16, left.z + 0.23, 0.5, s * 0.24, s * 0.08)
   }
 }
 
@@ -479,6 +484,183 @@ function buildPistol(weapon: 'glock' | 'usp', team: TeamId): ViewModel {
   return { group: g, tip: new THREE.Vector3(0, 0.014, tipZ), mag, slide, eject: new THREE.Vector3(0.022, 0.038, -0.1) }
 }
 
+// ---------------------------------------------------------------- Phase 3 pistols
+// Parametric semi-auto family (plan 3.2): one builder, per-weapon slide/frame
+// proportions + finish colors. The dual berettas (mirrored pair), the R8
+// revolver (cylinder + underlug) and the zeus (taser body) get dedicated
+// builders below.
+
+interface SemiSpec {
+  slideLen: number; slideH: number; slideW: number; slideCol: number
+  barrelMuzzle: number      // muzzle z (negative)
+  barrelLen: number
+  frameCol: number
+  gripCol: number
+  gripRake: number
+  magH: number
+  shroud?: boolean          // tec-9 vented barrel shroud
+  rail?: boolean            // under-frame accessory rail
+}
+
+const SEMI: Record<'p250' | 'fiveseven' | 'tec9' | 'cz75' | 'hkp2000', SemiSpec> = {
+  // compact + chunky
+  p250: { slideLen: 0.185, slideH: 0.046, slideW: 0.038, slideCol: 0x26292c, barrelMuzzle: -0.20, barrelLen: 0.03, frameCol: 0x222527, gripCol: 0x1f2224, gripRake: 0.22, magH: 0.09 },
+  // long thin slide, big 20-rd mag
+  fiveseven: { slideLen: 0.215, slideH: 0.040, slideW: 0.036, slideCol: 0x2c3033, barrelMuzzle: -0.225, barrelLen: 0.025, frameCol: 0x232629, gripCol: 0x1f2224, gripRake: 0.20, magH: 0.105, rail: true },
+  // boxy steel, near-vertical grip, vented shroud
+  tec9: { slideLen: 0.20, slideH: 0.052, slideW: 0.044, slideCol: 0x33383d, barrelMuzzle: -0.24, barrelLen: 0.05, frameCol: 0x2b2f33, gripCol: 0x222527, gripRake: 0.10, magH: 0.115, shroud: true },
+  // all-steel service pistol, railed frame
+  cz75: { slideLen: 0.195, slideH: 0.047, slideW: 0.039, slideCol: 0x2b2f33, barrelMuzzle: -0.21, barrelLen: 0.03, frameCol: 0x26292c, gripCol: 0x1f2224, gripRake: 0.26, magH: 0.10, rail: true },
+  // glock-ish proportions, lighter slide finish
+  hkp2000: { slideLen: 0.185, slideH: 0.040, slideW: 0.035, slideCol: 0x303539, barrelMuzzle: -0.195, barrelLen: 0.02, frameCol: 0x222527, gripCol: 0x1f2224, gripRake: 0.24, magH: 0.09 },
+}
+
+function buildSemiPistol(id: keyof typeof SEMI, team: TeamId): ViewModel {
+  const s = SEMI[id]
+  const g = new THREE.Group()
+  const slideZ = -s.slideLen / 2 + 0.02
+  const slideFront = -s.slideLen + 0.02
+  // slide
+  const slide = P(g, box(s.slideW, s.slideH, s.slideLen), 'metal_dark',
+    { color: s.slideCol, roughnessMul: 0.8, normalScale: 0.8 }, 0, 0.02, slideZ)
+  // barrel (muzzle at barrelMuzzle)
+  P(g, cyl(0.0075, s.barrelLen), 'steel_blued', { roughnessMul: 0.5 }, 0, 0.018, s.barrelMuzzle + s.barrelLen / 2, q(90))
+  if (s.shroud) {
+    // tec-9 vented barrel shroud
+    P(g, box(s.slideW + 0.004, 0.03, 0.08), 'metal_dark', { color: s.slideCol }, 0, 0.018, s.barrelMuzzle + 0.05)
+    for (let i = 0; i < 3; i++) {
+      P(g, box(0.005, 0.031, 0.012), 'metal_dark', { color: 0x0f1113 }, s.slideW / 2 + 0.002, 0.018, s.barrelMuzzle + 0.07 - i * 0.022)
+      P(g, box(0.005, 0.031, 0.012), 'metal_dark', { color: 0x0f1113 }, -s.slideW / 2 - 0.002, 0.018, s.barrelMuzzle + 0.07 - i * 0.022)
+    }
+  }
+  // slide serrations
+  for (let i = 0; i < 4; i++) {
+    P(g, box(s.slideW + 0.002, s.slideH * 0.55, 0.0025), 'metal_dark', { color: 0x0f1113 }, 0, 0.022, 0.045 - i * 0.007)
+  }
+  // sights + white front dot
+  P(g, box(0.005, 0.009, 0.007), 'metal_dark', { color: 0x50555a }, 0, 0.02 + s.slideH / 2 + 0.004, slideFront - 0.0025)
+  P(g, box(0.016, 0.008, 0.008), 'metal_dark', { color: 0x50555a }, 0, 0.02 + s.slideH / 2 + 0.004, 0.055)
+  basic(0xf4f4f4, g, box(0.004, 0.004, 0.003), 0, 0.02 + s.slideH / 2 + 0.008, slideFront - 0.0025)
+  // frame + optional under rail
+  P(g, box(s.slideW - 0.003, 0.03, 0.13), 'polymer_black', { color: s.frameCol }, 0, -0.008, -0.04)
+  if (s.rail) {
+    for (let i = 0; i < 3; i++) {
+      P(g, box(0.024, 0.008, 0.014), 'polymer_black', { color: 0x191c1e }, 0, -0.026, -0.085 + i * 0.022)
+    }
+  }
+  // trigger + guard
+  P(g, box(0.005, 0.026, 0.007), 'metal_dark', { color: 0x101214 }, 0, -0.025, -0.05, 0.15)
+  P(g, box(0.026, 0.004, 0.05), 'polymer_black', { color: 0x191c1e }, 0, -0.046, -0.05)
+  // grip
+  P(g, box(s.slideW - 0.002, s.magH + 0.02, 0.048), 'polymer_black', { density: 9, color: s.gripCol }, 0, -0.06, 0.015, s.gripRake)
+  // magazine
+  const mag = new THREE.Group()
+  g.add(mag)
+  P(mag, box(s.slideW - 0.006, s.magH, 0.042), 'metal_dark', { color: 0x1b1e21 }, 0, -0.058, 0.012, s.gripRake)
+  P(mag, box(s.slideW - 0.002, 0.011, 0.05), 'polymer_black', { color: 0x141618 }, 0, -0.058 - s.magH / 2 - 0.006, 0.024, s.gripRake)
+  buildGloves(g, team, { x: 0, y: -0.06, z: 0.028, rx: 0.3 })
+  return { group: g, tip: new THREE.Vector3(0, 0.018, s.barrelMuzzle), mag, slide, eject: new THREE.Vector3(0.022, 0.038, -0.1) }
+}
+
+// ---------------------------------------------------------------- Dual Berettas
+// Two Beretta 92s, one per hand (plan: "two viewmodels alternating hands").
+// The engine alternates fire left/right via slide / slideL.
+function berettaBody(parent: THREE.Object3D, xOff: number, mirror: boolean): { slide: THREE.Mesh; mag: THREE.Group } {
+  const s = mirror ? -1 : 1
+  // slide (beretta's open-top) + exposed chrome-ish barrel hood
+  const slide = P(parent, box(0.036, 0.044, 0.19), 'metal_dark',
+    { color: 0x2c3033, roughnessMul: 0.8, normalScale: 0.8 }, xOff, 0.02, -0.075)
+  P(parent, cyl(0.0085, 0.03), 'steel_blued', { roughnessMul: 0.4, metalness: 0.95 }, xOff, 0.024, -0.185, q(90))
+  // front sight + white dot
+  P(parent, box(0.005, 0.009, 0.007), 'metal_dark', { color: 0x50555a }, xOff, 0.046, -0.167)
+  basic(0xf4f4f4, parent, box(0.004, 0.004, 0.003), xOff, 0.05, -0.167)
+  // serrations
+  for (let i = 0; i < 4; i++) {
+    P(parent, box(0.038, 0.026, 0.0025), 'metal_dark', { color: 0x0f1113 }, xOff, 0.022, 0.03 - i * 0.007)
+  }
+  // frame + trigger + guard
+  P(parent, box(0.033, 0.03, 0.125), 'polymer_black', { color: 0x222527 }, xOff, -0.008, -0.04)
+  P(parent, box(0.005, 0.026, 0.007), 'metal_dark', { color: 0x101214 }, xOff, -0.025, -0.05, 0.15)
+  P(parent, box(0.026, 0.004, 0.05), 'polymer_black', { color: 0x191c1e }, xOff, -0.046, -0.05)
+  // grip
+  P(parent, box(0.034, 0.105, 0.048), 'polymer_black', { density: 9, color: 0x1f2224 }, xOff, -0.06, 0.015, 0.24)
+  // magazine (in the grip)
+  const mag = new THREE.Group()
+  parent.add(mag)
+  P(mag, box(0.03, 0.095, 0.042), 'metal_dark', { color: 0x1b1e21 }, xOff, -0.058, 0.012, 0.24)
+  P(mag, box(0.036, 0.011, 0.05), 'polymer_black', { color: 0x141618 }, xOff, -0.11, 0.024, 0.24)
+  // ambidextrous safety nub
+  P(parent, box(0.006, 0.012, 0.012), 'metal_dark', { color: 0x101214 }, xOff + s * 0.021, 0.012, -0.01)
+  return { slide, mag }
+}
+
+function buildElites(team: TeamId): ViewModel {
+  const g = new THREE.Group()
+  // right-hand gun (fires first) + mirrored left-hand gun
+  const right = berettaBody(g, 0.075, false)
+  const left = berettaBody(g, -0.14, true)
+  // right hand on the right gun, mirrored glove = left hand on the left gun
+  buildGloves(g, team, { x: 0.075, y: -0.06, z: 0.04, rx: 0.3 })
+  buildGloves(g, team, { x: -0.14, y: -0.06, z: 0.04, rx: 0.3 }, undefined, true)
+  return {
+    group: g,
+    tip: new THREE.Vector3(0.075, 0.02, -0.20),
+    mag: right.mag,
+    slide: right.slide,
+    slideL: left.slide,
+    eject: new THREE.Vector3(0.09, 0.04, -0.1),
+  }
+}
+
+// ---------------------------------------------------------------- R8 Revolver
+function buildRevolver(team: TeamId): ViewModel {
+  const g = new THREE.Group()
+  // frame block + top strap
+  P(g, box(0.036, 0.05, 0.08), 'steel_blued', { color: 0x2c3033, roughnessMul: 0.7 }, 0, 0.005, -0.02)
+  P(g, box(0.012, 0.01, 0.05), 'steel_blued', {}, 0, 0.048, -0.05)
+  // 8-shot cylinder + chamber ring
+  P(g, cyl(0.021, 0.052, 16), 'steel_blued', { color: 0x2b2f33, roughnessMul: 0.6 }, 0, 0.012, -0.115, q(90))
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    P(g, cyl(0.0035, 0.054, 8), 'metal_dark', { color: 0x0f1113 },
+      Math.cos(a) * 0.013, 0.012 + Math.sin(a) * 0.013, -0.115, q(90))
+  }
+  // barrel + underlug + ejector rod
+  P(g, cyl(0.011, 0.16), 'steel_blued', { roughnessMul: 0.5 }, 0, 0.02, -0.225, q(90))
+  P(g, box(0.013, 0.012, 0.15), 'steel_blued', {}, 0, 0.003, -0.225)
+  P(g, cyl(0.0035, 0.11, 8), 'metal_dark', { color: 0x33383d, metalness: 0.9, roughnessMul: 0.4 }, 0, 0.004, -0.215, q(90))
+  // hammer + sights
+  P(g, box(0.008, 0.022, 0.014), 'metal_dark', { color: 0x101214 }, 0, 0.042, 0.014, -0.45)
+  P(g, box(0.004, 0.014, 0.012), 'metal_dark', { color: 0x50555a }, 0, 0.042, -0.30)
+  P(g, box(0.01, 0.006, 0.008), 'metal_dark', { color: 0x50555a }, 0, 0.054, -0.02)
+  // grip + trigger + guard
+  P(g, box(0.034, 0.10, 0.046), 'polymer_black', { density: 9, color: 0x1f2224 }, 0, -0.058, 0.02, 0.3)
+  P(g, box(0.005, 0.026, 0.007), 'metal_dark', { color: 0x101214 }, 0, -0.028, -0.035, 0.2)
+  P(g, box(0.026, 0.004, 0.05), 'metal_dark', { color: 0x232629 }, 0, -0.046, -0.04)
+  buildGloves(g, team, { x: 0, y: -0.068, z: 0.03, rx: 0.32 })
+  return { group: g, tip: new THREE.Vector3(0, 0.02, -0.31), eject: new THREE.Vector3(0.024, 0.04, -0.11) }
+}
+
+// ---------------------------------------------------------------- Zeus x27
+function buildTaser(team: TeamId): ViewModel {
+  const g = new THREE.Group()
+  // body: boxy polymer with the yellow top shell
+  P(g, box(0.05, 0.06, 0.16), 'polymer_black', { color: 0x222527 }, 0, 0.008, -0.05)
+  P(g, box(0.052, 0.016, 0.15), 'polymer_black', { color: 0xc9a227, roughnessMul: 0.55 }, 0, 0.044, -0.05)
+  // front plate + twin electrodes (the arc gap)
+  P(g, box(0.05, 0.055, 0.02), 'metal_dark', { color: 0x191c1e }, 0, 0.008, -0.145)
+  P(g, cyl(0.0035, 0.07, 8), 'metal_dark', { color: 0xb9c2c9, metalness: 1.0, roughnessMul: 0.3 }, 0.013, 0.012, -0.185, q(90))
+  P(g, cyl(0.0035, 0.07, 8), 'metal_dark', { color: 0xb9c2c9, metalness: 1.0, roughnessMul: 0.3 }, -0.013, 0.012, -0.185, q(90))
+  // green ready-LED + side switch
+  basic(0x30ff60, g, box(0.006, 0.005, 0.006), 0.021, 0.055, 0.005)
+  P(g, box(0.01, 0.006, 0.02), 'metal_dark', { color: 0x101214 }, -0.027, 0.03, -0.02)
+  // grip + trigger guard
+  P(g, box(0.036, 0.10, 0.05), 'polymer_black', { density: 9, color: 0x1f2224 }, 0, -0.058, 0.02, 0.22)
+  P(g, box(0.026, 0.004, 0.05), 'polymer_black', { color: 0x191c1e }, 0, -0.046, -0.045)
+  buildGloves(g, team, { x: 0, y: -0.062, z: 0.028, rx: 0.28 })
+  return { group: g, tip: new THREE.Vector3(0, 0.012, -0.22), eject: new THREE.Vector3(0.022, 0.04, -0.08) }
+}
+
 // ---------------------------------------------------------------- knife (M9 bayonet style)
 function buildKnife(team: TeamId): ViewModel {
   const g = new THREE.Group()
@@ -570,6 +752,11 @@ export function buildViewModel(weapon: WeaponId, team: TeamId): ViewModel {
     case 'mp5': return buildMP5(team)
     case 'deagle': return buildDeagle(team)
     case 'glock': case 'usp': return buildPistol(weapon, team)
+    case 'p250': case 'fiveseven': case 'tec9': case 'cz75': case 'hkp2000':
+      return buildSemiPistol(weapon, team)
+    case 'elites': return buildElites(team)
+    case 'revolver': return buildRevolver(team)
+    case 'taser': return buildTaser(team)
     case 'knife': return buildKnife(team)
     case 'c4': return buildC4(team)
     default: return buildKnife(team)
@@ -628,6 +815,33 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
       P(g, box(0.032, 0.038, 0.16), 'metal_dark', { color: 0x26292c, roughnessMul: 0.8 }, 0, 0.01, -0.04)
       if (weaponId === 'usp') P(g, cyl(0.014, 0.1, 12), 'metal_dark', { roughnessMul: 0.75 }, 0, 0.01, -0.16, q(90))
       P(g, box(0.03, 0.08, 0.045), 'polymer_black', { density: 9 }, 0, -0.055, 0.02, 0.2)
+      break
+    // ---- Phase 3 pistols: generic low-detail shapes, per-family proportions
+    case 'p250': case 'hkp2000': case 'cz75': case 'fiveseven': case 'tec9': {
+      const long = weaponId === 'fiveseven' || weaponId === 'tec9'
+      P(g, box(0.034, long ? 0.046 : 0.04, long ? 0.19 : 0.17), 'metal_dark',
+        { color: weaponId === 'hkp2000' ? 0x303539 : 0x26292c, roughnessMul: 0.8 }, 0, 0.012, -0.05)
+      if (weaponId === 'tec9') P(g, cyl(0.009, 0.06, 8), 'steel_blued', {}, 0, 0.012, -0.17, q(90))
+      P(g, box(0.03, 0.085, 0.045), 'polymer_black', { density: 9 }, 0, -0.05, 0.02, weaponId === 'tec9' ? 0.1 : 0.22)
+      break
+    }
+    case 'elites':
+      for (const sgn of [1, -1]) {
+        P(g, box(0.03, 0.036, 0.17), 'metal_dark', { color: 0x2c3033, roughnessMul: 0.8 }, sgn * 0.045, 0.012, -0.04)
+        P(g, cyl(0.007, 0.024, 8), 'steel_blued', { roughnessMul: 0.4, metalness: 0.95 }, sgn * 0.045, 0.016, -0.135, q(90))
+        P(g, box(0.026, 0.075, 0.042), 'polymer_black', { density: 9 }, sgn * 0.05, -0.042, 0.02, 0.2)
+      }
+      break
+    case 'revolver':
+      P(g, box(0.03, 0.04, 0.07), 'steel_blued', { color: 0x2c3033 }, 0, 0.005, -0.01)
+      P(g, cyl(0.018, 0.05, 12), 'steel_blued', { roughnessMul: 0.6 }, 0, 0.012, -0.055, q(90))
+      P(g, cyl(0.009, 0.13, 10), 'steel_blued', { roughnessMul: 0.5 }, 0, 0.02, -0.13, q(90))
+      P(g, box(0.03, 0.085, 0.045), 'polymer_black', { density: 9, color: 0x1f2224 }, 0, -0.05, 0.015, 0.28)
+      break
+    case 'taser':
+      P(g, box(0.045, 0.05, 0.13), 'polymer_black', { color: 0x222527 }, 0, 0.008, -0.035)
+      P(g, box(0.047, 0.016, 0.12), 'polymer_black', { color: 0xc9a227, roughnessMul: 0.6 }, 0, 0.04, -0.035)
+      P(g, box(0.032, 0.085, 0.045), 'polymer_black', { density: 9 }, 0, -0.048, 0.015, 0.22)
       break
     case 'knife':
       P(g, box(0.01, 0.028, 0.14), 'metal_dark', { color: 0xcdd3d9, metalness: 1.0, roughnessMul: 0.35 }, 0, 0.01, -0.1)

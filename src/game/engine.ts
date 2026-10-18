@@ -93,6 +93,9 @@ const FALL_SAFE_V = 12.5   // max safe landing speed (~2.8m drop); above this = 
 
 const KICK: Partial<Record<WeaponId, number>> = {
   ak47: 0.55, m4: 0.42, mp5: 0.22, deagle: 1.3, awp: 2.2, glock: 0.55, usp: 0.6,
+  // Phase 3 pistols
+  p250: 0.55, fiveseven: 0.5, tec9: 0.7, cz75: 0.45, elites: 0.5,
+  hkp2000: 0.55, revolver: 2.0, taser: 0.8,
 }
 
 export class Engine {
@@ -147,6 +150,7 @@ export class Engine {
   private slideKickAt = -1e9
   private boltCycleAt = -1e9
   private slashAt = -1e9
+  private slideLeft = false   // dual berettas: which gun fires next
   private vmKick = 0
   private bobPhase = 0
   private lastW = 0
@@ -953,6 +957,7 @@ export class Engine {
     g.rotation.set(0, 0.06, 0)
     // remember part home transforms for the animation envelopes
     if (vm.slide) vm.slide.userData.homeZ = vm.slide.position.z
+    if (vm.slideL) vm.slideL.userData.homeZ = vm.slideL.position.z
     if (vm.bolt) vm.bolt.userData.homeZ = vm.bolt.position.z
     if (vm.mag) vm.mag.userData.homeY = vm.mag.position.y
     this.camera.add(g)
@@ -1033,7 +1038,8 @@ export class Engine {
       .normalize()
 
     this.raycaster.set(this.camera.position, dir)
-    this.raycaster.far = 200
+    // zeus: short-range electric arc (knife-like reach, not a ballistic gun)
+    this.raycaster.far = w.id === 'taser' ? 6 : 200
     const hitboxes = this.pm.hitboxMeshes()
     const hits = this.raycaster.intersectObjects([...hitboxes, ...this.map.raycastMeshes], false)
     const hit = hits.find(h => h.distance > 0.2)
@@ -1087,8 +1093,10 @@ export class Engine {
     this.pitch += kick
     this.yaw += (Math.random() - 0.5) * kick * 0.6 + Math.sin(this.recoil * 2.1) * 0.00035
     this.vmKick = 1
-    // part animations: pistol slide blowback / AWP bolt cycle
-    if (this.vm?.slide) this.slideKickAt = now
+    // part animations: pistol slide blowback / AWP bolt cycle / dual berettas
+    // alternate the cycling gun with every shot (fire left/right)
+    if (this.vm?.slideL) this.slideLeft = !this.slideLeft
+    if (this.vm?.slide || this.vm?.slideL) this.slideKickAt = now
     if (this.vm?.bolt) this.boltCycleAt = now
     if (w.scope && this.scoped) { this.setScoped(false); this.wantScope = false }
 
@@ -1416,7 +1424,14 @@ export class Engine {
       // ---- animated weapon parts (slide blowback / AWP bolt / mag swap / C4 LED)
       const vm = this.vm
       if (vm) {
-        if (vm.slide) {
+        if (vm.slide && vm.slideL) {
+          // dual berettas: only the gun that just fired cycles; the other sits home
+          const act = this.slideLeft ? vm.slideL : vm.slide
+          const idle = this.slideLeft ? vm.slide : vm.slideL
+          const k = Math.max(0, 1 - (now - this.slideKickAt) / 120)
+          act.position.z = (act.userData.homeZ as number) + k * 0.034
+          idle.position.z = idle.userData.homeZ as number
+        } else if (vm.slide) {
           const k = Math.max(0, 1 - (now - this.slideKickAt) / 120)
           vm.slide.position.z = (vm.slide.userData.homeZ as number) + k * 0.034
         }
