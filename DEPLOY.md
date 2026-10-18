@@ -1,7 +1,7 @@
 # DUST2 — CS2-style Web FPS · Deployment Guide
 
 A multiplayer Counter-Strike-style FPS that runs in the browser:
-**Dust2 map · headshot hitboxes (4× damage) · bomb defusal · economy & buy menu · 33-weapon buy roster (pistols incl. CZ75/R8/Zeus · SMGs · burst FAMAS, scoped + auto-snipers, suppressed M4A1-S · 4 shotguns with multi-pellet ballistics) · bots fill 5v5 · room codes for friends.**
+**Dust2 map · headshot hitboxes (4× damage) · bomb defusal · economy & buy menu · full CS:GO weapon roster — 42 buyable entries (33 guns · 6 grenades · kevlar/helmet/defuse kit) with 1.6-style silhouette icons · flash/smoke/molotov utility, per-player blind + LOS-blocking smoke · bots fill 5v5 · room codes for friends.**
 
 This guide gets it running on your own server so you and your friends can play together.
 
@@ -109,13 +109,36 @@ location / {
 | LMB | Fire |
 | RMB | Scope (AWP) |
 | R | Reload |
-| 1 / 2 / 3 / 4 | Primary / Pistol / Knife / C4 |
+| 1 / 2 / 3 / 4 / 5 | Primary / Pistol / Knife / C4 / Grenades (cycles) |
 | Q | Last weapon |
 | E (hold) | Plant / defuse the bomb |
 | B | Buy menu (during freeze time + 20s) |
+| LMB / RMB (grenade) | Full-power throw / underhand lob |
 | TAB | Scoreboard (hold) |
 | ENTER | Chat |
 | ESC | Pause / settings |
+
+## Weapon roster (full CS:GO set, one stat source)
+
+All stats live in **`shared/weapons.ts`** (single source of truth — see Tuning).
+Buy menu categories mirror CS 1.6 slots:
+
+| Category (B → digit) | Weapons |
+|---|---|
+| 1 · PISTOLS | deagle, glock¹, usp¹, p250, five-seven, tec-9, cz75, dual berettas, p2000, r8, zeus |
+| 2 · SHOTGUNS | nova, xm1014, mag-7, sawed-off — 9-pellet fans, server-validated per pellet |
+| 3 · SMGs | mp9, mac-10, mp7, ump-45, mp5-sd, p90, bizon |
+| 4 · RIFLES | ak-47, m4a4, m4a1-s, galil, famas, sg 553, aug, ssg 08, scar-20, g3sg1, awp |
+| 5 · MACHINE GUNS | negev (accuracy-ramp spool), m249 |
+| 6 · EQUIPMENT | kevlar, kevlar+helmet, defuse kit, flashbang, he, smoke, molotov, incendiary, decoy |
+
+¹ starters (free, team default) · every menu row shows a procedural weapon-silhouette
+icon rendered from the same viewmodel geometry the player holds.
+
+Kill rewards follow CS classes ($300 rifles/pistols, $600 SMGs, $900 shotguns,
+$100 AWP/auto-snipers, $300 MGs/grenades, $1500 knife) — verified against the
+shared table by the phase-9 balance suite, and the economy is validated by
+scripted 20-round bot simulations.
 
 ## Game rules (bomb defusal)
 

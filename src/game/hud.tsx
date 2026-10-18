@@ -37,6 +37,22 @@ const WEAPON_SHORT: Record<string, string> = {
   decoy: 'Decoy', defusekit: 'Kit',
 }
 
+/** 1.6-style silhouette icon per buy row (Phase 9 plan 9.1c). Source PNGs
+ *  are generated procedurally from the weapon viewmodels
+ *  (scripts/gen-buy-icons.ts). Asset-acceptance policy v3: accepted copy
+ *  (/assets/icons) first, staged copy (/staging/icons) as fallback, hidden
+ *  if neither exists — so the menu works identically before/after acceptance. */
+function BuyIcon({ id }: { id: string }) {
+  const [stage, setStage] = useState(0)
+  const src = stage === 0 ? `/assets/icons/${id}.png` : stage === 1 ? `/staging/icons/${id}.png` : null
+  if (!src) return null
+  return (
+    <img src={src} alt="" draggable={false} loading="eager"
+      className="h-7 w-[76px] shrink-0 object-contain opacity-90"
+      onError={() => setStage(stage + 1)} />
+  )
+}
+
 // ============================================================
 // CS 1.6-style category buy menu — two-level keyboard navigation.
 // B opens (page.tsx toggles), digits 1-6 pick a category, digits
@@ -155,6 +171,7 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
                 <button key={it.id} onClick={() => cb.onBuy(it.id)}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left transition ${st.wrongTeam ? 'bg-zinc-800/40 opacity-40' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
                   <span className="w-4 font-bold text-orange-400">{i + 1}.</span>
+                  <BuyIcon id={it.id} />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 text-sm font-bold">
                       {it.name}

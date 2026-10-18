@@ -12,7 +12,7 @@ sessions. When in doubt, ask the user — never assume an exception.
 - New or replaced binaries **always land in `public/staging/<same-relative-path>`**.
   Never drop a new binary directly into `public/assets/` — platform auto-commits
   sweep untracked non-ignored files, and it would enter git unreviewed.
-- Loader behavior: sounds/textures try `/assets/...` first, then `/staging/...`;
+- Loader behavior: sounds/textures/icons try `/assets/...` first, then `/staging/...`;
   the model route `POST /api/assets/human` serves **staging over accepted** while
   a staged copy exists, so a newly dropped version always wins for evaluation.
 - **Accept only on explicit user approval.** Acceptance is a plain file move:
@@ -57,12 +57,32 @@ sessions. When in doubt, ask the user — never assume an exception.
 ## Verification bar (before calling anything done)
 
 - E2E: `bun scripts/test-aimhead.ts` (4/4) and `bun scripts/test-bugfixes.ts` (3/3).
+- Full-roster regression: `bun scripts/test-phase9.ts` + `scripts/run-phase9-e2e.sh`
+  (data-driven buy/fire/reload/throw over every BUY_ENTRY + 10×MG tick-budget
+  load sanity). Phase suites 3–8 + bots are the per-mechanic detail layers.
 - Model: `POST /api/assets/human` → 200; in-browser `model=READY`, players N/N
   `onRig`.
 - VLM screenshot checks: only judge character models while ALIVE (the spectate
   camera ignores teleport); distant map crates get misread as "characters".
-- `tsc`: `src/` + `mini-services/` must be clean (known pre-existing errors live
-  in `scripts/` and `examples/` — leave them).
+- `tsc`: `src/` + `mini-services/` + phase tests must be clean (known
+  pre-existing errors live in `scripts/bsp*`, `scripts/texgen`, `examples/` —
+  leave them).
+
+## E2E harness invariants (learned the hard way — keep these in any socket test)
+
+- **Move players incrementally** (`hop`-style ~9m steps): single far `state`
+  emits trip the anti-teleport guard (>12m/claim) and are silently dropped.
+- **Sync positions from `snapshot` rows before computing hops**: `roundStart`
+  teleports everyone to spawns; a hop launched off a stale client-side position
+  is a rejected no-op, leaving players spawn-side with no LOS.
+- **Damage claims only apply during `live`** (`applyDamage` phase gate); grenade
+  **throws** are also live-only (`throwGrenade` checks `m.phase`).
+- **Buys are legal in freeze + the first 20s of live** — size test batches by a
+  time budget computed from fireDelay/reloadMs so every buy lands in-window.
+- The shooter never sees their own `shot` broadcasts (`socket.to(room)`) — count
+  them on a witness socket.
+- Who carries the bomb is a **connection race**: read `snapshot` row[13], never
+  assume socket creation order.
 
 ## Session protocol
 

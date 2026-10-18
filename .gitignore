@@ -80,3 +80,6 @@ public/assets/maps/*/debug-top.*
 /assets/
 tmp/
 .initial_snapshot.json
+
+# one-off diagnostic scripts (kept local, never committed)
+/scripts/tmp/
