@@ -35,7 +35,9 @@ const futureIds = Object.keys(WEAPON_AUDIO).filter(id => !(id in WEAPONS))
 for (const id of liveIds) {
   check(`WEAPON_AUDIO covers live weapon ${id}`, !!WEAPON_AUDIO[id])
 }
-check('future roster mapped (>= 20 entries — phases 4-7 remain)', futureIds.length >= 20, `${futureIds.length} future ids`)
+// Phase 4 live: future roster shrank to the Phase 5-8 remainder (8 rifles,
+// 4 shotguns, 2 MGs, grenades via GRENADE_AUDIO) — recalibrate the floor.
+check('future roster mapped (>= 14 entries — phases 5-8 remain)', futureIds.length >= 14, `${futureIds.length} future ids`)
 check('no future id collides with a live WEAPONS id',
   futureIds.every(id => !(id in WEAPONS)))
 

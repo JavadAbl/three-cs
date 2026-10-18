@@ -96,6 +96,8 @@ const KICK: Partial<Record<WeaponId, number>> = {
   // Phase 3 pistols
   p250: 0.55, fiveseven: 0.5, tec9: 0.7, cz75: 0.45, elites: 0.5,
   hkp2000: 0.55, revolver: 2.0, taser: 0.8,
+  // Phase 4 SMGs
+  mp9: 0.2, mac10: 0.3, mp7: 0.2, ump45: 0.35, p90: 0.25, bizon: 0.22,
 }
 
 export class Engine {

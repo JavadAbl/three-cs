@@ -29,6 +29,8 @@ const EXPECTED_CAT: Record<string, WeaponCategory> = {
   // Phase 3 pistols
   p250: 'pistol', fiveseven: 'pistol', tec9: 'pistol', cz75: 'pistol',
   elites: 'pistol', hkp2000: 'pistol', revolver: 'pistol', taser: 'pistol',
+  // Phase 4 SMGs
+  mp9: 'smg', mac10: 'smg', mp7: 'smg', ump45: 'smg', p90: 'smg', bizon: 'smg',
 }
 
 // --- 1. category backfill ---
@@ -51,7 +53,10 @@ const want = [
   // Phase 3 pistols
   'p250:300', 'fiveseven:500@CT', 'tec9:500@T', 'cz75:500', 'elites:500',
   'hkp2000:200@CT', 'revolver:600', 'taser:200',
-  'mp5:1500', 'ak47:2700@T', 'm4:3100@CT', 'awp:4750',
+  'mp5:1500',
+  // Phase 4 SMGs
+  'mp9:1250@CT', 'mac10:1250@T', 'mp7:1500', 'ump45:1500', 'p90:2350', 'bizon:1400',
+  'ak47:2700@T', 'm4:3100@CT', 'awp:4750',
   'kevlar:650', 'kevlarhelm:1000',
 ]
 check('BUY_ENTRIES derived set + prices + teams', JSON.stringify(got) === JSON.stringify(want), got.join(', '))
@@ -61,7 +66,7 @@ check('no price-0 starters/knife/c4 in buy list',
 // --- 4. grouping ---
 const groups: Record<string, string[]> = {
   pistol: ['deagle', 'p250', 'fiveseven', 'tec9', 'cz75', 'elites', 'hkp2000', 'revolver', 'taser'],
-  shotgun: [], smg: ['mp5'], rifle: ['ak47', 'm4', 'awp'],
+  shotgun: [], smg: ['mp5', 'mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'], rifle: ['ak47', 'm4', 'awp'],
   heavy: [], equipment: ['kevlar', 'kevlarhelm'],
 }
 check('pistol category fits the 9-digit buy menu cap', groups.pistol.length <= 9)
@@ -152,6 +157,30 @@ for (const id of ['p250', 'cz75', 'elites', 'taser'] as const) {
   check(`[${id}] one-shots an unarmored head (pistol class)`,
     shared.computeDamage(w, 'head', 5, 0, false).dmg >= 100)
 }
+
+check('smg category fits the 9-digit buy menu cap', groups.smg.length <= 9)
+
+// --- 9. Phase 4 SMG mechanics (schema-level) ---
+check('mp9 CT / mac10 T are the only team-restricted SMGs; rest free',
+  shared.WEAPONS.mp9.team === 'CT' && shared.WEAPONS.mac10.team === 'T' &&
+  ['mp5', 'mp7', 'ump45', 'p90', 'bizon'].every(id => shared.WEAPONS[id as shared.WeaponId].team === undefined))
+check('all six new SMGs are $600 kill-reward class',
+  ['mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'].every(id => {
+    const w = shared.WEAPONS[id as shared.WeaponId]
+    return w.killReward === 600 && w.killRewardClass === 'smg' &&
+      shared.KILL_REWARD_BY_CLASS[w.killRewardClass!] === w.killReward
+  }))
+check('bizon carries the 64-round helical mag; p90 the 50-round top mag',
+  shared.WEAPONS.bizon.mag === 64 && shared.WEAPONS.p90.mag === 50)
+check('mp7 is the fastest SMG (900 RPM ≈ 67ms)',
+  shared.WEAPONS.mp7.fireDelay <= 67 &&
+  Object.values(shared.WEAPONS).filter(w => w.category === 'smg').every(w => w.fireDelay >= shared.WEAPONS.mp7.fireDelay))
+check('ump45 has the heaviest SMG damage + armor-punch quirk (p90 tops pen)',
+  Object.values(shared.WEAPONS).filter(w => w.category === 'smg').every(w => w.damage <= shared.WEAPONS.ump45.damage) &&
+  shared.WEAPONS.ump45.armorPen >= 0.65 && shared.WEAPONS.p90.armorPen > shared.WEAPONS.ump45.armorPen)
+check('UMP is the slowest-moving SMG (230/250 speed scale)',
+  Object.values(shared.WEAPONS).filter(w => w.category === 'smg').every(w =>
+    w.id === 'ump45' || w.moveSpeed >= shared.WEAPONS.ump45.moveSpeed))
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

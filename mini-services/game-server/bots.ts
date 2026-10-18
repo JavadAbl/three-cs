@@ -216,7 +216,24 @@ export function botBuy(m: Match, p: PlayerState) {
   const rifle: WeaponId = p.team === 'T' ? 'ak47' : 'm4'
   if (p.money >= WEAPONS[rifle].price + 650) { buy(rifle); armor(true); return }
   if (p.money >= WEAPONS[rifle].price) { buy(rifle); return }
-  if (p.money >= 1500) { buy('mp5'); if (p.money >= 650) armor(false); return }
+  // mid-economy SMG branch (plan 4.4) — replaces the single mp5 fallback.
+  // p90 for the rich; $1500 class mixes mp7/ump45/mp5 + bizon's 64-rd anti-eco
+  // spray; team flavor at the $1250 step (mac-10 T / mp9 CT).
+  if (p.money >= 2350) {
+    buy('p90')
+    if (p.money >= 650) armor(false)      // plain kevlar if the remainder fits
+    return
+  }
+  if (p.money >= 1500) {
+    const roll = Math.random()
+    if (roll < 0.30) buy('mp7')            // $1500, 900 RPM, PDW-accurate
+    else if (roll < 0.55) buy('ump45')     // $1500, armor puncher
+    else if (roll < 0.80) buy('mp5')       // $1500, suppressed allrounder
+    else buy('bizon')                      // $1400, 64-round spray
+    if (p.money >= 650) armor(false)
+    return
+  }
+  if (p.money >= 1250) { buy(p.team === 'T' ? 'mac10' : 'mp9'); return }
   // eco / force rounds: deagle if they can, p250 if they almost can
   if (p.money >= 700) buy('deagle')
   else if (p.money >= 300 && Math.random() < 0.5) buy('p250')

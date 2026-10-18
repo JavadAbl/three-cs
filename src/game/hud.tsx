@@ -25,6 +25,8 @@ const WEAPON_SHORT: Record<string, string> = {
   // Phase 3 pistols
   p250: 'P250', fiveseven: 'Five-Seven', tec9: 'Tec-9', cz75: 'CZ75', elites: 'Dualies',
   hkp2000: 'P2000', revolver: 'R8', taser: 'Zeus',
+  // Phase 4 SMGs
+  mp9: 'MP9', mac10: 'MAC-10', mp7: 'MP7', ump45: 'UMP', p90: 'P90', bizon: 'Bizon',
 }
 
 // ============================================================

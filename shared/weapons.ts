@@ -21,6 +21,8 @@ export type WeaponId =
   // Phase 3 pistols — ids match the staged audio map (shared/weapons-audio.ts)
   | 'p250' | 'fiveseven' | 'tec9' | 'cz75' | 'elites'
   | 'hkp2000' | 'revolver' | 'taser'
+  // Phase 4 SMGs — ids match the staged audio map (shared/weapons-audio.ts)
+  | 'mp9' | 'mac10' | 'mp7' | 'ump45' | 'p90' | 'bizon'
 
 // Menu category. Weapons keep their own class for stats/logic; the buy menu
 // groups them under fixed CS 1.6 numbering. 'grenade' and 'gear' weapons land
@@ -157,6 +159,47 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     fireDelay: 90, mag: 30, reserve: 120, reloadMs: 2600, moveSpeed: 4.7,
     armorPen: 0.55, falloff10m: 0.84, auto: true, killReward: 600, accurate: 0.55,
     fireMode: 'auto', suppressed: true, killRewardClass: 'smg',
+  },
+  // ---------------------------------------------- Phase 4 SMGs (CS:GO values)
+  // Prices per plan 4.4; damage/armorPen/falloff/mags per CS:GO wiki. All
+  // $600 kill-reward class; movement 4.6-4.8 = the CS 0.92-0.96 weapon-speed
+  // scale (240/250, UMP 230). mp7 900 RPM ≈ 67ms, p90 857 RPM ≈ 70ms,
+  // bizon 64-round helical mag is the anti-eco spray identity.
+  mp9: {
+    id: 'mp9', name: 'MP9', slot: 1, category: 'smg', price: 1250, team: 'CT', damage: 26, hsMult: 4, legMult: 0.75,
+    fireDelay: 75, mag: 30, reserve: 120, reloadMs: 2100, moveSpeed: 4.8,
+    armorPen: 0.60, falloff10m: 0.84, auto: true, killReward: 600, accurate: 0.45,
+    fireMode: 'auto', killRewardClass: 'smg', // CT compact, mag-in-grip, 800 RPM
+  },
+  mac10: {
+    id: 'mac10', name: 'MAC-10', slot: 1, category: 'smg', price: 1250, team: 'T', damage: 29, hsMult: 4, legMult: 0.75,
+    fireDelay: 75, mag: 30, reserve: 100, reloadMs: 2300, moveSpeed: 4.8,
+    armorPen: 0.575, falloff10m: 0.80, auto: true, killReward: 600, accurate: 0.70,
+    fireMode: 'auto', killRewardClass: 'smg', // T boxy room-sweeper, wild spray
+  },
+  mp7: {
+    id: 'mp7', name: 'MP7', slot: 1, category: 'smg', price: 1500, damage: 29, hsMult: 4, legMult: 0.75,
+    fireDelay: 67, mag: 30, reserve: 120, reloadMs: 3000, moveSpeed: 4.8,
+    armorPen: 0.625, falloff10m: 0.84, auto: true, killReward: 600, accurate: 0.45,
+    fireMode: 'auto', killRewardClass: 'smg', // fastest SMG (900 RPM), PDW-accurate
+  },
+  ump45: {
+    id: 'ump45', name: 'UMP-45', slot: 1, category: 'smg', price: 1500, damage: 35, hsMult: 4, legMult: 0.75,
+    fireDelay: 90, mag: 25, reserve: 100, reloadMs: 3500, moveSpeed: 4.6,
+    armorPen: 0.65, falloff10m: 0.75, auto: true, killReward: 600, accurate: 0.40,
+    fireMode: 'auto', killRewardClass: 'smg', // heaviest SMG round: armor punch, short reach
+  },
+  p90: {
+    id: 'p90', name: 'P90', slot: 1, category: 'smg', price: 2350, damage: 26, hsMult: 4, legMult: 0.75,
+    fireDelay: 70, mag: 50, reserve: 100, reloadMs: 3400, moveSpeed: 4.8,
+    armorPen: 0.69, falloff10m: 0.84, auto: true, killReward: 600, accurate: 0.55,
+    fireMode: 'auto', killRewardClass: 'smg', // bullpup, 50-rd top mag, rich-SMG
+  },
+  bizon: {
+    id: 'bizon', name: 'PP-Bizon', slot: 1, category: 'smg', price: 1400, damage: 27, hsMult: 4, legMult: 0.75,
+    fireDelay: 80, mag: 64, reserve: 120, reloadMs: 3400, moveSpeed: 4.8,
+    armorPen: 0.575, falloff10m: 0.82, auto: true, killReward: 600, accurate: 0.50,
+    fireMode: 'auto', killRewardClass: 'smg', // 64-round helical drum: anti-eco spray
   },
   ak47: {
     id: 'ak47', name: 'AK-47', slot: 1, category: 'rifle', price: 2700, team: 'T', damage: 36, hsMult: 4, legMult: 0.75,
