@@ -662,3 +662,23 @@ Stage Summary:
 - Phase 1 is pushed and remote main = local main = df7dfe5
 - New failure mode documented: environment resets can silently kill HOME-state config (credentials) and flip file modes — check both before assuming a token was revoked
 - Lesson: repo state survives these resets (git dir untouched), only HOME dotfiles + file modes wobble
+
+---
+Task ID: 35
+Agent: Super Z (main agent)
+Task: WEAPONS_PLAN.md Phase 2 — data-driven audio map + stage all new-weapon samples
+
+Work Log:
+- ENV RECOVERY first: the environment reset (task 34) had wiped the gitignored raw pack (assets/packs, 307MB), public/staging/, and conversion workspaces. Recovered the pack from the /tmp/my-project mirror (cp -r assets/packs). scripts/csgo-snd partial clone was NOT recoverable but the flat pack at assets/packs/csgo/weapons (553 wavs) has everything needed — extract.sh's manifest confirmed the raw naming.
+- 2.1 DATA-DRIVEN MAP: new shared/weapons-audio.ts — WEAPON_AUDIO (Record<string, WeaponAudio {fire, distant, out, in, rack, draw, bolt, suppressed}>) covering the FULL 41-weapon target roster (9 live + 32 future gun ids), GRENADE_AUDIO + GRENADE_COMMON (Phase 8 prep), NON_WEAPON_FILES (knife melee, C4 events, feedback, footsteps, UI, music), and liveWeaponSoundFiles() (map ∩ WEAPONS ids → preload names, deduped).
+- audio.ts refactor: FILES/FIRE/DISTANT/RELOAD/DRAW/PISTOLS tables all DELETED — FILES derives from the map; gunshot/reloadStage/draw read WEAPON_AUDIO[weapon]; AWP-style post-shot rechamber generalized to the map's bolt field (only awp carries it — identical behavior); dryFire pistol check now derives from WEAPONS category. Dead preload weight dropped: awp_boltforward was never played by any code (headshot/c4_click stay — they're in the committed 85 and harmless).
+- 2.2 STAGING: scripts/stage-weapon-sounds.sh — 166-entry manifest (raw wav → staged name), same ffmpeg pipeline as the accepted set (leading-silence strip for shot latency, Vorbis q3, 44.1kHz) → public/staging/sounds/ (166 files, 3.0MB). Covers: 8 pistols + 6 SMGs + 8 rifles/snipers (incl. m4a1s suppressed set) + 4 shotguns (shell+pump reload model) + 2 MGs (box reload model) + grenades (flash/he/smoke/molotov/inc/decoy + generic pinpull/throw/bounce/deploy) + sg553 zoom pair for Phase 5. cz75 reload sounds absent from the pack — synth fallback covers it (noted in map comment).
+- TEST: new scripts/test-audio-map.ts (272 checks): map coverage of live roster, schema completeness per category, every live name exists in committed pack, every future name exists in staged pack, no preload duplicates/overlap, HTTP 200 on ALL 166 staged + ALL 85 committed files through :3000.
+- VERIFIED: test-audio-map 272/272; E2E aimhead 4/4 + bugfixes 3/3 + buymenu 53/53; tsc clean (src/mini-services/shared); browser via :81: game deploys, 84 sound requests fired through the new import chain (exactly the derived FILES count), zero staging fetches (correct — no live weapon staged), zero page errors.
+- NOTHING COMMITTED from staging (policy v3): the 166 oggs stay gitignored until user acceptance (mv + git add at Phase 9 or per-batch on request).
+
+Stage Summary:
+- Audio is fully data-driven: adding a weapon in shared/weapons.ts + a WEAPON_AUDIO entry = sounds wired; phases 3-8 have ZERO audio pipeline work left (samples already staged + mapped + load automatically when the weapon goes live)
+- 85/85 accepted pack still serving unchanged; preload trimmed of dead weight (84 names)
+- Raw pack recovered to assets/ (gitignored) — future resets can re-copy from /tmp/my-project mirror while it lives
+- Next: Phase 3 (pistols ×8 — stats, viewmodels, bot buys; audio+menu already waiting for them)

@@ -4,68 +4,22 @@
 // the accepted copy first (steady state = one request), then the staged copy.
 // Every public sound: real decoded sample if available -> procedural synth otherwise,
 // so the game still sounds right if the pack fails to load (offline / old Safari).
+//
+// PHASE 2: the per-weapon tables (FIRE/DISTANT/RELOAD/DRAW) and the FILES list
+// are GONE — everything derives from the data-driven map in
+// shared/weapons-audio.ts (WEAPON_AUDIO covers the full 41-weapon target
+// roster; only live weapons preload). Non-weapon sounds (knife melee, C4,
+// feedback, footsteps, UI, music) come from NON_WEAPON_FILES.
+import { WEAPON_AUDIO, NON_WEAPON_FILES, liveWeaponSoundFiles } from '../../shared/weapons-audio'
+import { WEAPONS } from './weapons'
+
 export type Vec3 = [number, number, number]
 
-// every sound file shipped in the pack (name == filename in /assets/sounds)
-const FILES = [
-  // per-weapon fire + distant variants
-  'ak47_fire', 'ak47_distant', 'm4_fire', 'm4_distant', 'awp_fire', 'awp_distant',
-  'deagle_fire', 'deagle_distant', 'mp5_fire', 'glock_fire', 'glock_distant',
-  'usp_fire', 'usp_distant',
-  // reload + draw, per weapon
-  'ak47_clipout', 'ak47_clipin', 'ak47_bolt', 'ak47_draw',
-  'm4_clipout', 'm4_clipin', 'm4_bolt', 'm4_draw',
-  'awp_clipout', 'awp_clipin', 'awp_bolt', 'awp_boltforward', 'awp_draw',
-  'deagle_clipout', 'deagle_clipin', 'deagle_slide', 'deagle_draw',
-  'mp5_clipout', 'mp5_clipin', 'mp5_slide', 'mp5_draw',
-  'glock_clipout', 'glock_clipin', 'glock_slide', 'glock_draw',
-  'usp_clipout', 'usp_clipin', 'usp_slide', 'usp_draw',
-  // knife
-  'knife_draw', 'knife_slash1', 'knife_slash2', 'knife_hit1', 'knife_hit2', 'knife_wall', 'knife_stab',
-  // C4
-  'c4_beep1', 'c4_beep2', 'c4_click', 'c4_initiate', 'c4_plant', 'c4_explode',
-  'c4_disarmstart', 'c4_disarmfinish', 'c4_draw', 'c4_key1', 'c4_key2',
-  // empties
-  'empty_pistol', 'empty_rifle',
-  // player feedback
-  'dink', 'headshot', 'hurt1', 'hurt2',
-  // footsteps + impacts
-  'foot_dirt1', 'foot_dirt2', 'foot_dirt3', 'foot_dirt4',
-  'foot_conc1', 'foot_conc2', 'foot_conc3', 'foot_conc4',
-  'impact1', 'impact2', 'impact3', 'impact4',
-  // misc
-  'buy', 'cant_buy', 'uiclick', 'zoom',
-  // music stingers (default CS:GO music kit)
-  'round_start', 'round_win', 'round_lose',
-]
+// derived: live-weapon samples + the fixed non-weapon set — nothing hand-listed
+const FILES = [...liveWeaponSoundFiles(), ...NON_WEAPON_FILES]
 
 const DIR = '/assets/sounds/'
 const STAGE_DIR = '/staging/sounds/'
-
-// per-weapon sample tables
-const FIRE: Record<string, string> = {
-  ak47: 'ak47_fire', m4: 'm4_fire', awp: 'awp_fire', deagle: 'deagle_fire',
-  mp5: 'mp5_fire', glock: 'glock_fire', usp: 'usp_fire',
-}
-const DISTANT: Record<string, string> = {
-  ak47: 'ak47_distant', m4: 'm4_distant', awp: 'awp_distant', deagle: 'deagle_distant',
-  glock: 'glock_distant', usp: 'usp_distant',
-}
-const RELOAD: Record<string, { out: string; in: string; rack: string }> = {
-  ak47: { out: 'ak47_clipout', in: 'ak47_clipin', rack: 'ak47_bolt' },
-  m4: { out: 'm4_clipout', in: 'm4_clipin', rack: 'm4_bolt' },
-  awp: { out: 'awp_clipout', in: 'awp_clipin', rack: 'awp_bolt' },
-  deagle: { out: 'deagle_clipout', in: 'deagle_clipin', rack: 'deagle_slide' },
-  mp5: { out: 'mp5_clipout', in: 'mp5_clipin', rack: 'mp5_slide' },
-  glock: { out: 'glock_clipout', in: 'glock_clipin', rack: 'glock_slide' },
-  usp: { out: 'usp_clipout', in: 'usp_clipin', rack: 'usp_slide' },
-}
-const DRAW: Record<string, string> = {
-  ak47: 'ak47_draw', m4: 'm4_draw', awp: 'awp_draw', deagle: 'deagle_draw',
-  mp5: 'mp5_draw', glock: 'glock_draw', usp: 'usp_draw',
-  knife: 'knife_draw', c4: 'c4_draw',
-}
-const PISTOLS = new Set(['deagle', 'glock', 'usp'])
 
 const pick = <T,>(arr: T[]): T => arr[(Math.random() * arr.length) | 0]
 
@@ -220,19 +174,19 @@ export class GameAudio {
   // ---------------------------------------------------------------- weapons
   gunshot(weapon: string, pos?: Vec3, self?: Vec3) {
     const s = this.spatial(pos, self)
-    const wid = FIRE[weapon] ? weapon : weapon === 'mp5' ? 'mp5' : weapon
-    const fire = FIRE[wid] ?? FIRE[weapon]
-    if (fire) {
-      let name = fire
-      if (s.far && DISTANT[wid]) name = DISTANT[wid]
+    const wa = WEAPON_AUDIO[weapon]
+    if (wa?.fire) {
+      let name = wa.fire
+      if (s.far && wa.distant) name = wa.distant
       const gain = pos ? 0.48 * s.gain : 0.5
       if (this.play(name, { gain, pan: s.pan, variance: 0.04 })) {
-        // AWP rechambers audibly after every nearby shot
-        if (weapon === 'awp' && !s.far) {
+        // rechamber audibly after every nearby shot (awp-style)
+        if (wa.bolt && !s.far) {
           const now = performance.now()
           if (now - this.lastAwkBolt > 700) {
             this.lastAwkBolt = now
-            setTimeout(() => this.play('awp_bolt', { gain: 0.38, variance: 0.03 }), 300)
+            const bolt = wa.bolt
+            setTimeout(() => this.play(bolt, { gain: 0.38, variance: 0.03 }), 300)
           }
         }
         return
@@ -274,10 +228,8 @@ export class GameAudio {
 
   /** staged reload sfx: 'out' mag release, 'in' mag seat, 'rack' charging handle/slide */
   reloadStage(weapon: string, stage: 'out' | 'in' | 'rack') {
-    const r = RELOAD[weapon]
-    if (r) {
-      if (this.play(r[stage], { gain: 0.5, variance: 0.02 })) return
-    }
+    const name = WEAPON_AUDIO[weapon]?.[stage]
+    if (name && this.play(name, { gain: 0.5, variance: 0.02 })) return
     if (stage === 'out') this.reloadClick()
     else if (stage === 'in') this.reloadMagIn()
     else this.reloadSlide()
@@ -285,13 +237,14 @@ export class GameAudio {
 
   /** weapon raise sound on switch */
   draw(weapon: string) {
-    const d = DRAW[weapon]
+    const d = WEAPON_AUDIO[weapon]?.draw
     if (d && this.play(d, { gain: 0.45, variance: 0.02 })) return
     this.switchWeapon()
   }
 
   dryFire(weapon?: string) {
-    if (weapon && PISTOLS.has(weapon) && this.play('empty_pistol', { gain: 0.4 })) return
+    const isPistol = weapon ? WEAPONS[weapon as keyof typeof WEAPONS]?.category === 'pistol' : false
+    if (isPistol && this.play('empty_pistol', { gain: 0.4 })) return
     if (weapon && this.play('empty_rifle', { gain: 0.4 })) return
     this.tone(900, 0.04, 0.2, 'square')
   }
