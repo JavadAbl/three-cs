@@ -1103,3 +1103,23 @@ Work Log:
 Stage Summary:
 - Push auth is persistent again (standing user decision 2026-10-17 honored); remote main = local main = b8eeac7
 - Remote is fully current: the rejected-Quaternius-pack wipe is on GitHub; a fresh clone now runs the fully procedural game with the intact weapon-model drop-in pipeline
+---
+Task ID: 57
+Agent: Super Z (main agent)
+Task: Stage the user-uploaded Sketchfab "ak-47.glb" for live evaluation (user: "i upload ak-47.glb")
+
+Work Log:
+- Located upload at /home/z/my-project/upload/ak-47.glb (4.86 MB, valid GLB v2, generator Sketchfab-14.62.0, FBX-sourced)
+- Inventory (scripts/.tmp/inspect-one-glb.ts — recovered from git 544f32e, adapted single-file): 134 nodes / 65 meshes / 17,392 tris / 16,587 verts, 3 textures (PBR), 1 material, 0 anims/skins; ext KHR_materials_specular; NAMED PART nodes present (bm_magazine*, bl_grip_low, u_dustcover*, r_barrel*, l_stock*...) — far richer than the rejected Quaternius pack; bbox longest=X(1.92u), muzzle +X, positioned far off origin
+- Baked the weapon-GLB contract via one-off scripts/.tmp/bake-ak47.ts (same raw-container technique as retired stage-guns-pack.ts): uniform scale 0.4591 -> 0.88 m real AK length; rotY +90° -> muzzle −Z; GRIP anchored at origin using the actual bl_grip_low node bbox center (precise — no fz/fy fraction heuristic needed); muzzle end auto-detected from part positions (barrelEnd cx=5.60 vs stock cx=4.21 -> +X end), no VLM sign pass needed; fixup composed into root node matrix (134-node graph)
+- Result bbox: z −0.602 (muzzle tip) .. +0.278 (stock rear) — textbook AK proportions; y −0.115..+0.137 sights-up; Draco chain (compress-glb.sh) 4.86 MB -> 516 KB (10.6%), all 134 nodes + 17,392 tris survive, staged at public/staging/models/weapons/ak47.glb (gitignored — evaluative)
+- Live eval (scripts/.tmp/ak47-eval.sh, agent-browser): lobby preload ak47='ready' (32 other ids 'failed' = procedural, correct post-wipe); joined TERRORIST (AK is T-only); bought via B→4→1; vm = GLB branch (vmGlb='ak47', parts=12 = gun + 2 glove rigs), knife regression intact (glb=null procedural), weapon-switch round-trip ok, remote bot pistols procedural stubs (no staged files), console errors 0
+- VLM verification on screenshots: "AK-47 identifiable by wooden furniture and curved magazine", muzzle pointing away into the scene, natural size vs hands, clean textures, no clipping — PASS both idle and post-fire shots
+- Perf note: 17,392 tris slightly above the 15k vm budget guideline — runs fine live; user can judge
+- git status clean by design: upload/ + public/staging/ + scripts/.tmp/ all gitignored; nothing committed for the model itself (staged = evaluative)
+
+Stage Summary:
+- The user's new AK-47 is LIVE in-game now: refresh -> play T side -> buy AK-47 (B→4→1) — remote guns + first-person vm both use it; knife + all other weapons stay procedural
+- Model quality: textured PBR, named parts (future mag-drop animation possible via bm_magazine nodes — engine parts wiring is the follow-up if wanted)
+- NOTHING accepted yet: acceptance = mv staging->assets + git add, and requires the LICENSE first — this is a Sketchfab download; user must confirm source URL + license (CC0/CC-BY OK; CC-BY-NC/editorial NOT committable) before it enters git
+- Tuning loop if the user wants: edit scripts/.tmp/bake-ak47.ts (REAL_LEN / grip anchor) -> re-run -> bash scripts/compress-glb.sh -> refresh page (route buffer cache: touch route file or restart dev)
