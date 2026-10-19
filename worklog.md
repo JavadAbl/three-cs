@@ -1089,3 +1089,17 @@ Stage Summary:
 - Game is back to 100% procedural weapons (parts-animated viewmodels + remote stubs), verified live headless + VLM
 - Drop-in pipeline intact and waiting: next models = bake to contract (grip origin, muzzle −Z, real meters) → compress-glb.sh → public/staging/models/weapons/<wiredId>.glb → refresh; per-id acceptance unchanged
 - Pending: git push blocked on credential-store restoration (user PAT needed, Task 49 recipe)
+---
+Task ID: 56
+Agent: Super Z (main agent)
+Task: Restore git push auth with the user-provided PAT, push the Task 55 commits (user: "<PAT>")
+
+Work Log:
+- Executed the AGENTS.md case-(b) recovery recipe: credential store rewritten at ~/.git-credentials (x-access-token form, chmod 600, umask 077, outside the repo, contents never printed) + `git config --global credential.helper 'store --file=/home/z/.git-credentials'` restored; no token embedded in remote URLs, .git/config, repo files or logs
+- Mode-flip check: working tree clean this time — no chmod cleanup needed
+- PUSH: plain `git push origin main` → 1c96d59..b8eeac7. Both pending commits landed: c1222f2 (weapon-model wipe — Task 55) + b8eeac7 (worklog Task 55 record)
+- Verified sync both directions: 0 local-only, 0 remote-only; remote tree confirmed carrying the wipe (0 pack scripts / 0 weapon GLBs in origin/main; route + weapongltf.ts + README present as the dormant drop-in pipeline)
+
+Stage Summary:
+- Push auth is persistent again (standing user decision 2026-10-17 honored); remote main = local main = b8eeac7
+- Remote is fully current: the rejected-Quaternius-pack wipe is on GitHub; a fresh clone now runs the fully procedural game with the intact weapon-model drop-in pipeline
