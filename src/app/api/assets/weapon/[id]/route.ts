@@ -19,9 +19,10 @@ import path from 'node:path'
 // If neither file exists the route 404s and the caller keeps its procedural
 // model — a fresh clone runs fully procedural, nothing breaks.
 //
-// Current staged set (2026-10-19): 33 Draco-compressed GLBs from the CC0
-// Quaternius "Ultimate Guns Pack", fix-baked per the weapon GLB spec (real
-// scale, muzzle −Z, grip origin) by scripts/stage-guns-pack.sh.
+// Staged set: EMPTY — the CC0 Quaternius pack staged 2026-10-19 was
+// REJECTED by the user and wiped everywhere (2026-10-20); it must not be
+// restored. All ids 404 → fully procedural game, until NEW models are
+// dropped here (weapon GLB contract: public/assets/models/README.md).
 
 const ASSET_DIRS = ['staging', 'assets'] // staging wins
 const ID_RE = /^[a-z0-9]{2,12}$/

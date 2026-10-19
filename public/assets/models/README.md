@@ -7,10 +7,14 @@ and it must NOT be restored from anywhere. The game runs the procedural
 soldier rig for all players until a NEW model is dropped into staging; the
 user will supply a better one later.
 
-**Weapon model status (2026-10-19): 33 Draco GLBs STAGED for evaluation**
-(`public/staging/models/weapons/`, gitignored) — the CC0 Quaternius
-"Ultimate Guns Pack", fix-baked to the weapon GLB spec and wired into the
-game for **remote guns** + the **knife viewmodel**. See "Weapon GLBs" below.
+**Weapon model status (2026-10-20): NO weapon models — staged pack REJECTED.**
+The CC0 Quaternius "Ultimate Guns Pack" (33 GLBs staged 2026-10-19 for
+live evaluation) was **rejected by the user** ("wipe all weapon models.
+they are not good, il find new models") — every staged GLB and raw-pack
+copy was deleted (mirror included) and it must NOT be restored from
+anywhere. The game runs **fully procedural weapons** (parts-animated
+viewmodels + remote stubs) until NEW models are dropped; the drop-in
+pipeline below stays live and waiting.
 
 `public/assets/` holds **accepted, committed** running assets. New or pending
 binaries live in **`public/staging/`** (gitignored, still web-served so the
@@ -48,55 +52,49 @@ recognize it as a downloadable file:
 - The model is preloaded while the lobby menu is open, so starting a match
   never triggers a fresh download.
 
-## Weapon GLBs (staged 2026-10-19)
+## Weapon GLBs (pipeline LIVE but DORMANT — no files staged)
 
-`public/staging/models/weapons/<weaponId>.glb` — 33 of the 43 roster weapons,
-sourced from the **Quaternius "Ultimate Guns Pack" (poly.pizza GLB bundle,
-License: CC0 public domain**, commercial use OK, no attribution required —
-committable under our art-authorization rule). Originals were FBX2glTF
-conversions with arbitrary scale, +X barrels and no part nodes; the staging
-pipeline **bakes a fixup into each file's mesh-node transform** so they meet
-the Task 46 weapon GLB spec:
+Drop a GLB at **`public/staging/models/weapons/<weaponId>.glb`** (gitignored,
+evaluative) or `public/assets/models/weapons/<weaponId>.glb` (accepted,
+committed) and the game uses it immediately for **remote guns + the
+first-person viewmodel + the knife** — zero code changes. With no file an
+id simply stays procedural (current state: all of them).
 
-- **real-world scale** — longest dimension normalized to each weapon's true
-  length (pistol 0.22 m … sniper 1.23 m)
-- **muzzle −Z, grip at origin** — engine gun-stub contract, drops straight
-  into the same hand anchors the procedural stubs use
-- per-class grip anchors (fz/fy fractions of the rotated bbox) in
-  `scripts/stage-guns-pack.ts` — tweak + re-run to re-tune
-- then Draco-compressed via the safe chain (avg **9.5 KB per gun, 320 KB
-  total**)
+**Wired ids** (33, see `ROUTES` in `src/game/weapongltf.ts`): knife,
+glock, usp, p250, cz75, fiveseven, tec9, hkp2000, deagle, elites (dual),
+revolver, mp5, mp9, mac10, mp7, ump45, p90, bizon, nova, xm1014, mag7,
+sawedoff, ak47, m4, m4a1s, galil, sg553, famas, aug, awp, ssg08, scar20,
+g3sg1. Everything else (m249, negev, taser, c4, all grenades) is
+procedural-only and not wired.
 
-**Pipeline** (re-runnable end to end):
+**The weapon GLB contract** — files must be baked before staging, or they
+will sit wrong in the hand / point the wrong way / be the wrong size:
+
+- **grip anchor at the origin** — the group attaches to the hand anchor at
+  (0,0,0); a raw model centered on its own bbox floats mid-air
+- **muzzle pointing −Z** — the engine gun-stub contract; raw exports often
+  point +X or +Y
+- **real-meter scale** — pistol ~0.22 m … sniper ~1.23 m along the barrel
+- **upright** — top of the weapon toward +Y, sights up
+- optional: named part nodes (mag/slide/bolt/pump) keep the engine's parts
+  animations alive; files without them silently skip those (whole-vm
+  bob/sway/recoil/reload dip/draw always run)
+
+The one-off fixup baker that did this for the (now rejected) Quaternius
+pack lives in git history (commit `544f32e`, `scripts/stage-guns-pack.ts`)
+as the reference pattern for the next pack.
+
+Compress before staging (see the Draco section below):
 
 ```bash
-bash scripts/stage-guns-pack.sh        # fixup-bake + draco-compress all 33
-bun scripts/verify-guns-orientation.ts # side-view contact sheet (muzzle LEFT check)
+bash scripts/compress-glb.sh <input.glb> public/staging/models/weapons/<weaponId>.glb
 ```
-
-The raw pack zip must NOT enter git — extract it to `staging/` (gitignored)
-at the repo root; only the spec-compliant staged outputs are web-served.
 
 **Serving**: extensionless POST route **`/api/assets/weapon/[id]`** (same
 download-manager evasion as the human model; staging wins over accepted;
-404 → procedural fallback, so a fresh clone runs fully procedural).
-
-**What uses them** (`src/game/weapongltf.ts`, preloaded in the lobby):
-
-- **remote guns** — what other players hold (players.ts builds GLB-first,
-  procedural stub stays the fallback per id)
-- **the knife viewmodel** — bayonet, no moving parts (engine.rebuildViewmodel
-  picks the GLB knife; procedural blade is the fallback)
-
-**What deliberately does NOT**: all other first-person viewmodels. The pack
-has **no named mag/slide/bolt/pump part nodes**, and the procedural vms carry
-the engine's parts animations (reload mag-drop / slide blowback / AWP bolt
-cycle / shotgun pump) that GLB swaps would silently lose. They also stay for
-accuracy: the pack is generic archetypes, not CS-accurate silhouettes.
-
-**Not covered by the pack** (stay procedural): m249, negev, taser, c4, all
-grenades, and the dual-elites second gun is a mirrored clone of the same
-pistol GLB.
+404 → procedural fallback, so a fresh clone runs fully procedural). The
+route caches the file buffer in module memory — touch the route file (or
+restart dev) after replacing a file to re-read it.
 
 **Accept** (per weapon, after the user approves the look):
 
@@ -104,8 +102,6 @@ pistol GLB.
 mv public/staging/models/weapons/ak47.glb public/assets/models/weapons/ak47.glb
 git add public/assets/models/weapons/ak47.glb && git commit
 ```
-
-(the route already prefers the accepted copy once staged is gone).
 
 ## Why binaries are staged at all
 

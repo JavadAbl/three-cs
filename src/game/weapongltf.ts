@@ -3,23 +3,33 @@
 // from the Task 46 plan), following the human-model pattern
 // (usermodel.ts): preload once, procedural builders stay as fallback.
 //
-// Scope (user-approved 2026-10-19, extended same day per user request
-// "in first person camera i see old models in hand"): the staged CC0
-// Quaternius pack (33 Draco GLBs, scripts/stage-guns-pack.sh) is used for
-//   1. REMOTE guns — what other players hold (static models are perfect
-//      there; the procedural remote guns had no part animation anyway)
-//   2. FIRST-PERSON viewmodels — knife AND every staged gun. Trade-off the
-//      user accepted: pack files have no named mag/slide/bolt/pump nodes,
-//      so per-part animations (reload mag-drop, pistol blowback, AWP bolt
-//      cycle, shotgun pump) are silently skipped — the engine guards every
-//      part with `if (vm.X)`, and whole-vm motion (bob/sway/recoil/reload
-//      dip/draw) is group-level and keeps running. Weapons without a staged
-//      GLB (m249, negev, taser, c4, all grenades) stay procedural.
+// STATUS (2026-10-20): DORMANT. The CC0 Quaternius "Ultimate Guns Pack"
+// staged 2026-10-19 (33 Draco GLBs) was REJECTED by the user ("wipe all
+// weapon models. they are not good, il find new models") — every staged
+// GLB and raw-pack copy was deleted (mirror included) and the
+// pack-specific staging scripts were removed from the tree (pattern
+// preserved in git history, commit 544f32e). Nothing may restore the
+// rejected pack.
+//
+// This module stays as the drop-in pipeline for the NEXT models the user
+// sources. When a GLB for a wired id below exists at
+// public/staging/models/weapons/<id>.glb (gitignored, evaluative) or
+// public/assets/models/weapons/<id>.glb (accepted), it lights up for:
+//   1. REMOTE guns — what other players hold (static is fine there)
+//   2. FIRST-PERSON viewmodels — knife AND guns
+// Files must be baked to the weapon GLB contract (grip anchor at the
+// origin, muzzle pointing −Z, real-meter scale — see
+// public/assets/models/README.md). Files without named mag/slide/bolt/pump
+// nodes silently skip per-part animations — the engine guards every part
+// with `if (vm.X)`; whole-vm motion (bob/sway/recoil/reload dip/draw) is
+// group-level and keeps running. Weapons without a staged GLB stay
+// procedural.
 //
 // Loading: every id is fetched via the extensionless POST route
 // /api/assets/weapon/<id> (download-manager evasion, see the route file),
 // parsed with the shared Draco-aware GLTFLoader, and cached as a prototype
-// scene. Missing files (fresh clone) 404 → that id simply stays procedural.
+// scene. Missing files (current state: ALL of them) 404 → every id stays
+// procedural — identical to a fresh clone.
 // ============================================================
 import * as THREE from 'three'
 import { sharedGLTFLoader } from './gltf'
@@ -27,7 +37,7 @@ import { buildGloves, type ViewModel } from './weaponmodels'
 import { WEAPONS } from './weapons'
 import type { TeamId, WeaponId } from './weapons'
 
-/** staged weapon ids + per-id mount flags (mirrors scripts/stage-guns-pack.ts ROUTES) */
+/** wired weapon ids + per-id mount flags — drop <id>.glb files for these to go live */
 const ROUTES: Partial<Record<string, { dual?: boolean }>> = {
   knife: {},
   glock: {}, usp: {}, p250: {}, cz75: {}, fiveseven: {}, tec9: {}, hkp2000: {},
