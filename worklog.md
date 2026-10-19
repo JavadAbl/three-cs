@@ -899,3 +899,18 @@ Work Log:
 Stage Summary:
 - The wipe-recovery behavior is now a durable, user-issued repo rule instead of session folklore
 - Remote main (745c8f2 + this commit) carries the full production asset set — single-source-of-truth is now literally true
+---
+Task ID: 46
+Agent: Super Z (main agent)
+Task: Decide the weapon model format (user question: "which kind of models do u use for weapons? glb?")
+
+Work Log:
+- Reviewed current rendering: all ~30 weapons are procedural builders in weaponmodels.ts (ViewModel interface: group/tip/mag/slide/slideL/bolt/pump), engine animates parts by node name; weaponskins.ts swaps albedo PNGs on procedural materials
+- Confirmed the project already runs GLB for the player model (public/assets/models/human.glb via extensionless POST route /api/assets/human, procedural fallback, lobby preload, staging→accept lifecycle per its README)
+- Decision record: weapon models = GLB (binary glTF 2.0). Rationale: three.js native interchange, right-handed/+Y-up/meters matching engine conventions, self-contained single file (geometry+PBR+embedded textures+named nodes), Blender lossless export; .gltf/FBX/OBJ rejected (multi-file / proprietary axis-unit bugs / no PBR-no named parts)
+- Sourcing spec documented for the user: {weaponId}.glb matching roster IDs, origin at grip, muzzle -Z, +Y up, meters; named nodes mag/slide/bolt/pump(+slideL/R); budget vm ≤15k tris / world ≤3k tris, tex ≤1024; static pose only (engine animates parts procedurally — no baked clips needed); staging models/weapons/ → assets/models/weapons/ acceptance flow; licensing rule as per skins README
+- Migration plan proposed: GLB branch inside buildViewModel() with cached loader (human-model pattern), procedural builders retained as fallback, orientation/parts/scale acceptance checker (mirrors check-icon-orientation.ts), skins phase = material overrides on named nodes, hero guns first
+
+Stage Summary:
+- Format decided: GLB, consistent with the existing player-model pipeline — no new infrastructure paradigm needed
+- No code changed this turn; loader scaffolding is the next implementation task once the user confirms or starts sourcing models
