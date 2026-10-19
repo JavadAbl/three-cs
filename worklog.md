@@ -1141,3 +1141,20 @@ Stage Summary:
 - The staged AK-47 viewmodel now sits 13cm back: stock mostly clipped off (small CS-style wedge in the corner), everything else unchanged
 - Tuning affordance for the user: in-game console __eng.vmTune(0.02) (closer / more stock off) or __eng.vmTune(-0.02) (deeper / more stock visible) — tell me the pullback number you like and I bake it into GLB_VM_PULLBACK
 - vmTune value resets on rejoin (session-only); the baked default is 0.13
+---
+Task ID: 59
+Agent: Super Z (main agent)
+Task: AK viewmodel still shows a stock wedge after the 0.13 pull-back (user: "it is better but it need to go back yet") — pull it back further
+
+Work Log:
+- Read Task 58 state: GLB_VM_PULLBACK=0.13 put the stock butt at camera-space z=-0.042 — just barely behind the NEAR PLANE, so the stock sliver between the near plane and ~15cm ahead still projected into the bottom-right corner (VLM had called it "small stock wedge visible in the bottom-right corner only")
+- Geometry: butt must clear the EYE, not the near plane — needs pullback >= vmBase(-0.45) + butt local z(+0.278) => >=0.172; chose 0.20 (54% more than 0.13): butt at +0.028 camera-space = behind the eye entirely; grip/hands land at a classic 25cm CS-viewmodel distance; muzzle still 0.85m ahead
+- engine.ts: GLB_VM_PULLBACK 0.13 -> 0.20, comments updated with the user quote + the near-plane-vs-eye reasoning; vmTune knob unchanged (adj still stacks on top)
+- VERIFICATION: tsc clean (src/); test-aimhead + test-bugfixes ALL PASS; live eval (scripts/.tmp/ak47-eval.sh): ak47 GLB vm ready (parts=12, parent=PerspectiveCamera), knife regression intact (glb=null), weapon-switch round-trip ok, remote bots procedural stubs, console errors 0; __eng.vmTune(0) -> {adj:0, pullback:0.2} confirms new baked default live in browser
+- VLM on fresh screenshots: (a) "wooden butt/stock NOT visible ... rear wooden stock is completely cut off by the edge of the screen", bottom-right shows receiver + curved mag + handguard only; (b) framing "looks like a standard CS:GO-style viewmodel"; (c) the bottom-edge cutoff is "the same kind of cutoff as in commercial FPS games like CS:GO", NOT broken; (d) muzzle flash anchored correctly on the barrel line; (e) hands gripping naturally
+- COMMIT a613f60 pushed
+
+Stage Summary:
+- Staged AK-47 viewmodel now sits 20cm back (was 13cm): the stock wedge is GONE — visible gun is receiver/mag/handguard/hands only, classic CS look
+- Tuning still available: __eng.vmTune(0.02) pulls closer (even less on screen), __eng.vmTune(-0.02) pushes deeper; value resets on rejoin, baked default 0.20
+- The staged model remains evaluative (gitignored) — acceptance still needs the Sketchfab license confirmation from the user
