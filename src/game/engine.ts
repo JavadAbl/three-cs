@@ -16,7 +16,7 @@ import { PlayerManager } from './players'
 import { Effects, buildBombMesh, buildNadeMesh, SmokeCloud, FireZone } from './fx'
 import type { WorldFx } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
-import { preloadWeaponModels, buildGLBKnifeVM, weaponModelsState } from './weapongltf'
+import { preloadWeaponModels, buildGLBKnifeVM, buildGLBGunVM, weaponModelsState } from './weapongltf'
 import { userModelState } from './usermodel'
 import type { ViewModel } from './weaponmodels'
 import { audio } from './audio'
@@ -323,12 +323,13 @@ export class Engine {
     this.pm = new PlayerManager(this.scene, this.myTeam)
     // start weapon PBR texture downloads early so viewmodels never pop in mid-round
     preloadWeaponTextures()
-    // staged weapon GLBs (remote guns + knife vm): preloaded in the lobby too;
-    // once parsed, drop the vm cache so the next weapon switch picks them up
+    // staged weapon GLBs (remote guns + ALL staged viewmodels): preloaded in
+    // the lobby too; once parsed, drop the vm cache and swap whatever is in
+    // hand right now (gun OR knife) from procedural to its staged GLB
     // (procedural builders stay as the fallback for anything not staged)
     void preloadWeaponModels().then(() => {
       this.vmCache.clear()
-      if (this.vmGroup && (this.inventory[this.wIdx] ?? 'knife') === 'knife') this.rebuildViewmodel()
+      if (this.vmGroup) this.rebuildViewmodel()
     })
     // async GLB player models (procedural rig stays as fallback until ready)
     this.pm.preloadModels()
@@ -431,6 +432,8 @@ export class Engine {
           return this.ammo[w]
         },
         vm: () => this.vmGroup ? { visible: this.vmGroup.visible, parts: this.vmGroup.children.length, parent: this.vmGroup.parent?.type ?? null, w: this.inventory[this.wIdx] } : null,
+        // id of the staged GLB backing the current viewmodel (null = procedural)
+        vmGlb: () => (this.vm?.group.userData as { glbVm?: string } | undefined)?.glbVm ?? null,
         vmState: () => {
           const vm = this.vm
           if (!vm) return null
@@ -1191,10 +1194,13 @@ export class Engine {
     const key = `${w}:${this.myTeam}`
     let vm = this.vmCache.get(key)
     if (!vm) {
-      // staged GLB knife (bayonet) replaces the procedural blade; everything
-      // else stays procedural — the pack has no named mag/slide/bolt/pump
-      // nodes, and the procedural vms carry the parts animations.
-      vm = (w === 'knife' ? buildGLBKnifeVM(this.myTeam) : null) ?? buildViewModel(w, this.myTeam)
+      // staged GLB first (knife bayonet + every staged gun — user request
+      // 2026-10-19: "in first person camera i see old models in hand");
+      // GLB vms carry no named parts, so per-part animations skip while the
+      // whole-vm motion keeps running. Anything not staged (m249, negev,
+      // taser, c4, grenades) falls through to the procedural builders.
+      vm = (w === 'knife' ? buildGLBKnifeVM(this.myTeam) : buildGLBGunVM(w, this.myTeam))
+        ?? buildViewModel(w, this.myTeam)
       this.vmCache.set(key, vm)
     }
     this.vm = vm
@@ -1563,7 +1569,8 @@ export class Engine {
     const key = `${w.id}:${this.myTeam}`
     let vm = this.vmCache.get(key)
     if (!vm) {
-      vm = buildViewModel(w.id, this.myTeam)
+      vm = (w.id === 'knife' ? buildGLBKnifeVM(this.myTeam) : buildGLBGunVM(w.id, this.myTeam))
+        ?? buildViewModel(w.id, this.myTeam)
       this.vmCache.set(key, vm)
     }
     return this.camera.localToWorld(new THREE.Vector3(
