@@ -935,3 +935,19 @@ Stage Summary:
 - Draco compression is fully operational end-to-end: benchmark 22x smaller (4.5% of original), named parts proven to survive, decoder self-hosted, compress script committed, human-model loader already Draco-capable
 - Weapon GLB drops (Task 46 plan) should be compressed with `bash scripts/compress-glb.sh <file>` before staging — never with blanket optimize
 - Pending: git push blocked on credential-store restoration (user PAT needed, per the documented recovery recipe)
+---
+Task ID: 48
+Agent: Super Z (main agent)
+Task: GLB inventory — list files in use vs missing (user question)
+
+Work Log:
+- Swept disk + git + code refs: find for *.glb (excl node_modules/.git) = ZERO files anywhere; git ls-files = no tracked glb; public/staging/ doesn't exist; public/assets/models/ holds only README.md
+- human.glb (player model) is wired everywhere in code (POST /api/assets/human route → usermodel.ts auto-rig → engine/players bone anims → page.tsx lobby preload → scripts/test-user-glb.ts headless parse) but the BINARY IS GONE: it only ever lived in gitignored staging after the repo was rebuilt binary-free (pre-rollback remote b03dc4b once carried the 7.6MB copy). Game runs on the procedural box-soldier fallback for all players until the user re-drops it (recommended: compressed via scripts/compress-glb.sh — Task 47 tooling)
+- Weapons: ALL 43 roster ids (shared/weapons.ts WeaponId union) are procedural builders in weaponmodels.ts — zero weapon GLBs exist, and the buildViewModel GLB branch + per-weapon route are not yet written (Task 46 plan; loader side ready via sharedGLTFLoader, Draco-capable)
+- Other model-ish assets are not GLB: aimhead map = geom.json; map/grenades/C4 = procedural
+- Push retry: still blocked (credentials wiped; fetch OK because repo is public-read) — 54242dd + worklog commits remain local, origin/main at 73af5f5
+
+Stage Summary:
+- In-use GLB count: 1 by design (human.glb), 0 on disk; weapon GLB count: 0 of 43
+- Missing: human.glb (user re-drop needed) + 43 weapon viewmodel GLBs (hero five first per plan) + the weapon-GLB loader branch itself
+- Git push still awaits the user's PAT (credential store wiped again)
