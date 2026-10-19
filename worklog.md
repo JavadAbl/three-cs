@@ -1123,3 +1123,21 @@ Stage Summary:
 - Model quality: textured PBR, named parts (future mag-drop animation possible via bm_magazine nodes — engine parts wiring is the follow-up if wanted)
 - NOTHING accepted yet: acceptance = mv staging->assets + git add, and requires the LICENSE first — this is a Sketchfab download; user must confirm source URL + license (CC0/CC-BY OK; CC-BY-NC/editorial NOT committable) before it enters git
 - Tuning loop if the user wants: edit scripts/.tmp/bake-ak47.ts (REAL_LEN / grip anchor) -> re-run -> bash scripts/compress-glb.sh -> refresh page (route buffer cache: touch route file or restart dev)
+---
+Task ID: 58
+Agent: Super Z (main agent)
+Task: First-person AK sits too close — "in first person camera, it should go back a little. Gun stock is completely in screen"
+
+Work Log:
+- Geometry analysis: staged AK stock extends +0.278 m behind the grip origin; at vmBase z=-0.45 the stock rear parked 17cm in front of the eye and dominated bottom-right
+- FIRST ATTEMPT (wrong direction, caught by VLM): pushed the vm FORWARD (-0.13) — that recedes the stock toward the vanishing point but keeps it fully on-screen; VLM on the screenshot correctly reported "stock still clearly visible"
+- Root-correct fix: PULL the vm BACK (+0.13) so the stock butt crosses the near plane (0.05) and clips off behind the eye — the CS-style look ("go back" literally = toward the player). Stock rear: -0.172 -> -0.042 (behind near plane); muzzle still 0.92m ahead; hands/grip ride with the vm; muzzle-flash + eject math derive from vmBasePos so they follow automatically
+- engine.ts: GLB_VM_PULLBACK = 0.13 const applied in rebuildViewmodel for GLB gun vms only (userData.glbVm set, not knife, slot 1 long guns); knife + all procedural vms keep their tuned bases
+- New __eng.vmTune(dz) debug knob: live-adjusts the pull-back (positive = closer to you / stock more off-screen), instant-apply only when the held vm is a GLB gun, sticks across switches; returns {adj, pullback} — user can find their sweet spot and I bake the value
+- VERIFICATION: tsc clean; aimhead + bugfixes ALL PASS; live re-eval: vm glb=ak47 intact, knife regression intact; VLM forced-choice on the new screenshot: "(b) small stock wedge visible in bottom-right corner only" + "overall gun framing looks like a normal CS:GO viewmodel" (was: stock completely in screen / 1/4..1/3 of screen); vmTune live round-trip +0.05 -> pullback 0.18, -0.05 -> 0.13 ok
+- COMMIT b6f6209 pushed
+
+Stage Summary:
+- The staged AK-47 viewmodel now sits 13cm back: stock mostly clipped off (small CS-style wedge in the corner), everything else unchanged
+- Tuning affordance for the user: in-game console __eng.vmTune(0.02) (closer / more stock off) or __eng.vmTune(-0.02) (deeper / more stock visible) — tell me the pullback number you like and I bake it into GLB_VM_PULLBACK
+- vmTune value resets on rejoin (session-only); the baked default is 0.13
