@@ -1049,3 +1049,24 @@ Stage Summary:
 - Re-tune loop for the user: edit fz/fy/len in scripts/stage-guns-pack.ts ROUTES → bash scripts/stage-guns-pack.sh → refresh page (route cache: touch route file or restart dev)
 - Nothing accepted yet: 33 GLBs are staged/evaluative; acceptance per id = mv to public/assets/models/weapons/ + git add
 - Known trade-off: GLB knife bypasses the (dormant) skin system; remote guns carry flat-color pack materials (no PBR textures — pack has none)
+---
+Task ID: 54
+Agent: Super Z (main agent)
+Task: First-person gun viewmodels still showed the OLD procedural models — user: "but in first person camera i see old models in hand"
+
+Work Log:
+- Root cause: Task 53's GLB branch was deliberately scoped to remote guns + knife vm ONLY; first-person gun vms fell through to buildViewModel (procedural). The user overrode that trade-off — extend the GLB branch to every staged gun
+- weapongltf.ts: new buildGLBGunVM(weaponId, team) — clones the staged proto (grip already pinned at origin by the staging bake), measureGun() walks the muzzle slice (z < min.z+4cm) so vm.tip and eject sit on the barrel line; gloves = same procedural rig (trigger hand on grip; support hand at 42% toward muzzle for slot-1 long guns = 4 extra meshes; dual elites = two pistols at ±0.07 canted inward, one glove rig each, one mirrored)
+- engine.ts: rebuildViewmodel + muzzleWorld now GLB-first for ALL staged ids (knife keeps its dedicated bayonet vm); preload-completion handler swaps whatever is in hand (was knife-only guard); new __eng.vmGlb() debug hook reads userData.glbVm markers set by both GLB vm builders
+- Accepted trade-off (recorded in both files): pack GLBs have no named mag/slide/bolt/pump nodes → per-part animations silently skip (engine already null-guards every part); whole-vm bob/sway/recoil/reload-dip/draw are group-level and keep running; unstaged weapons (m249, negev, taser, c4, all 8 grenades) stay procedural
+- Tests: tsc clean (src/); aimhead 4/4; bugfixes 3/3; phase9 e2e 119/119 + phase3-8 regressions ALL PASS (first run timed out against a STALE `bun --hot index.ts` game-server from 05:18 whose cmdline the runner's pkill pattern misses — killed it, fresh run green; the runner pattern is worth fixing someday)
+- scripts/browser-wglb2-smoke.sh (new): joins CT, asserts vmGlb + parts for spawn usp (8), bought m4a1s via B→4→3 (12), knife (8), remote bot guns parts=1 (Task 53 regression), screenshots all three
+- Headless discovery: requestPointerLock silently fails in agent-browser → hud.tsx pause overlay (!pointerLocked gate) never clears, blurring every screenshot; RESUME click + trusted mouse click both fail to lock. Fix in the smoke: CSS-hide full-screen overlays (div.absolute.inset-0.backdrop-blur-sm) before each screenshot — screenshot-only, no game state touched. Real browsers lock on click, users never see this
+- VLM verification on final clean screenshots: usp = pistol in ONE gloved hand; m4a1s = rifle in TWO gloved hands (support hand visible); knife = bayonet — all "low-poly flat-color stylized" (the new pack look, NOT the old procedural PBR models), natural size/orientation, no glitches
+- Committed 544f32e + pushed to origin main
+
+Stage Summary:
+- First-person gun viewmodels now render from the staged CC0 pack for all 33 staged ids (was: knife + remote only) — the "old models in hand" complaint is resolved
+- Re-tune loop unchanged: edit ROUTES in scripts/stage-guns-pack.ts → bash scripts/stage-guns-pack.sh → refresh page
+- Known costs: GLB vms lose mag-drop/slide/bolt/pump animations (whole-vm motion intact); skin system still bypassed for GLB vms (dormant anyway)
+- Debug affordance: __eng.vmGlb() returns the staged id backing the current vm (null = procedural)
