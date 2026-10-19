@@ -90,9 +90,13 @@ export interface EngineOpts {
 
 const PLAYER_R = 0.4
 // GLB long-gun vm pull-back: park the real-model stock butt behind the
-// near plane so it clips off like CS viewmodels (user 2026-10-19:
-// "gun stock is completely in screen"). Live-tunable: __eng.vmTune(dz).
-const GLB_VM_PULLBACK = 0.13
+// eye so it clips off like CS viewmodels (user 2026-10-19: "gun stock is
+// completely in screen"; 2026-10-20: "it is better but it need to go
+// back yet" — 0.13 left a stock wedge in the bottom-right corner, the
+// butt only reached the near plane, not the eye). 0.20 puts the butt
+// (+0.278 local) at +0.028 camera-space = behind the eye entirely.
+// Live-tunable: __eng.vmTune(dz).
+const GLB_VM_PULLBACK = 0.20
 const STAND_H = 1.8
 const CROUCH_H = 1.3
 const EYE_STAND = 1.62
@@ -1225,9 +1229,10 @@ export class Engine {
     this.vmBasePos.copy(vmBase(w))
     // Staged GLB gun vms: real full-length stocks otherwise park ~17cm in
     // front of the eye and fill the screen (user 2026-10-19: "gun stock is
-    // completely in screen"). Pull long-gun vms BACK so the stock butt
-    // crosses the near plane (0.05) and clips off behind the eye — the
-    // CS-style look (stock behind your shoulder). Grip/hands/muzzle stay
+    // completely in screen"). Pull long-gun vms BACK so the stock butt ends
+    // up behind the eye itself (not just the near plane — 0.13 still left a
+    // stock wedge in the corner; user 2026-10-20) — the CS-style look
+    // (stock behind your shoulder). Grip/hands/muzzle stay
     // in natural positions; tip/eject derive from vmBasePos so they follow.
     // Knife keeps its tuned base; per-weapon values if staged models diverge.
     const gv = (vm.group.userData as { glbVm?: string }).glbVm
