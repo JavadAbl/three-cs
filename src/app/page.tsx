@@ -80,6 +80,15 @@ export default function Home() {
       .catch(() => { /* procedural rig stays the fallback */ })
   }, [])
 
+  // Same warm-up for the staged weapon GLBs (remote guns + knife viewmodel,
+  // ~320 KB Draco total): parse during lobby time so the first match already
+  // renders them. weapongltf memoizes, so engine/players re-calls are no-ops.
+  useEffect(() => {
+    void import('@/game/weapongltf')
+      .then((m) => m.preloadWeaponModels())
+      .catch(() => { /* procedural weapons stay the fallback */ })
+  }, [])
+
 
   // server browser live list (lobby only)
   useEffect(() => {

@@ -967,3 +967,85 @@ Work Log:
 Stage Summary:
 - Push auth is persistent again (standing user decision 2026-10-17 honored); remote is fully current including the Draco toolchain
 - A fresh sandbox restart can now `git pull` the complete runnable game (all committed assets + tooling) per the environment-recovery rule
+---
+Task ID: 50
+Agent: Super Z (main agent)
+Task: Remove human.glb — user formally REJECTS the previous player model ("remove human.glb. i dont want it. i find better one later")
+
+Work Log:
+- Working tree: nothing to delete — human.glb was already absent from public/assets/models/ and public/staging (lost in the environment wipe, Task 48 inventory)
+- Git history: `git rev-list --objects --all` shows NO human.glb blob reachable (only the long-deleted Mixamo Soldier.glb blob from early dev remains in old history) — the rebuilt binary-free history never carried it, so no history purge is needed
+- Mirror sweep: found the last surviving copy at /tmp/my-project/public/assets/models/human.glb (stale recovery mirror) — DELETED via system-wide find -delete; post-delete find confirms zero copies remain anywhere
+- public/assets/models/README.md: status banner added — no accepted player model, previous human.glb REJECTED 2026-10-19, must NOT be restored from anywhere, game runs the procedural soldier rig until a NEW model is dropped (user will supply a better one later); the staging→acceptance drop-in workflow stays intact for the next model
+- Code: deliberately UNCHANGED — /api/assets/human route, usermodel.ts auto-rig, lobby preload and test-user-glb.ts are the drop-in pipeline the future model needs; with no file they idle harmlessly (route 404s, procedural fallback, one warn per session)
+- No game code touched → no test battery required; committed the README status change and pushed (auth restored Task 49)
+
+Stage Summary:
+- human.glb is now gone from: working tree (already), git history (never carried), and the /tmp mirror (deleted) — nothing can resurrect it
+- Durable rejection record in README + this log: future agents must NOT restore it; the user will bring a better model, which will slot into the intact pipeline (recommend compressing the new drop with scripts/compress-glb.sh)
+- Game state: all players render as procedural soldiers; weapon GLBs remain the next sourcing task (Task 46 plan)
+---
+Task ID: 51
+Agent: Super Z (main agent)
+Task: Evaluate the user's Drive weapon pack ("Ultimate Gun Pack - July 2019") for suitability
+
+Work Log:
+- Listed the whole Drive folder via gdown (222 items): 40 guns + 15 accessories in FBX + OBJ + Blend; NO texture files anywhere (flat-color materials only); License.txt + Preview.jpg at root
+- LICENSE VERDICT: CC0 1.0 Universal — public domain, by @Quaternius (not TorQueMoD as initially guessed). Fully committable under our "only artwork you have rights to" rule
+- Downloaded samples (AssaultRifle_1, SniperRifle_1, Shotgun_SawedOff, SubmachineGun_1, Pistol_1) + MTLs; measured via OBJ text inspection + trimesh: 956-1,382 tris per gun, 3-4 flat-color materials (Black/DarkMetal/DarkWood/Metal style)
+- CONVERSION PROVEN in-sandbox without root: pip trimesh converts OBJ→GLB (5/5 samples); gltf-transform CLI cannot read OBJ (JSON parse attempt); sudo apt blocked (no root) so assimp/Blender not installable — trimesh is our converter until Blender is wanted
+- Compress pipeline on real pack data: AssaultRifle_1 GLB 69,632B -> 8,728B (12.5%) via scripts/compress-glb.sh
+- Structure caveat: every gun is ONE merged mesh (single 'o' group) — no mag/slide/bolt/pump named parts, so the parts-animation contract breaks for these unless parts are split in Blender (pack ships .blend sources, so it's doable later)
+- Roster fit: generic archetypes, not CS-accurate; ~25-30 of 43 slots get credible stand-ins (Pistol_1-6 -> pistols, SubmachineGun_1-5 -> SMGs, SniperRifle_1-6 -> snipers incl. AWP-ish, Shotgun_SawedOff -> sawedoff exact, AssaultRifle/Bullpup -> rifles; Bayonet accessory -> knife); NO machine guns (m249/negev uncovered), no C4/grenades
+- Style caveat: flat-color low-poly vs our current PBR-textured procedural viewmodels — coherent stylized look but an aesthetic shift; user to judge live
+- Scratch kept in gitignored scripts/.tmp/wep-pack (5 raw OBJ/MTL + 5 converted GLBs + license + preview); nothing entered the repo
+
+Stage Summary:
+- Verdict: USEFUL — CC0, tiny, convertible, ideal as the first real GLB batch for the pending weapon-GLB loader branch (real files instead of synthetics), and as placeholder coverage for ~2/3 of the roster
+- Not the final CS-accurate roster: generic silhouettes, no named parts, no MGs — keep as placeholders until user sources accurate models
+- Proposed next step: wire the weapon-GLB branch of buildViewModel + map ~10 pack guns to roster IDs into staging for live in-game evaluation
+
+---
+Task ID: 52
+Agent: Super Z (main agent)
+Task: Evaluate the user-uploaded "Ultimate Guns Pack-glb.zip" (poly.pizza GLB bundle) for the weapon GLB pipeline
+
+Work Log:
+- Extracted zip to gitignored staging/ultimate-guns-pack/ — 25 GLB files, 1.7MB total, internal date Jul 15 2022
+- Identified origin via web search: poly.pizza/bundle/Ultimate-Guns-Pack-cpgUfI4t2F — Quaternius "Ultimate Guns Pack", 25 gun models, Licence: Public Domain (CC0), commercial use OK, no attribution required — fully committable under our art-authorization rule (SAME author+license as the Task 51 Drive folder, this is its ready-made GLB export)
+- Wrote scripts/inspect-guns-pack-raw.ts (zero-dep raw GLB JSON parser; @gltf-transform lib API had bun interop issues) — inventory of all 25: generator FBX2glTF v0.9.7 (poly.pizza conversion), 0 textures, 0 animations, 0 skins, flat-color materials (Wood/Black/DarkMetal/Metal/Main/MainDark/MainLight/Glass/Green...)
+- Geometry: 240-2,778 tris (median 1,344) — ALL under both vm (15k) and world (3k) budgets; verts 465-5,032
+- Node graph: exactly 2 nodes per file (RootNode + one mesh node) — NO named mag/slide/bolt/pump parts, parts animation impossible without Blender re-splitting
+- Transform: nodes carry scale [100,100,100] + quat -90°X (FBX cm→m + Z-up→Y-up bake); world bbox rifles ~5.4 units along +X (24/25 longest axis X; muzzle at +X end) — needs fixup wrapper per spec (muzzle −Z, grip origin, meter scale)
+- Draco chain test (bash scripts/compress-glb.sh): AssaultRifle 74KB→10.2KB, Bullpup 141KB→12.7KB (9%), Pistol 60KB→9.6KB, SawedOff 56KB→9.1KB, Sniper 75KB→10.3KB, Bayonet 17KB→5.3KB — 7-11x, node names + materials intact, extensionsRequired=[KHR_draco_mesh_compression], decoder already self-hosted at public/draco/gltf/
+- Coverage vs 43-weapon roster: revolver x3, sawedoff (exact), shotgun family x3, sniper family x4, pistols x4, SMG x2, assault rifles x3, bullpup x1, Bayonet->knife (knife has no moving parts — exact fit); MISSING: m249, negev, deagle-specific, taser, all 8 grenades
+
+Stage Summary:
+- Verdict: USEFUL — CC0 verified, native GLB (no conversion), tiny tris, Draco-ready; better than Task 51 raw pack (pre-converted, pre-assembled presets)
+- Best roles: (1) world/ground models — static is fine there, budgets fit perfectly; (2) knife viewmodel via Bayonet; (3) placeholder viewmodels if user accepts losing mag/slide/bolt/pump part animation and CS-accurate silhouettes
+- Blockers for full vm adoption: no named parts (parts animation contract breaks), generic archetypes not CS-accurate, per-model orientation/scale fixup needed (+X→−Z rotate, ~x0.18 scale, grip pinning)
+- Nothing entered the repo; staging is gitignored; pack + report reusable when the weapon-GLB loader branch (Task 46 plan) gets wired
+
+---
+Task ID: 53
+Agent: Super Z (main agent)
+Task: Wire the weapon-GLB loader branch + stage the Quaternius pack as remote guns and knife viewmodel (user approved with "ok")
+
+Work Log:
+- scripts/stage-guns-pack.ts: raw-GLB fixup baker — reads the pack GLBs (zero-dep container/BIN parse), bakes per-route fixup into the mesh-node matrix: uniform scale to REAL weapon length (0.22-1.23 m per id), rotate long axis so muzzle points −Z, translate so grip anchor (per-class fz/fy bbox fractions) sits at origin; matrix replaces node TRS (spec-forbidden to keep both)
+- MUZZLE_SIGN table: automated peak-|y| slice heuristic scored 8/33 (low-poly front sights stack higher than flat buttstocks) — RETIRED; signs established visually via scripts/verify-guns-orientation.ts contact sheet + VLM forced-choice pass (33/33 muzzle LEFT, upright)
+- Bugfixes during bring-up: GLB chunk padding is 4-byte not 8; triangle walker used byte offsets as index steps (misaligned u16 reads); verify projection initially mirrored+flipped (muzzle −Z rendered RIGHT) which inverted the first VLM verdict — root-caused before mass-flipping
+- scripts/stage-guns-pack.sh: end-to-end staging — fixup bake + Draco chain (prune/dedup/weld/webp/draco) → public/staging/models/weapons/<id>.glb; 33 ids staged, avg 9.5 KB, 320 KB total; Draco chain decomposes baked matrix to TRS (verified numerically identical, maxdiff < 1e-4, node names intact)
+- src/app/api/assets/weapon/[id]/route.ts: extensionless POST route (download-manager evasion, human-route pattern), staging wins over accepted, per-id buffer cache + ETag, 404 → procedural fallback; smoke-tested (200 byte-identical / 404 unstaged / traversal rejected)
+- src/game/weapongltf.ts: preload (memoized, lobby-warmed), per-id proto cache, buildGLBRemoteGun (dual-pistol clone for elites), buildGLBKnifeVM (bayonet + same procedural glove rig)
+- players.ts: remote guns GLB-first in getOrCreate/setGun + refreshGuns() after preload; engine.ts: knife vm GLB branch in rebuildViewmodel + vmCache.clear() on preload completion (+ immediate rebuild if holding knife); page.tsx: lobby warm-up; weaponmodels.ts: export buildGloves
+- Verification: tsc clean (src + new scripts); aimhead 4/4, bugfixes ALL PASS, phase9 e2e 119/119 + phase3-8 regressions ALL PASS; browser smoke: 33/33 states 'ready' after lobby dwell, remote stubs rebuilt (parts=1 = single GLB scene root, world positions at hand height y~1.1-1.25), knife vm = 8 parts (bayonet + 7 glove meshes) and VLM-confirmed on screenshot (bayonet in gloved hand, natural size/orientation)
+- applySkin (weaponskins) checked: currently dormant (no call sites, no skins dropped) and respects userData.skinnable — no GLB conflict
+- .gitignore: added /staging/ (raw pack scratch) — auto-commit hook had already swept staging/ultimate-guns-pack/*.glb into local history (commit 3b28e5f); rebuilt: soft-reset to pushed c4b754e, unstaged the pack, recommitted clean (binaries never reached the remote, no force-push needed)
+- README (public/assets/models): weapon GLB section — staging flow, pipeline commands, what uses them / what deliberately doesn't (vm parts animations), acceptance recipe
+
+Stage Summary:
+- Weapon GLB branch LIVE: remote guns (33 ids incl. mirrored elites pair) + knife viewmodel render from staged Draco GLBs; everything else stays procedural by design (named-part animations + CS-accurate silhouettes)
+- Re-tune loop for the user: edit fz/fy/len in scripts/stage-guns-pack.ts ROUTES → bash scripts/stage-guns-pack.sh → refresh page (route cache: touch route file or restart dev)
+- Nothing accepted yet: 33 GLBs are staged/evaluative; acceptance per id = mv to public/assets/models/weapons/ + git add
+- Known trade-off: GLB knife bypasses the (dormant) skin system; remote guns carry flat-color pack materials (no PBR textures — pack has none)

@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { soldierCamo, soldierVest, soldierFace } from './textures'
 import { buildRemoteGun } from './weaponmodels'
 import { preloadUserModel, userModelReady, createUserModel, type UserInstance } from './usermodel'
+import { preloadWeaponModels, buildGLBRemoteGun } from './weapongltf'
 import type { TeamId } from './weapons'
 
 export interface RemotePlayer {
@@ -263,7 +264,12 @@ export class PlayerManager {
 
   setMyTeam(t: TeamId) { this.myTeam = t }
 
-  /** kick off the user-model asset load; upgrades existing procedural players once ready */
+  /**
+   * Kick off the user-model asset load; upgrades existing procedural players
+   * once ready. Also warms the staged weapon GLBs (remote guns): when they
+   * finish parsing, every player's gun stub is rebuilt — GLB-first, with
+   * the procedural stub staying as fallback for ids that aren't staged.
+   */
   preloadModels(): void {
     void preloadUserModel().then(() => {
       if (!userModelReady()) return
@@ -271,6 +277,18 @@ export class PlayerManager {
         if (!p.glb && p.rig) this.upgradeToGlb(p)
       }
     })
+    void preloadWeaponModels().then(() => this.refreshGuns())
+  }
+
+  /** rebuild every remote gun (GLB-first after the weapon preload lands) */
+  refreshGuns(): void {
+    for (const p of this.players.values()) {
+      const parent = p.glb ? p.glb.gunRig : p.rig?.gunRig
+      if (!parent) continue
+      parent.remove(p.gunStub)
+      p.gunStub = buildGLBRemoteGun(p.weapon) ?? buildRemoteGun(p.weapon)
+      parent.add(p.gunStub)
+    }
   }
 
   private upgradeToGlb(p: RemotePlayer) {
@@ -327,7 +345,7 @@ export class PlayerManager {
       root.add(sprite)
     }
 
-    const gunStub = buildRemoteGun('knife')
+    const gunStub = buildGLBRemoteGun('knife') ?? buildRemoteGun('knife')
     ;(glb ? glb.gunRig : rig!.gunRig).add(gunStub)
 
     this.scene.add(root)
@@ -361,7 +379,7 @@ export class PlayerManager {
     p.weapon = weapon
     const parent = p.glb ? p.glb.gunRig : p.rig!.gunRig
     parent.remove(p.gunStub)
-    p.gunStub = buildRemoteGun(weapon)
+    p.gunStub = buildGLBRemoteGun(weapon) ?? buildRemoteGun(weapon)
     parent.add(p.gunStub)
   }
 

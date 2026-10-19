@@ -16,6 +16,7 @@ import { PlayerManager } from './players'
 import { Effects, buildBombMesh, buildNadeMesh, SmokeCloud, FireZone } from './fx'
 import type { WorldFx } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
+import { preloadWeaponModels, buildGLBKnifeVM, weaponModelsState } from './weapongltf'
 import { userModelState } from './usermodel'
 import type { ViewModel } from './weaponmodels'
 import { audio } from './audio'
@@ -322,6 +323,13 @@ export class Engine {
     this.pm = new PlayerManager(this.scene, this.myTeam)
     // start weapon PBR texture downloads early so viewmodels never pop in mid-round
     preloadWeaponTextures()
+    // staged weapon GLBs (remote guns + knife vm): preloaded in the lobby too;
+    // once parsed, drop the vm cache so the next weapon switch picks them up
+    // (procedural builders stay as the fallback for anything not staged)
+    void preloadWeaponModels().then(() => {
+      this.vmCache.clear()
+      if (this.vmGroup && (this.inventory[this.wIdx] ?? 'knife') === 'knife') this.rebuildViewmodel()
+    })
     // async GLB player models (procedural rig stays as fallback until ready)
     this.pm.preloadModels()
 
@@ -346,6 +354,7 @@ export class Engine {
         })),
         sock: () => this.socket,
         glb: () => userModelState(),
+        wglb: () => weaponModelsState(),
         upgrade: () => this.pm.upgradeAllNow(),
         meshWorld: (id: string) => {
           const p = this.pm.getById(id)
@@ -1182,7 +1191,10 @@ export class Engine {
     const key = `${w}:${this.myTeam}`
     let vm = this.vmCache.get(key)
     if (!vm) {
-      vm = buildViewModel(w, this.myTeam)
+      // staged GLB knife (bayonet) replaces the procedural blade; everything
+      // else stays procedural — the pack has no named mag/slide/bolt/pump
+      // nodes, and the procedural vms carry the parts animations.
+      vm = (w === 'knife' ? buildGLBKnifeVM(this.myTeam) : null) ?? buildViewModel(w, this.myTeam)
       this.vmCache.set(key, vm)
     }
     this.vm = vm

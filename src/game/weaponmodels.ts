@@ -218,6 +218,8 @@ const CUFF: Record<TeamId, number> = { T: 0x9a7f4e, CT: 0x2c4a6e }
  * mirror=true flips everything across x — used by the dual berettas to
  * build a proper LEFT hand on the left-hand gun.
  */
+// exported for weapongltf.ts (GLB knife viewmodel reuses the same glove rig)
+export
 function buildGloves(g: THREE.Object3D, team: TeamId,
   grip: { x: number; y: number; z: number; rx?: number },
   left?: { x: number; y: number; z: number; rx?: number }, mirror = false) {

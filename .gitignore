@@ -86,3 +86,7 @@ tmp/
 
 # draco benchmark scratch output (scripts/make-draco-demo-glb.ts)
 scripts/.tmp/
+
+# raw third-party asset packs being evaluated (e.g. staging/ultimate-guns-pack,
+# extracted zips) — never enter git history; only staged/accepted copies count
+/staging/

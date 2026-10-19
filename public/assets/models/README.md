@@ -1,11 +1,16 @@
-# Player model assets — staging & acceptance workflow
+# Player & weapon model assets — staging & acceptance workflow
 
-**Current status (2026-10-19): NO accepted player model.** The previously
+**Player model status (2026-10-19): NO accepted player model.** The previously
 evaluated `human.glb` was **rejected by the user** ("remove human.glb. i dont
 want it. i find better one later") — every copy was deleted (mirror included)
 and it must NOT be restored from anywhere. The game runs the procedural
 soldier rig for all players until a NEW model is dropped into staging; the
 user will supply a better one later.
+
+**Weapon model status (2026-10-19): 33 Draco GLBs STAGED for evaluation**
+(`public/staging/models/weapons/`, gitignored) — the CC0 Quaternius
+"Ultimate Guns Pack", fix-baked to the weapon GLB spec and wired into the
+game for **remote guns** + the **knife viewmodel**. See "Weapon GLBs" below.
 
 `public/assets/` holds **accepted, committed** running assets. New or pending
 binaries live in **`public/staging/`** (gitignored, still web-served so the
@@ -30,7 +35,7 @@ always tests the newest drop). The route caches the parsed buffer in module
 memory — touch `src/app/api/assets/human/route.ts` (or restart dev) after
 replacing a file to re-read it.
 
-## How the game loads the model
+## How the game loads the player model
 
 Through the extensionless route **`/api/assets/human`**
 (`src/app/api/assets/human/route.ts`, fetched via POST), never the static
@@ -42,6 +47,65 @@ recognize it as a downloadable file:
   soldier rig (players.ts) — nothing breaks.
 - The model is preloaded while the lobby menu is open, so starting a match
   never triggers a fresh download.
+
+## Weapon GLBs (staged 2026-10-19)
+
+`public/staging/models/weapons/<weaponId>.glb` — 33 of the 43 roster weapons,
+sourced from the **Quaternius "Ultimate Guns Pack" (poly.pizza GLB bundle,
+License: CC0 public domain**, commercial use OK, no attribution required —
+committable under our art-authorization rule). Originals were FBX2glTF
+conversions with arbitrary scale, +X barrels and no part nodes; the staging
+pipeline **bakes a fixup into each file's mesh-node transform** so they meet
+the Task 46 weapon GLB spec:
+
+- **real-world scale** — longest dimension normalized to each weapon's true
+  length (pistol 0.22 m … sniper 1.23 m)
+- **muzzle −Z, grip at origin** — engine gun-stub contract, drops straight
+  into the same hand anchors the procedural stubs use
+- per-class grip anchors (fz/fy fractions of the rotated bbox) in
+  `scripts/stage-guns-pack.ts` — tweak + re-run to re-tune
+- then Draco-compressed via the safe chain (avg **9.5 KB per gun, 320 KB
+  total**)
+
+**Pipeline** (re-runnable end to end):
+
+```bash
+bash scripts/stage-guns-pack.sh        # fixup-bake + draco-compress all 33
+bun scripts/verify-guns-orientation.ts # side-view contact sheet (muzzle LEFT check)
+```
+
+The raw pack zip must NOT enter git — extract it to `staging/` (gitignored)
+at the repo root; only the spec-compliant staged outputs are web-served.
+
+**Serving**: extensionless POST route **`/api/assets/weapon/[id]`** (same
+download-manager evasion as the human model; staging wins over accepted;
+404 → procedural fallback, so a fresh clone runs fully procedural).
+
+**What uses them** (`src/game/weapongltf.ts`, preloaded in the lobby):
+
+- **remote guns** — what other players hold (players.ts builds GLB-first,
+  procedural stub stays the fallback per id)
+- **the knife viewmodel** — bayonet, no moving parts (engine.rebuildViewmodel
+  picks the GLB knife; procedural blade is the fallback)
+
+**What deliberately does NOT**: all other first-person viewmodels. The pack
+has **no named mag/slide/bolt/pump part nodes**, and the procedural vms carry
+the engine's parts animations (reload mag-drop / slide blowback / AWP bolt
+cycle / shotgun pump) that GLB swaps would silently lose. They also stay for
+accuracy: the pack is generic archetypes, not CS-accurate silhouettes.
+
+**Not covered by the pack** (stay procedural): m249, negev, taser, c4, all
+grenades, and the dual-elites second gun is a mirrored clone of the same
+pistol GLB.
+
+**Accept** (per weapon, after the user approves the look):
+
+```bash
+mv public/staging/models/weapons/ak47.glb public/assets/models/weapons/ak47.glb
+git add public/assets/models/weapons/ak47.glb && git commit
+```
+
+(the route already prefers the accepted copy once staged is gone).
 
 ## Why binaries are staged at all
 
