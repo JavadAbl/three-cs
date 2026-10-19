@@ -89,6 +89,10 @@ export interface EngineOpts {
 }
 
 const PLAYER_R = 0.4
+// GLB long-gun vm pull-back: park the real-model stock butt behind the
+// near plane so it clips off like CS viewmodels (user 2026-10-19:
+// "gun stock is completely in screen"). Live-tunable: __eng.vmTune(dz).
+const GLB_VM_PULLBACK = 0.13
 const STAND_H = 1.8
 const CROUCH_H = 1.3
 const EYE_STAND = 1.62
@@ -171,6 +175,8 @@ export class Engine {
   private vmCache = new Map<string, ViewModel>()
   private vm: ViewModel | null = null
   private vmBasePos = new THREE.Vector3(0.26, -0.24, -0.45)
+  // extra pull-back on GLB long-gun vms, live-tunable via __eng.vmTune()
+  private vmGlbAdj = 0
   // viewmodel part animations
   private slideKickAt = -1e9
   private boltCycleAt = -1e9
@@ -370,6 +376,18 @@ export class Engine {
             }
           })
           return out
+        },
+        // live GLB vm pull-back tuning: positive dz = gun closer to you
+        // (stock further off-screen), negative = deeper into the scene.
+        // Applies instantly (bob loop renders from vmBasePos) and sticks
+        // across weapon switches until reload/rejoin.
+        vmTune: (dz: number) => {
+          this.vmGlbAdj += dz
+          // instant-apply only when the held vm IS a GLB gun (knife/procedural
+          // vms didn't get the pull-back; their base must not move)
+          const gv = (this.vm?.group.userData as { glbVm?: string } | undefined)?.glbVm
+          if (gv && gv !== 'knife') this.vmBasePos.z += dz
+          return { adj: Number(this.vmGlbAdj.toFixed(3)), pullback: Number((GLB_VM_PULLBACK + this.vmGlbAdj).toFixed(3)) }
         },
         // live gun-in-hand offset tuning (GLB rig): __eng.gunTune(id, x,y,z, rx,ry,rz)
         gunTune: (id: string, x?: number, y?: number, z?: number, rx?: number, ry?: number, rz?: number) => {
@@ -1205,6 +1223,15 @@ export class Engine {
     }
     this.vm = vm
     this.vmBasePos.copy(vmBase(w))
+    // Staged GLB gun vms: real full-length stocks otherwise park ~17cm in
+    // front of the eye and fill the screen (user 2026-10-19: "gun stock is
+    // completely in screen"). Pull long-gun vms BACK so the stock butt
+    // crosses the near plane (0.05) and clips off behind the eye — the
+    // CS-style look (stock behind your shoulder). Grip/hands/muzzle stay
+    // in natural positions; tip/eject derive from vmBasePos so they follow.
+    // Knife keeps its tuned base; per-weapon values if staged models diverge.
+    const gv = (vm.group.userData as { glbVm?: string }).glbVm
+    if (gv && gv !== 'knife' && WEAPONS[w as WeaponId]?.slot === 1) this.vmBasePos.z += GLB_VM_PULLBACK + this.vmGlbAdj
     const g = vm.group
     g.position.copy(this.vmBasePos)
     g.rotation.set(0, 0.06, 0)
