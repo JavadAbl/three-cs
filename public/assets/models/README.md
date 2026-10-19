@@ -1,5 +1,12 @@
 # Player model assets — staging & acceptance workflow
 
+**Current status (2026-10-19): NO accepted player model.** The previously
+evaluated `human.glb` was **rejected by the user** ("remove human.glb. i dont
+want it. i find better one later") — every copy was deleted (mirror included)
+and it must NOT be restored from anywhere. The game runs the procedural
+soldier rig for all players until a NEW model is dropped into staging; the
+user will supply a better one later.
+
 `public/assets/` holds **accepted, committed** running assets. New or pending
 binaries live in **`public/staging/`** (gitignored, still web-served so the
 game can run them for live evaluation).
