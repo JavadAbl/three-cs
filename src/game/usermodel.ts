@@ -12,7 +12,7 @@
 // players.ts then drives the bones procedurally (walk / run / crouch / aim / death).
 // The procedural box-soldier rig in players.ts stays as the load-fallback.
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { sharedGLTFLoader } from './gltf'
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import type { TeamId } from './weapons'
 
@@ -155,7 +155,7 @@ export function preloadUserModel(): Promise<void> {
         return r.arrayBuffer()
       })
       .then((buf) => {
-        new GLTFLoader().parse(
+        sharedGLTFLoader().parse(
           buf,
           '',
           (gltf) => {

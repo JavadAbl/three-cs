@@ -41,3 +41,35 @@ recognize it as a downloadable file:
 Large binaries bloat git history permanently (every version ever committed
 stays in the pack forever). Staging keeps evaluation cheap: swap files as
 often as you like, only accepted copies enter history.
+
+## Compressing GLBs for the web (Draco)
+
+The game's GLB loader (`src/game/gltf.ts`, shared by the human model and the
+future weapon models) decodes **KHR_draco_mesh_compression** with a
+**self-hosted** decoder copied from three.js into `public/draco/gltf/`
+(192KB wasm + 58KB wrapper, fetched once per page session, only when a
+Draco GLB is actually parsed — no CDN, game stays self-contained).
+Uncompressed GLBs load unchanged; the procedural fallbacks don't touch it.
+
+Before dropping a GLB into `public/staging/models/`, compress it:
+
+```bash
+bash scripts/compress-glb.sh <input.glb> [output.glb]
+```
+
+Pipeline (all node-graph-safe): `prune → dedup → weld → webp → draco`.
+
+- **Draco compresses geometry only** (~20x on meshes). Textures need
+  `webp` (included in the script, ~4-8x on typical PBR maps).
+- **Named part nodes survive** — Draco compresses mesh data, not the node
+  graph, so the engine's parts animations (mag drop / slide blowback /
+  bolt cycle / pump rack) keep working. `webp` only re-encodes images.
+- Benchmark (scripts/make-draco-demo-glb.ts, reproducible): a 12.8k-tri
+  budget-sized rifle with named parts — **321KB raw → 14.4KB (4.5%)**.
+- ⚠ **Never run `gltf-transform optimize --compress draco` on game models**
+  (i.e. don't replace the script with it): its `join` step merges named part
+  nodes into one mesh (measured: `body/handguard/mag/bolt/... → body`),
+  silently killing the parts animations. The safe steps are the ones the
+  script uses.
+- Decode cost is one-time per file at lobby preload — a ~15k-tri viewmodel
+  decodes in a few ms, never mid-round.

@@ -83,3 +83,6 @@ tmp/
 
 # one-off diagnostic scripts (kept local, never committed)
 /scripts/tmp/
+
+# draco benchmark scratch output (scripts/make-draco-demo-glb.ts)
+scripts/.tmp/
