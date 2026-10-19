@@ -1070,3 +1070,22 @@ Stage Summary:
 - Re-tune loop unchanged: edit ROUTES in scripts/stage-guns-pack.ts → bash scripts/stage-guns-pack.sh → refresh page
 - Known costs: GLB vms lose mag-drop/slide/bolt/pump animations (whole-vm motion intact); skin system still bypassed for GLB vms (dormant anyway)
 - Debug affordance: __eng.vmGlb() returns the staged id backing the current vm (null = procedural)
+---
+Task ID: 55
+Agent: Super Z (main agent)
+Task: Wipe ALL weapon models — user: "wipe all weapon models . they are not good, il find new models"
+
+Work Log:
+- Inventory first: main-repo staged GLBs + raw pack were ALREADY GONE (environment wipe took public/staging/ with it; git status stayed clean because both staging dirs are gitignored); git ls-files + git rev-list --objects --all = ZERO weapon GLBs ever tracked/committed — no history purge needed
+- Last surviving pack copy found in the /tmp stale mirror: /tmp/my-project/staging/ultimate-guns-pack/ (25 raw GLBs) — DELETED; post-delete system-wide find confirms zero weapon .glb anywhere (only the unrelated old Soldier.glb mirror file remains, out of scope — not a weapon)
+- Quaternius-pack-specific scripts git-rm'd (6): stage-guns-pack.ts/.sh (fixup baker), verify-guns-orientation.ts (contact sheet), inspect-guns-pack-raw.ts (inventory), browser-wglb-smoke.sh + browser-wglb2-smoke.sh (pack-assertion smokes — would fail post-wipe). Pattern preserved in git history (544f32e) for the next pack. KEPT: generic tooling (compress-glb.sh, make-draco-demo-glb.ts, draco decoders, stage-weapon-sounds.sh — sounds, unrelated)
+- Pipeline deliberately KEPT (human.glb precedent, Task 50): weapon route + weapongltf.ts + engine/players/page GLB branches stay as the dormant drop-in path for the user's NEXT models; verified graceful: every id 404s once per lobby preload → state 'failed' → cloneProto null → builders null → procedural everywhere, identical to a fresh clone
+- Doc updates recording the rejection: weapongltf.ts header (DORMANT status + do-not-restore + next-drop contract), weapon route header (staged set EMPTY), README banner ("NO weapon models — staged pack REJECTED", quote, wiped-everywhere, must-not-restore) + Weapon GLBs section rewritten as next-models drop-in guide (wired ids list, bake contract: grip origin / muzzle −Z / real meters / upright, compress-glb.sh recipe, acceptance recipe)
+- VERIFICATION: tsc clean (src/ — pre-existing errors only in examples/ + scripts/bsp, untouched); aimhead + bugfixes ALL PASS; phase9 e2e 119/119 + phase3-8 regressions ALL PASS; one-off browser smoke (scripts/.tmp/postwipe-smoke.sh, gitignored): 33 route fetches fired → wglb states {ready:0, failed:33, other:0}, spawn usp vmGlb()=null (procedural), knife vmGlb()=null, zero weapon/glb console errors; VLM eyeball of screenshot: dark blocky pistol in gloved hand, rendering correctly, no glitches (procedural look, NOT the rejected pack's flat-color style)
+- COMMIT c1222f2 — push FAILED: platform wiped ~/.git-credentials AND the credential.helper gitconfig line again (AGENTS.md case (b), same as Task 47/49). Commit is local; remote main is 1 behind — needs the user's PAT once to restore (recipe in AGENTS.md)
+
+Stage Summary:
+- ALL weapon models wiped: staged GLBs (already gone via env), raw pack (mirror copy deleted), git history (never carried them), pack scripts (removed from tree) — nothing can resurrect the Quaternius pack except deliberate git-history archaeology
+- Game is back to 100% procedural weapons (parts-animated viewmodels + remote stubs), verified live headless + VLM
+- Drop-in pipeline intact and waiting: next models = bake to contract (grip origin, muzzle −Z, real meters) → compress-glb.sh → public/staging/models/weapons/<wiredId>.glb → refresh; per-id acceptance unchanged
+- Pending: git push blocked on credential-store restoration (user PAT needed, Task 49 recipe)
