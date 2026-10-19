@@ -951,3 +951,19 @@ Stage Summary:
 - In-use GLB count: 1 by design (human.glb), 0 on disk; weapon GLB count: 0 of 43
 - Missing: human.glb (user re-drop needed) + 43 weapon viewmodel GLBs (hero five first per plan) + the weapon-GLB loader branch itself
 - Git push still awaits the user's PAT (credential store wiped again)
+---
+Task ID: 49
+Agent: Super Z (main agent)
+Task: Restore git push auth with the user-provided PAT, pull & push (user: "use this to pull & push")
+
+Work Log:
+- Executed the AGENTS.md case-(b) recovery recipe exactly: credential store rewritten at ~/.git-credentials (x-access-token form, chmod 600, outside the repo, contents never printed) + `git config --global credential.helper 'store --file=/home/z/.git-credentials'` restored; no token embedded in remote URLs, .git/config, repo files or logs
+- Checked mode-flip symptom: `git diff --name-only` empty — no chmod cleanup needed this time
+- PULL side: fetch showed remote had 0 commits not in local (local was strictly ahead) — pull resolved to the already-done fetch
+- PUSH: plain `git push origin main` → 73af5f5..a5c7321. All 4 pending commits landed: 87c41a7 (platform auto-commit), 54242dd (draco GLB compression toolchain — Task 47), 43f0faa + a5c7321 (platform auto-commits of worklog Task 46/48 records)
+- Verified sync both directions: 0 local-only, 0 remote-only; remote tree confirmed carrying public/draco/gltf/* (3 decoder files), scripts/compress-glb.sh, scripts/make-draco-demo-glb.ts, src/game/gltf.ts
+- Remote main = local main = a5c7321 — single-source-of-truth state restored
+
+Stage Summary:
+- Push auth is persistent again (standing user decision 2026-10-17 honored); remote is fully current including the Draco toolchain
+- A fresh sandbox restart can now `git pull` the complete runnable game (all committed assets + tooling) per the environment-recovery rule
