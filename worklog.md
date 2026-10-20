@@ -1271,3 +1271,25 @@ Work Log:
 Stage Summary:
 - GitHub origin/main is now in sync with local main — nothing stranded anymore
 - Push protocol for this container recorded: user-supplied fine-grained PAT + one-shot inline URL (no persistence); ask the user to revoke after
+---
+Task ID: 66
+Agent: Super Z (main agent)
+Task: User: "add ak74 for terror. i upload both glb and mp3 sound" — full AK-74M weapon integration (user's own model + fire recording)
+
+Work Log:
+- Uploads found: upload/ak-74m.glb (3.84MB) + upload/ak74.mp3 (47KB). Model inspection (scripts/.tmp/inspect-ak74.ts + ak74-parts.ts): 57 nodes, 27 named part nodes under GLTF_SceneRootNode (Grip_low_4, Magazine_low_16, Magazine_Relese_low_6 [note the misspelling], Bolt_low_9 with external charging handle at x+0.379, Dust_cover_low_21, Barrel/Gas_block/Handguard/Stock...), ALREADY muzzle-−Z oriented (unlike the AK-47 which pointed +X), 16,860 tris
+- Bake (tracked scripts/bake-ak74.ts, mirrors bake-ak47.ts): NO rotation (muzzle −Z native), uniform scale 0.1007 (0.943m real AK-74M length / 9.368u), grip anchor = Grip_low_4 subtree bbox center. VERIFY PASS: 57 nodes / 16,860 tris survive, final bbox z[−0.660 muzzle .. +0.283 stock], y[−0.124 .. +0.138], grip center deviation 0.00mm. Draco: 3.84MB -> 422,676 bytes (11.0%) staged at public/staging/models/weapons/ak74.glb
+- Sound: ffmpeg ak74.mp3 -> public/staging/sounds/ak74_fire.ogg (mono, Vorbis q4, 44.1kHz, leading silence stripped, 1.46s, 16.6KB). WEAPON_AUDIO.ak74 reuses AK-47 family samples for distant/clipout/clipin/bolt/draw (same platform, zero new files needed); only fire is the user's own recording
+- Contracts upgraded (weapongltf.ts): topmostMatching(root, re, exclude?) — exclude drops reference hardware: AK-74M's Magazine_Relese latch stays on the receiver while the mag drops. Slide contract now two-tier: REAL bolt/carrier first (/bolt|charging|carrier/i — AK-74M Bolt_low_9 incl. charging handle = physically correct bolt reciprocation) with dust-cover fallback (/dust[_.]?cover/i — AK-47's u_dustcover* unchanged; verified AK-47 node names cannot match the bolt regex)
+- Weapon def (shared/weapons.ts): id 'ak74', name 'AK-74M', T rifle, $2500, 34 dmg (5.45 vs AK-47's 36), 100ms/600RPM, 30/90, reloadMs 2400, armorPen 0.74, falloff 0.97, accurate 0.30 (tighter than AK's 0.35), moveSpeed 4.4, KICK 0.5. Buy menu auto-derived (row 2 for T; rifle category now 12 entries — still 2 pages, PAGE=8 paging handles it). Procedural fallbacks reuse buildAK/buildRemoteGun ak47 stubs (GLB is primary; fresh clones get an AK silhouette)
+- test-buymenu: 3 stale expectations updated (roster list +rifle group + 11->12 rows) — 217/217 PASS; aimhead + bugfixes + reload ALL PASS; tsc 0 errors
+- Live eval: ak74 model 'ready', sound fetched /staging/sounds/ak74_fire.ogg HTTP 200 (resource-timing proof; note: the 250-entry default buffer evicts early fetches — set performance.setResourceTimingBufferSize at lobby before join to observe the preload). Buy B→4→2 warmup: w=ak74, vmGlb=ak74, parts=14, mag+slide wired. FIRE-CATCH: slide 0 -> 0.0309 on first post-shot rAF -> 0 decayed (bolt kick live, k-clamp from Task 64 working). RELOAD: drain to 24, mid-window magVisible=false, refill 30/84. Regressions: ak47 vm intact (vmGlb=ak47, mag+slide wired — live-verified holding it), knife procedural (glb null), console 0 non-expected errors
+- LESSON: same-slot rebuy works only inside the 20s live buy window (ROUND.buyWindowMs) — later menu presses no-op silently; warmup/freeze buys always work. Menu digit timing in headless needs 500ms+ gaps between presses
+- Staged (gitignored, pending user acceptance — dev-only like the AK-47): ak74.glb model + ak74_fire.ogg sound + ak74.png icon (ak47 silhouette stand-in). Acceptance = mv staging->assets + git add for all three. Recovery: bake-ak74.ts is TRACKED (reproduces the GLB exactly); sound re-converts from upload/ak74.mp3 with one ffmpeg line; icon re-copies from assets/ak47.png
+- COMMIT eb36acb (amended once: shell ate the $ in $2500 — escape \$ in commit messages)
+
+Stage Summary:
+- AK-74M is LIVE for T: refresh -> buy menu B→4→2 -> textured PBR rifle with real bolt-carrier fire animation, real magazine reload animation, the user's own fire sound, AK-47-family reload/draw sounds
+- The slide contract is now two-tier (real bolt preferred, cover proxy fallback) — future models with named bolt nodes get physically-correct animation automatically
+- Binaries staged pending the user's visual approval; acceptance on request = mv + git add (model, sound, icon)
+- Remote guns: bots buy ak47/m4 (unchanged); a T player's ak74 renders for others via buildGLBRemoteGun automatically
