@@ -19,10 +19,12 @@ import path from 'node:path'
 // If neither file exists the route 404s and the caller keeps its procedural
 // model — a fresh clone runs fully procedural, nothing breaks.
 //
-// Staged set: EMPTY — the CC0 Quaternius pack staged 2026-10-19 was
-// REJECTED by the user and wiped everywhere (2026-10-20); it must not be
-// restored. All ids 404 → fully procedural game, until NEW models are
-// dropped here (weapon GLB contract: public/assets/models/README.md).
+// Staged set (2026-10-20): ak47 — the user's Sketchfab AK-47 (NOT the
+// rejected CC0 Quaternius pack, which must never be restored). A
+// gitignored-paths cleanup wiped public/staging at 2026-10-20 04:12 UTC;
+// the model was re-baked from upload/ak-47.glb (byte-identical result) and
+// re-staged the same hour. All other ids 404 → procedural (weapon GLB
+// contract: public/assets/models/README.md).
 
 const ASSET_DIRS = ['staging', 'assets'] // staging wins
 const ID_RE = /^[a-z0-9]{2,12}$/
