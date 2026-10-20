@@ -1315,3 +1315,20 @@ Stage Summary:
 - AK-74M is now a DURABLE COMMITTED ASSET SET: model + user's own fire sound + buy icon, all in public/assets/, reproducible via tracked scripts/bake-ak74.ts + one ffmpeg line + the icon copy
 - The license ledger records ak74 as license-NOT-VERIFIED (user's direct upload, no source URL) under the same dev-only waiver as ak47; both carry the standing condition: re-clear or replace before any publish/distribution
 - Staging is empty; both accepted weapons load through the same route (staging-wins-then-assets), all suites green, live animations re-proven on the committed bytes
+
+---
+Task ID: 68
+Agent: Super Z (main agent)
+Task: User supplied a fresh fine-grained PAT in chat (implicit "push the stranded commits" per Task 65 protocol) — push the 3 local-only commits (Tasks 66-67) to GitHub
+
+Work Log:
+- Pre-push state check: working tree clean, local main 3 commits ahead of origin/main (eb36acb AK-74M integration, fcfbd6f Task 66 worklog, 903b842 ak74 acceptance) — matches the Task 67 record
+- Pushed via ONE-SHOT inline credential URL (git push https://x-access-token:<token>@github.com/JavadAbl/three-cs.git main:main) — token never written to any file, git config, or worklog; remote URL in .git/config untouched (still credential-less)
+- RESULT: d927f01..903b842 main -> main — all 3 commits landed on GitHub
+- Post-push fetch verified: origin/main tip = 903b842, local ahead count = 0
+- SECURITY NOTE: the PAT was pasted into the chat transcript — user advised to REVOKE it in GitHub (Settings -> Developer settings -> Fine-grained tokens) after this push; it served its single purpose
+- This worklog record committed and pushed after (4th commit of this batch)
+
+Stage Summary:
+- GitHub origin/main is now in sync with local main — the AK-74M integration + acceptance commits are durable remotely
+- Push protocol reaffirmed: user-supplied fine-grained PAT + one-shot inline URL (no persistence); ask user to revoke after
