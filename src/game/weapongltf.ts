@@ -19,9 +19,11 @@
 //   2. FIRST-PERSON viewmodels — knife AND guns
 // Files must be baked to the weapon GLB contract (grip anchor at the
 // origin, muzzle pointing −Z, real-meter scale — see
-// public/assets/models/README.md). Files without named mag/slide/bolt/pump
-// nodes silently skip per-part animations — the engine guards every part
-// with `if (vm.X)`; whole-vm motion (bob/sway/recoil/reload dip/draw) is
+// public/assets/models/README.md). Named MAGAZINE nodes (/magaz/i — the
+// staged AK's bm_magazine*) are wired into the reload animation as vm.mag
+// (Task 62); other parts (slide/bolt/pump) still need the engine's part
+// contract to be extended per-part — the engine guards everything with
+// `if (vm.X)`; whole-vm motion (bob/sway/recoil/reload dip/draw) is
 // group-level and keeps running. Weapons without a staged GLB stay
 // procedural.
 //
@@ -217,9 +219,16 @@ function measureGun(g: THREE.Group): { box: THREE.Box3; tipY: number } {
  * to the vm contract (grip anchor at origin, muzzle −Z, real-meter length),
  * so the group drops onto the same vmBase the procedural vms use. Gloves are
  * the same procedural pair every vm carries: trigger hand on the grip,
- * support hand out on the handguard for long guns (slot 1). No parts are
- * returned — mag/slide/bolt/pump animations simply skip for GLB vms.
- * Returns null while the GLB is not ready → caller falls back to procedural.
+ * support hand out on the handguard for long guns (slot 1). NAMED
+ * MAGAZINE nodes (bm_magazine* in the staged AK — Task 62, user: "ok do
+ * magazine works") are reparented into a pivot returned as vm.mag so the
+ * engine's reload animation drives the REAL mag: hidden 18–72% (a falling
+ * copy spawns via dropMag) then slides in from 5cm below. The pivot lives
+ * directly under the vm group (meter space) and is centered on the mag
+ * geometry so the slide-in + dropped copy anchor correctly. Other parts
+ * (slide/bolt/pump) are still not returned — those animations simply skip
+ * for GLB vms. Returns null while the GLB is not ready → caller falls back
+ * to procedural.
  */
 export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): ViewModel | null {
   const route = ROUTES[weaponId]
@@ -253,6 +262,43 @@ export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): Vie
   if (!c) return null
   c.scale.setScalar(gs)
   g.add(c)
+
+  // ---- real magazine wiring (Task 62) ---------------------------------
+  // Collect the TOPMOST nodes whose name matches /magaz/i (the staged AK
+  // has 5 sibling assembly nodes: bm_magazine_low, bm_magazineBottom_low,
+  // bm_magazinePart1..3_low — each carrying a mesh child that also matches;
+  // the ancestor filter keeps only the 5 roots). Reparent them into a
+  // pivot that is a DIRECT CHILD of the vm group, so the pivot's local
+  // space is meters: the engine's reload anim (hide 18–72%, then
+  // position.y = homeY - 0.05 slide-in) moves the real mag in true
+  // meters without any unit conversion. Centering the pivot on the mag
+  // geometry makes dropMag spawn the falling copy at the visible mag.
+  c.updateWorldMatrix(true, true)
+  const magNodes: THREE.Object3D[] = []
+  c.traverse((o) => {
+    if (!/magaz/i.test(o.name)) return
+    let p = o.parent
+    while (p && p !== c) {
+      if (/magaz/i.test(p.name)) return // a matched ancestor handles it
+      p = p.parent
+    }
+    magNodes.push(o)
+  })
+  let mag: THREE.Group | null = null
+  if (magNodes.length) {
+    mag = new THREE.Group()
+    mag.name = 'glbMagPivot'
+    g.add(mag)
+    for (const n of magNodes) mag.attach(n)
+    // recenter on the mag geometry: children shift -center, pivot takes +center
+    mag.updateWorldMatrix(true, true)
+    const mb = new THREE.Box3().setFromObject(mag)
+    const ctr = mb.getCenter(new THREE.Vector3())
+    for (const n of magNodes) n.position.sub(ctr)
+    mag.position.copy(ctr)
+    g.userData.glbMagNodes = magNodes.length
+  }
+
   const { box, tipY } = measureGun(g)
   if (WEAPONS[weaponId as WeaponId]?.slot === 1) {
     // long gun: support hand ~42% of the way out to the muzzle
@@ -266,5 +312,6 @@ export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): Vie
     tip: new THREE.Vector3(0, tipY, box.min.z),
     // shell port: right side, roughly receiver height a short way ahead of grip
     eject: new THREE.Vector3(0.035, tipY, box.min.z * 0.28),
+    ...(mag ? { mag } : {}),
   }
 }

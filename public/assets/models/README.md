@@ -140,3 +140,19 @@ Pipeline (all node-graph-safe): `prune → dedup → weld → webp → draco`.
   script uses.
 - Decode cost is one-time per file at lobby preload — a ~15k-tri viewmodel
   decodes in a few ms, never mid-round.
+
+## Staged-model license ledger (2026-10-20)
+
+| weapon | staged file (gitignored) | author | license | source |
+|--------|--------------------------|--------|---------|--------|
+| ak47 | `public/staging/models/weapons/ak47.glb` (baked from `upload/ak-47.glb` via `scripts/bake-ak47.ts` + `compress-glb.sh`) | Lokeig | **CC Attribution-NonCommercial** (attribution required, commercial use forbidden) | https://sketchfab.com/3d-models/ak-47-384565b1779c450b90397232163e4e6d |
+
+**Acceptance verdict for ak47: NOT committable.** The NC term fails the
+project's acceptance rule (CC0 / CC-BY only). The model stays in
+**staging** for live evaluation only — it must never be `git add`ed.
+Recovery path after a staging wipe (this happened once — 2026-10-20 04:12
+UTC): `npx tsx scripts/bake-ak47.ts && bash scripts/compress-glb.sh
+scripts/.tmp/ak47-fixed.glb public/staging/models/weapons/ak47.glb`, then
+touch `src/app/api/assets/weapon/[id]/route.ts` if the dev server had a
+cached 404. The tracked bake script reproduces the staged file exactly
+(scale 0.4591, bbox z −0.602..+0.278, 516,568 bytes after Draco).
