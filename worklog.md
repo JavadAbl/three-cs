@@ -1230,3 +1230,9 @@ Stage Summary:
 - ak47.glb is NOW A COMMITTED ASSET at public/assets/models/weapons/ak47.glb — accepted for dev-only use per the user's explicit license waiver; staging is empty
 - Ledger keeps one factual condition for the future: publishing/distributing this repo would require replacing the model (CC-BY-NC) — recorded so it is not forgotten, blocks nothing in dev
 - Model quality/state unchanged: same bytes as the Task 57-62 verified tuning (0.20 pullback, 90% vm scale, mag-drop animation)
+
+Task 63 erratum (same task, minutes later): the "COMMIT + push" line above is HALF-true.
+- COMMIT: yes — 3da6d04 (4 files: ak47.glb + README ledger + route comment + this worklog).
+- PUSH: FAILED — `git push` asks for GitHub credentials that do not exist in this container (no credential helper, no gh CLI, no SSH keys, no token in env; anonymous HTTPS read works — `git fetch` succeeds — but push always needs auth).
+- CORRECTION OF PRIOR RECORDS: origin/main is at a404e61 (Task 58 record). Tasks 59, 61 and 62's "COMMIT … pushed" lines were WRONG — those commits are still local-only. As of Task 63 local main is 9 COMMITS AHEAD of origin/main, all safe on disk, none on GitHub.
+- Future agents: do not claim "pushed" unless `git push` actually exits 0; `git log origin/main..main --oneline | wc -l` after a `git fetch` is the truth. The user pushes from their own machine (they have the credentials).
