@@ -178,6 +178,16 @@ export function buildGLBKnifeVM(team: TeamId): ViewModel | null {
 
 // ---------------------------------------------------------------- gun vms
 
+// First-person GLB gun vms render at 90% of the real-meter model
+// (user 2026-10-20: "its position is good now. can reduce its size a
+// little now?" — after the 0.20 pull-back the full-size gun read large on
+// screen). Scale applies to the GUN CLONE ONLY: the procedural gloves keep
+// real hand size, the classic CS viewmodel trick — measureGun() then
+// re-derives tip/eject from the scaled geometry, and remote guns
+// (buildGLBRemoteGun) stay real-size for other players. Live-tunable via
+// __eng.vmScale(f) (multiplier on this constant).
+export const GLB_VM_SCALE = 0.90
+
 /**
  * Measure a freshly assembled vm group (identity transform): overall bbox
  * plus the average height of the muzzle slice (z < min.z + 4cm) so the muzzle
@@ -211,11 +221,12 @@ function measureGun(g: THREE.Group): { box: THREE.Box3; tipY: number } {
  * returned — mag/slide/bolt/pump animations simply skip for GLB vms.
  * Returns null while the GLB is not ready → caller falls back to procedural.
  */
-export function buildGLBGunVM(weaponId: string, team: TeamId): ViewModel | null {
+export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): ViewModel | null {
   const route = ROUTES[weaponId]
   if (!route) return null
   const g = new THREE.Group()
   g.userData.glbVm = weaponId // debug/test marker: this vm came from the GLB branch
+  const gs = GLB_VM_SCALE * scaleMul
 
   if (route.dual) {
     // dual berettas: two pistols in two gloved hands, canted slightly inward
@@ -223,6 +234,7 @@ export function buildGLBGunVM(weaponId: string, team: TeamId): ViewModel | null 
     for (const side of [1, -1]) {
       const c = cloneProto(weaponId)
       if (!c) return null
+      c.scale.setScalar(gs)
       c.position.x = side * 0.07
       c.rotation.y = -side * 0.06
       g.add(c)
@@ -239,6 +251,7 @@ export function buildGLBGunVM(weaponId: string, team: TeamId): ViewModel | null 
 
   const c = cloneProto(weaponId)
   if (!c) return null
+  c.scale.setScalar(gs)
   g.add(c)
   const { box, tipY } = measureGun(g)
   if (WEAPONS[weaponId as WeaponId]?.slot === 1) {

@@ -16,7 +16,7 @@ import { PlayerManager } from './players'
 import { Effects, buildBombMesh, buildNadeMesh, SmokeCloud, FireZone } from './fx'
 import type { WorldFx } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
-import { preloadWeaponModels, buildGLBKnifeVM, buildGLBGunVM, weaponModelsState } from './weapongltf'
+import { preloadWeaponModels, buildGLBKnifeVM, buildGLBGunVM, weaponModelsState, GLB_VM_SCALE } from './weapongltf'
 import { userModelState } from './usermodel'
 import type { ViewModel } from './weaponmodels'
 import { audio } from './audio'
@@ -181,6 +181,9 @@ export class Engine {
   private vmBasePos = new THREE.Vector3(0.26, -0.24, -0.45)
   // extra pull-back on GLB long-gun vms, live-tunable via __eng.vmTune()
   private vmGlbAdj = 0
+  // live size multiplier for GLB gun vms (stacks on GLB_VM_SCALE in
+  // weapongltf.ts), tunable via __eng.vmScale(f); 1 = baked default
+  private vmGlbScaleMul = 1
   // viewmodel part animations
   private slideKickAt = -1e9
   private boltCycleAt = -1e9
@@ -392,6 +395,17 @@ export class Engine {
           const gv = (this.vm?.group.userData as { glbVm?: string } | undefined)?.glbVm
           if (gv && gv !== 'knife') this.vmBasePos.z += dz
           return { adj: Number(this.vmGlbAdj.toFixed(3)), pullback: Number((GLB_VM_PULLBACK + this.vmGlbAdj).toFixed(3)) }
+        },
+        // live GLB gun vm SIZE tuning: f is a multiplier on the baked 90%
+        // size (vmScale(0.9) = 10% smaller again, vmScale(1) = reset to
+        // baked default). Busts the vm cache and rebuilds instantly so the
+        // effect is visible with zero reloads; sticks across weapon switches.
+        vmScale: (f: number) => {
+          if (!Number.isFinite(f)) return null
+          this.vmGlbScaleMul = Math.min(1.5, Math.max(0.5, f))
+          this.vmCache.clear()
+          this.rebuildViewmodel()
+          return { mul: this.vmGlbScaleMul, scale: Number((GLB_VM_SCALE * this.vmGlbScaleMul).toFixed(3)) }
         },
         // live gun-in-hand offset tuning (GLB rig): __eng.gunTune(id, x,y,z, rx,ry,rz)
         gunTune: (id: string, x?: number, y?: number, z?: number, rx?: number, ry?: number, rz?: number) => {
@@ -1221,7 +1235,7 @@ export class Engine {
       // GLB vms carry no named parts, so per-part animations skip while the
       // whole-vm motion keeps running. Anything not staged (m249, negev,
       // taser, c4, grenades) falls through to the procedural builders.
-      vm = (w === 'knife' ? buildGLBKnifeVM(this.myTeam) : buildGLBGunVM(w, this.myTeam))
+      vm = (w === 'knife' ? buildGLBKnifeVM(this.myTeam) : buildGLBGunVM(w, this.myTeam, this.vmGlbScaleMul))
         ?? buildViewModel(w, this.myTeam)
       this.vmCache.set(key, vm)
     }
