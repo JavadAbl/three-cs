@@ -7,8 +7,8 @@ and it must NOT be restored from anywhere. The game runs the procedural
 soldier rig for all players until a NEW model is dropped into staging; the
 user will supply a better one later.
 
-**Weapon model status (2026-10-20): TWO accepted weapon models — ak47,
-ak74.**
+**Weapon model status (2026-10-20): THREE accepted weapon models — ak47,
+ak74, galil.**
 The CC0 Quaternius "Ultimate Guns Pack" (33 GLBs staged 2026-10-19 for
 live evaluation) was **rejected by the user** ("wipe all weapon models.
 they are not good, il find new models") — every staged GLB and raw-pack
@@ -19,9 +19,13 @@ at `public/assets/models/weapons/ak47.glb` (see the license ledger
 below). The user's own AK-74M upload (`upload/ak-74m.glb`) was integrated
 2026-10-20 (Task 66: model + the user's own fire sound) and **accepted
 the same day** ("accept ak74") — committed at
-`public/assets/models/weapons/ak74.glb`. Every other weapon id runs
-**procedural** (parts-animated viewmodels + remote stubs); the drop-in
-pipeline below stays live and waiting for more models.
+`public/assets/models/weapons/ak74.glb`. The user's Galil AR upload
+(`upload/galil_ar_counter_strike_2.glb`, a Counter-Strike 2 game rip) was
+integrated 2026-10-20 (Task 70, orientation fixed via cross-section muzzle
+detect + rotY 180°) and **accepted 2026-10-21** ("Galil accepted.") —
+committed at `public/assets/models/weapons/galil.glb`. Every other weapon
+id runs **procedural** (parts-animated viewmodels + remote stubs); the
+drop-in pipeline below stays live and waiting for more models.
 
 `public/assets/` holds **accepted, committed** running assets. New or pending
 binaries live in **`public/staging/`** (gitignored, still web-served so the
@@ -59,14 +63,14 @@ recognize it as a downloadable file:
 - The model is preloaded while the lobby menu is open, so starting a match
   never triggers a fresh download.
 
-## Weapon GLBs (pipeline LIVE — two accepted models: ak47, ak74)
+## Weapon GLBs (pipeline LIVE — three accepted models: ak47, ak74, galil)
 
 Drop a GLB at **`public/staging/models/weapons/<weaponId>.glb`** (gitignored,
 evaluative) or `public/assets/models/weapons/<weaponId>.glb` (accepted,
 committed) and the game uses it immediately for **remote guns + the
 first-person viewmodel + the knife** — zero code changes. With no file an
-id simply stays procedural (current state: all of them except ak47 and
-ak74).
+id simply stays procedural (current state: all of them except ak47,
+ak74 and galil).
 
 **Wired ids** (33, see `ROUTES` in `src/game/weapongltf.ts`): knife,
 glock, usp, p250, cz75, fiveseven, tec9, hkp2000, deagle, elites (dual),
@@ -162,6 +166,7 @@ Pipeline (all node-graph-safe): `prune → dedup → weld → webp → draco`.
 |--------|--------------------------|--------|---------|--------|
 | ak47 | `public/assets/models/weapons/ak47.glb` (committed; baked from `upload/ak-47.glb` via `scripts/bake-ak47.ts` + `compress-glb.sh`) | Lokeig | **CC Attribution-NonCommercial** (attribution required, commercial use forbidden) | https://sketchfab.com/3d-models/ak-47-384565b1779c450b90397232163e4e6d |
 | ak74 | `public/assets/models/weapons/ak74.glb` (committed; baked from the user's `upload/ak-74m.glb` via `scripts/bake-ak74.ts` + `compress-glb.sh`) | the user's own upload | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/ak-74m.glb` |
+| galil | `public/assets/models/weapons/galil.glb` (committed; baked from the user's `upload/galil_ar_counter_strike_2.glb` via `scripts/bake-galil.ts` + `compress-glb.sh`) | the user's own upload (Counter-Strike 2 game rip, internal name `GalilAr_CS2_weapon_rif_galilar`) | **not verified** (game-rip asset, no license; dev-only waiver applies) | uploaded directly to `upload/galil_ar_counter_strike_2.glb` |
 
 **Acceptance verdict for ak47: ACCEPTED — DEV-ONLY (2026-10-20).** The
 user explicitly waived the license concern: "forgot about licence at
@@ -195,3 +200,20 @@ grip anchor = `Grip_low_4` subtree). Re-tuning / recovery path:
 `npx tsx scripts/bake-ak74.ts && bash scripts/compress-glb.sh
 scripts/.tmp/ak74-fixed.glb <target>.glb`, then touch the weapon route
 to drop its buffer cache.
+
+**Acceptance verdict for galil: ACCEPTED — DEV-ONLY (2026-10-21).** The
+user supplied the file directly ("i upload galil glb"; later: "Galil
+accepted.") and approved it after live evaluation of the orientation
+fix (Task 70). It is a **Counter-Strike 2 game rip** (single merged mesh,
+41,074 tris, no named part nodes — parts animations silently skipped,
+whole-vm bob/sway/recoil/reload dip/draw still run). No external source
+or license exists — the row above records **not verified** under the
+same dev-only waiver as ak47/ak74 (no publish / no distribution; game
+assets from a commercial title must be re-clear or replaced before any
+release). The committed file: 621,508 bytes, sha1 `90de74470958…`,
+baked parameters in `scripts/bake-galil.ts` (rotY 180° — rip muzzle is
++Z, engine contract is −Z; uniform scale 1.2396 to the 0.97 m IMI Galil
+AR length; grip anchor = bbox center of the geometrically-detected rear
+grip bump). Re-tuning / recovery path: `npx tsx scripts/bake-galil.ts
+&& bash scripts/compress-glb.sh scripts/.tmp/galil-fixed.glb
+<target>.glb`, then touch the weapon route to drop its buffer cache.

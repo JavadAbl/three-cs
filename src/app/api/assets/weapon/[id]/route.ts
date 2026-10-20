@@ -19,17 +19,17 @@ import path from 'node:path'
 // If neither file exists the route 404s and the caller keeps its procedural
 // model — a fresh clone runs fully procedural, nothing breaks.
 //
-// Accepted set (2026-10-20): ak47, ak74 — the user's Sketchfab AK-47
+// Accepted set (2026-10-21): ak47, ak74, galil — the user's Sketchfab AK-47
 // (Lokeig, NOT the rejected CC0 Quaternius pack, which must never be
-// restored) and the user's own AK-74M upload. Both accepted for DEV-ONLY
-// use per the user's explicit decision ("i dont want publish this game. i
-// want it for dev purposes only") — see the license ledger in
-// public/assets/models/README.md before ever distributing this repo.
-// Staged (evaluative, 2026-10-20): galil — the user's CS2-rip Galil AR,
-// re-baked orientation-correct by scripts/bake-galil.ts (Task 70; the
-// first staging rendered reversed — muzzle +Z rip + no named parts = the
-// AK-74 detect found nothing). All other ids 404 → procedural (weapon GLB
-// contract: public/assets/models/README.md).
+// restored), the user's own AK-74M upload, and the user's CS2-rip Galil AR
+// (accepted "Galil accepted.", Task 71; single merged mesh, no named parts,
+// baked rotY 180° by scripts/bake-galil.ts — the first staging rendered
+// reversed). All three accepted for DEV-ONLY use per the user's explicit
+// decision ("i dont want publish this game. i want it for dev purposes
+// only") — see the license ledger in public/assets/models/README.md before
+// ever distributing this repo.
+// All other ids 404 → procedural (weapon GLB contract:
+// public/assets/models/README.md).
 
 const ASSET_DIRS = ['staging', 'assets'] // staging wins
 const ID_RE = /^[a-z0-9]{2,12}$/

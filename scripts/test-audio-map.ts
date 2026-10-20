@@ -109,6 +109,12 @@ check('preload = live weapons + live grenades only (no future-roster names prelo
 
 // --- 6. HTTP serving (every staged + every committed ogg → 200) ---
 async function httpCheck(base: string, dir: string, label: string) {
+  // staging/ is a gitignored scratch dir — after an env reset (Task 70) it can
+  // legitimately not exist; nothing staged = nothing to serve, not a failure.
+  if (!existsSync(dir)) {
+    check(`HTTP 200: all ${label} files (dir absent — nothing staged, skipped)`, true)
+    return
+  }
   const names = readdirSync(dir).filter(f => f.endsWith('.ogg'))
   let bad = 0
   const BATCH = 20
