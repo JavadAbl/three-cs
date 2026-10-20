@@ -1381,3 +1381,20 @@ Stage Summary:
 - Galil AR is now a DURABLE COMMITTED ASSET (model in assets, icon already committed, sounds from the CS:GO pack): third accepted weapon alongside ak47/ak74, same dev-only waiver, ledger updated
 - The "locked weapons" were NOT a bug in the buy system — it is the CS buy window; the bug was SILENT UX, now fixed with an unmistakable banner + LOCKED row tags. If the user wants free-buy-anytime (dev sandbox), that would be a small server change — offer it, don't assume
 - Buys verified working in every dimension: money, slot replacement, multi-buy, open/closed states, suites green
+
+---
+Task ID: 72
+Agent: Super Z (main agent)
+Task: User supplied a PAT in chat (implicit "push the stranded commits" per Task 65 protocol) — push the 5 local-only commits to GitHub
+
+Work Log:
+- Pre-push state: origin/main at 8b52e58 (Task 68's tip); local main 5 ahead — 5f6c11d (Task 70 galil orientation fix + env-reset recovery), 304e67a (platform auto-commit that had caught the galil acceptance mv), 9aafa86 (galil acceptance docs), 3d2ec57 (buy-menu lock UX fix), fbfe007 (Task 71 worklog)
+- Pushed via ONE-SHOT inline credential URL (git push https://x-access-token:<token>@github.com/JavadAbl/three-cs.git main:main) — token never written to any file, git config, or worklog; remote URL in .git/config untouched (still credential-less)
+- RESULT: 8b52e58..fbfe007 main -> main — all 5 commits landed
+- Post-push fetch verified: origin/main tip = fbfe007, local ahead count = 0
+- SECURITY NOTE: the PAT was pasted into the chat transcript (same token string as Task 68 — apparently never revoked) — user advised AGAIN to REVOKE it in GitHub (Settings -> Developer settings -> Fine-grained tokens) now that it served its purpose; a fresh PAT will be needed for future pushes anyway
+- This worklog record committed and pushed after (6th commit of the batch)
+
+Stage Summary:
+- GitHub origin/main is in sync with local main — the Galil AR (model + orientation fix + acceptance) and the buy-window LOCKED UX fix are all durable remotely
+- Push protocol unchanged: user-supplied fine-grained PAT + one-shot inline URL (no persistence); remind to revoke after
