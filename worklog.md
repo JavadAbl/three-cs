@@ -1255,3 +1255,19 @@ Stage Summary:
 - Name contracts now documented in the README contract section: /magaz/i -> vm.mag (Task 62), /dustcover/i -> vm.slide (Task 64) — future GLBs with those node names light up automatically; bolt/pump still unwired
 - Bonus engine fix benefits all pistols: slide kick now renders at full on the firing frame instead of one frame late
 - r_barrel* nodes stay fixed by design (physical correctness + muzzle-flash anchor); if the user ever wants a barrel micro-kick it needs a new engine part type — recommend against
+---
+Task ID: 65
+Agent: Super Z (main agent)
+Task: User: "push updates" — pushed the 12 locally-stranded commits to GitHub (user supplied a fine-grained PAT in chat)
+
+Work Log:
+- Credential sweep re-confirmed the container has zero auth of its own: no credential helper, .netrc, ~/.ssh (no ssh client binary at all, no root to install one), no token env. GitHub HTTPS read is anonymous-OK, write always needs auth — only path was a user-supplied token (user pasted a fine-grained PAT, repo-scoped to three-cs, Contents: RW)
+- Pushed via ONE-SHOT inline credential URL (git push https://x-access-token:<token>@github.com/... main:main) — token never written to any file, git config, or worklog; remote URL in .git/config untouched (still credential-less)
+- RESULT: a404e61..b4e091d main -> main — all 12 commits landed (Tasks 58-64: vm pull-back 0.20, 90% vm scale, mag wiring, staging-wipe recovery, dev-only acceptance of ak47.glb into assets, dust-cover slide-back + k-clamp engine fix, plus worklog records)
+- Post-push fetch verified: origin/main tip = b4e091d, local ahead count = 0
+- SECURITY NOTE: the PAT was pasted into the chat transcript — advised the user to REVOKE it in GitHub (Settings → Developer settings → Fine-grained tokens) immediately after this push; it served its single purpose
+- This worklog record committed and pushed after (13th commit)
+
+Stage Summary:
+- GitHub origin/main is now in sync with local main — nothing stranded anymore
+- Push protocol for this container recorded: user-supplied fine-grained PAT + one-shot inline URL (no persistence); ask the user to revoke after
