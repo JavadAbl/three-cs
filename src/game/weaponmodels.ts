@@ -19,10 +19,11 @@ export interface ViewModel {
   tip: THREE.Vector3
   /** magazine (hidden mid-reload, dropped copy spawned by engine) */
   mag?: THREE.Group
-  /** pistol slide (blowback anim) */
-  slide?: THREE.Mesh
+  /** blowback part (pistol slide; on GLB vms the reciprocating top unit,
+   * e.g. the AK's dust-cover assembly — Task 64). Engine drives position.z */
+  slide?: THREE.Object3D
   /** second slide for dual berettas — engine alternates fire left/right */
-  slideL?: THREE.Mesh
+  slideL?: THREE.Object3D
   /** AWP bolt assembly (cycle anim) */
   bolt?: THREE.Group
   /** shotgun fore-end pump (rack anim, Phase 6) */

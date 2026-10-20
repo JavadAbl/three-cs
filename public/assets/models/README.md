@@ -79,9 +79,12 @@ will sit wrong in the hand / point the wrong way / be the wrong size:
   point +X or +Y
 - **real-meter scale** — pistol ~0.22 m … sniper ~1.23 m along the barrel
 - **upright** — top of the weapon toward +Y, sights up
-- optional: named part nodes (mag/slide/bolt/pump) keep the engine's parts
-  animations alive; files without them silently skip those (whole-vm
-  bob/sway/recoil/reload dip/draw always run)
+- optional: named part nodes keep the engine's parts animations alive;
+  files without them silently skip those (whole-vm
+  bob/sway/recoil/reload dip/draw always run). Name contracts (Task 62/64):
+  `/magaz/i` nodes → vm.mag (reload swap), `/dustcover/i` nodes → vm.slide
+  (34mm blowback on every shot — the AK's u_dustcover* cluster); bolt/pump
+  have no contract yet
 
 The one-off fixup baker that did this for the (now rejected) Quaternius
 pack lives in git history (commit `544f32e`, `scripts/stage-guns-pack.ts`)

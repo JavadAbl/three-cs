@@ -19,12 +19,15 @@
 //   2. FIRST-PERSON viewmodels — knife AND guns
 // Files must be baked to the weapon GLB contract (grip anchor at the
 // origin, muzzle pointing −Z, real-meter scale — see
-// public/assets/models/README.md). Named MAGAZINE nodes (/magaz/i — the
-// staged AK's bm_magazine*) are wired into the reload animation as vm.mag
-// (Task 62); other parts (slide/bolt/pump) still need the engine's part
-// contract to be extended per-part — the engine guards everything with
-// `if (vm.X)`; whole-vm motion (bob/sway/recoil/reload dip/draw) is
-// group-level and keeps running. Weapons without a staged GLB stay
+// public/assets/models/README.md). Named part nodes are wired into the
+// engine's parts animations by name (the engine guards everything with
+// `if (vm.X)`, so parts a model lacks simply skip): /magaz/i → vm.mag
+// reload swap (Task 62, AK bm_magazine*), /dustcover/i → vm.slide blowback
+// on fire (Task 64, AK u_dustcover* — the game-AK reciprocating-top
+// proxy; r_barrel* stays fixed: real AKs don't recoil the barrel, and the
+// muzzle-flash tip is measured from static geometry). bolt/pump have no
+// name contract yet. Whole-vm motion (bob/sway/recoil/reload dip/draw)
+// is group-level and always runs. Weapons without a staged GLB stay
 // procedural.
 //
 // Loading: every id is fetched via the extensionless POST route
@@ -215,20 +218,52 @@ function measureGun(g: THREE.Group): { box: THREE.Box3; tipY: number } {
 }
 
 /**
+ * Topmost nodes under `root` whose name matches `re` (ancestor filter —
+ * e.g. the AK's bm_magazine* assembly nodes each carry a MESH child whose
+ * name also matches; only the topmost node is collected so the whole
+ * subtree moves as one part).
+ */
+function topmostMatching(root: THREE.Object3D, re: RegExp): THREE.Object3D[] {
+  const out: THREE.Object3D[] = []
+  root.traverse((o) => {
+    if (!re.test(o.name)) return
+    let p = o.parent
+    while (p && p !== root) {
+      if (re.test(p.name)) return // a matched ancestor handles it
+      p = p.parent
+    }
+    out.push(o)
+  })
+  return out
+}
+
+/**
  * First-person GUN viewmodel from the staged GLB. The staged files are baked
  * to the vm contract (grip anchor at origin, muzzle −Z, real-meter length),
  * so the group drops onto the same vmBase the procedural vms use. Gloves are
  * the same procedural pair every vm carries: trigger hand on the grip,
- * support hand out on the handguard for long guns (slot 1). NAMED
- * MAGAZINE nodes (bm_magazine* in the staged AK — Task 62, user: "ok do
- * magazine works") are reparented into a pivot returned as vm.mag so the
- * engine's reload animation drives the REAL mag: hidden 18–72% (a falling
- * copy spawns via dropMag) then slides in from 5cm below. The pivot lives
- * directly under the vm group (meter space) and is centered on the mag
- * geometry so the slide-in + dropped copy anchor correctly. Other parts
- * (slide/bolt/pump) are still not returned — those animations simply skip
- * for GLB vms. Returns null while the GLB is not ready → caller falls back
- * to procedural.
+ * support hand out on the handguard for long guns (slot 1). NAMED PART
+ * nodes are reparented into pivots that are DIRECT children of the vm group
+ * (meter space — the engine's envelopes are metric):
+ *   - /magaz/i (bm_magazine* in the AK — Task 62, user: "ok do magazine
+ *     works") → vm.mag: hidden 18–72% of the reload (a falling copy spawns
+ *     via dropMag) then slides in from 5cm below; the pivot is centered on
+ *     the mag geometry so the slide-in + dropped copy anchor correctly.
+ *   - /dustcover/i (u_dustcover* + ul_dustcoverScroll* + u_dustcoverHolder*
+ *     in the AK — Task 64, user: "wiring the AK's dust cover/barrel nodes
+ *     for a slide-back animation on fire") → vm.slide: the engine's 34mm
+ *     120ms blowback per shot (600 RPM keeps it vibrating through sustained
+ *     fire). The dust cover is the standard game-AK proxy for the bolt
+ *     carrier cycle (this model has no separate carrier/charging-handle
+ *     node; the procedural AK's cover was fully static — this beats it).
+ *     The r_barrel* cluster is deliberately NOT wired: real AKs keep the
+ *     barrel + gas tube fixed (long-stroke piston), and the muzzle-flash
+ *     tip is measured from static geometry — a sliding muzzle would leave
+ *     the flash floating ahead. No recenter needed for the slide (the
+ *     engine records homeZ and adds the kick on top).
+ * Other parts (bolt/pump) are still not returned — those animations simply
+ * skip for GLB vms. Returns null while the GLB is not ready → caller falls
+ * back to procedural.
  */
 export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): ViewModel | null {
   const route = ROUTES[weaponId]
@@ -263,27 +298,16 @@ export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): Vie
   c.scale.setScalar(gs)
   g.add(c)
 
-  // ---- real magazine wiring (Task 62) ---------------------------------
-  // Collect the TOPMOST nodes whose name matches /magaz/i (the staged AK
-  // has 5 sibling assembly nodes: bm_magazine_low, bm_magazineBottom_low,
-  // bm_magazinePart1..3_low — each carrying a mesh child that also matches;
-  // the ancestor filter keeps only the 5 roots). Reparent them into a
-  // pivot that is a DIRECT CHILD of the vm group, so the pivot's local
-  // space is meters: the engine's reload anim (hide 18–72%, then
-  // position.y = homeY - 0.05 slide-in) moves the real mag in true
-  // meters without any unit conversion. Centering the pivot on the mag
-  // geometry makes dropMag spawn the falling copy at the visible mag.
+  // ---- named-part wiring (Task 62 mag, Task 64 slide) -------------------
+  // Pivots are DIRECT children of the vm group so their local space is
+  // meters; attach() preserves world transforms, and the engine's envelopes
+  // (mag slide-in 5cm, slide blowback 34mm) move the real parts in true
+  // meters with no unit conversion.
   c.updateWorldMatrix(true, true)
-  const magNodes: THREE.Object3D[] = []
-  c.traverse((o) => {
-    if (!/magaz/i.test(o.name)) return
-    let p = o.parent
-    while (p && p !== c) {
-      if (/magaz/i.test(p.name)) return // a matched ancestor handles it
-      p = p.parent
-    }
-    magNodes.push(o)
-  })
+
+  // magazine: recenter on the mag geometry so dropMag spawns the falling
+  // copy at the visible mag (staged AK: 5 sibling assembly nodes)
+  const magNodes = topmostMatching(c, /magaz/i)
   let mag: THREE.Group | null = null
   if (magNodes.length) {
     mag = new THREE.Group()
@@ -297,6 +321,18 @@ export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): Vie
     for (const n of magNodes) n.position.sub(ctr)
     mag.position.copy(ctr)
     g.userData.glbMagNodes = magNodes.length
+  }
+
+  // dust cover (or any /dustcover/i top unit): the reciprocating top on
+  // fire. No recenter — the engine records homeZ and adds k*0.034 per shot.
+  const slideNodes = topmostMatching(c, /dustcover/i)
+  let slide: THREE.Group | null = null
+  if (slideNodes.length) {
+    slide = new THREE.Group()
+    slide.name = 'glbSlidePivot'
+    g.add(slide)
+    for (const n of slideNodes) slide.attach(n)
+    g.userData.glbSlideNodes = slideNodes.length
   }
 
   const { box, tipY } = measureGun(g)
@@ -313,5 +349,6 @@ export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): Vie
     // shell port: right side, roughly receiver height a short way ahead of grip
     eject: new THREE.Vector3(0.035, tipY, box.min.z * 0.28),
     ...(mag ? { mag } : {}),
+    ...(slide ? { slide } : {}),
   }
 }

@@ -1907,14 +1907,19 @@ export class Engine {
       const vm = this.vm
       if (vm) {
         if (vm.slide && vm.slideL) {
-          // dual berettas: only the gun that just fired cycles; the other sits home
+          // dual berettas: only the gun that just fired cycles; the other sits home.
+          // k clamps to 1 on the firing frame itself — auto-fire sets slideKickAt
+          // with a fresher performance.now() than this frame-top `now`, and the
+          // kick should render AT the shot, not one frame late (Task 64).
           const act = this.slideLeft ? vm.slideL : vm.slide
           const idle = this.slideLeft ? vm.slide : vm.slideL
-          const k = Math.max(0, 1 - (now - this.slideKickAt) / 120)
+          const k = Math.min(1, Math.max(0, 1 - (now - this.slideKickAt) / 120))
           act.position.z = (act.userData.homeZ as number) + k * 0.034
           idle.position.z = idle.userData.homeZ as number
         } else if (vm.slide) {
-          const k = Math.max(0, 1 - (now - this.slideKickAt) / 120)
+          // same min-clamp: full 34mm blowback on the firing frame, then the
+          // 120ms decay (Task 64 — also drives the GLB AK dust cover)
+          const k = Math.min(1, Math.max(0, 1 - (now - this.slideKickAt) / 120))
           vm.slide.position.z = (vm.slide.userData.homeZ as number) + k * 0.034
         }
         if (vm.bolt) {
