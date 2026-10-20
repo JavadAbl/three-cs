@@ -1176,3 +1176,20 @@ Stage Summary:
 - Recovery took minutes only because the bake knowledge was fully recorded in worklog Task 57 + git history — the pattern (worklog numbers + recoverable technique) paid off
 - Acceptance still pending: Sketchfab license confirmation from the user (mv staging -> assets + git add once confirmed)
 - CAUTION for future sessions: gitignored paths (public/staging/, scripts/.tmp/, /tmp) are NOT durable — anything valuable there must be committed or re-derivable
+---
+Task ID: 61
+Agent: Super Z (main agent)
+Task: Position approved (user: "its position is good now") — reduce the first-person AK size a little (user: "can reduce its size a little now?")
+
+Work Log:
+- Approach: scale the GUN CLONE only (GLB_VM_SCALE = 0.90 in weapongltf.ts), NOT the whole vm group — the procedural gloves keep real hand size (classic CS viewmodel trick), so the gun reads smaller while the hands stay body-scale; remote guns (buildGLBRemoteGun) keep real-meter size for other players
+- Geometry after 0.9: stock butt local +0.250 -> world +0.000 (still behind the eye, stock stays clipped); muzzle -0.542 local -> world -0.792 (well ahead); support hand auto-follows at 42% of the SCALED handguard; measureGun() re-derives tip/eject from scaled geometry so muzzle flash + shell port stay on the barrel line
+- buildGLBGunVM(weaponId, team, scaleMul = 1): scale applied per clone in both single and dual branches BEFORE measureGun; GLB_VM_SCALE exported
+- New knob __eng.vmScale(f): multiplier on the baked 0.90 (clamped 0.5-1.5), busts vmCache + rebuildViewmodel() for instant apply, returns {mul, scale}; sticks across switches, resets on rejoin
+- VERIFICATION: tsc clean (src/); aimhead + bugfixes ALL PASS; live: vm glb=ak47 parts=12, vmScale(1) -> {mul:1, scale:0.9}; VLM A/B vs the full-size screenshot: "slightly smaller" (user asked for 'a little'), hands naturally proportioned, wooden stock still fully off-screen (no pullback regression), still a normal CS:GO-style viewmodel; knife regression intact (glb=null), AK round-trip ok, 0 console errors
+- COMMIT 7640418 pushed
+
+Stage Summary:
+- First-person AK now renders at 90% (10% smaller linear, ~19% less screen area); remote guns + knife unchanged
+- Tuning: __eng.vmScale(0.9) shrinks 10% more (effective 0.81), vmScale(1) = baked default; tell me the scale number you like and I bake it
+- Still pending: Sketchfab license for acceptance; optional bm_magazine wiring for real mag-drop
