@@ -1211,3 +1211,22 @@ Stage Summary:
 - The staged AK-47 now has a REAL magazine animation: mag drops out of sight 18-72% of the reload (falling copy spawns), slides back in from below 72-86%, all driven by the actual bm_magazine* nodes of the user's model
 - The model is NOT accepted (CC-BY-NC) — stays staging-only for evaluation; the tracked bake script + license ledger harden it against the next staging wipe
 - Slide/bolt/pump animations still skip for GLB vms (the AK has u_dustcover* + r_barrel* nodes — wiring those is a future task if the user wants)
+---
+Task ID: 63
+Agent: Super Z (main agent)
+Task: User waived the license concern ("forgot about licence at all. i dont want publish this game. i want it for dev porpuses only") — do the pending ak47 ACCEPTANCE (dev-only) so the model is durable in git instead of wipe-prone staging
+
+Work Log:
+- Acceptance: mkdir public/assets/models/weapons + mv staging→assets (sha1 605665b4… byte-identical before/after, 516,568 bytes) + plain `git add` (no -f, per policy) — the Task-60 wipe scenario can never touch it again; staging dir now empty, route falls through to assets
+- Route proof on COLD cache (touched route.ts to drop module buffer cache): POST /api/assets/weapon/ak47 → 200, downloaded bytes cmp-identical; knife + awp → 404 (procedural fallbacks intact)
+- Docs: route.ts comment staged-set→accepted-set (dev-only per user quote); README license ledger verdict flipped — "ACCEPTED — DEV-ONLY (2026-10-20)", user quote recorded, ONE standing condition kept (if ever published/distributed, NC term applies → replace model or re-clear before any release); weapon status header now "ONE accepted weapon model — ak47"; re-tuning path updated (tracked bake-ak47.ts reproduces the committed file exactly)
+- Live eval (fresh browser session post-mv, so the fetch exercised the new assets path): lobby→TERRORIST→PLAY; wglb ak47='ready'; buy B→4→1 → weapon=ak47, vmGlb='ak47', vm on PerspectiveCamera parts=13 (12 + mag pivot), magWired=true (home magY −0.0166), ammo 30/90
+- Knife regression: Escape closed buy menu (it was swallowing 1/2/3 keys — remembered from prior evals), key 3 → knife vmGlb=null parts=16 procedural ✓; key 1 → back to ak47 vmGlb='ak47' ✓
+- Reload smoke: fired 5 → reload → mid-window magVisible=false (mag dropped out of sight), late read magVisible=true magY=−0.0296 (slide-in dip below home), post-reload ammo mag=30 reserve=85 (90−5 fired) — server refill ok
+- tsc: src/ 0 errors (examples/ + scripts/bsp noise pre-existing); console: 0 errors, only the expected [usermodel] human.glb 404 fallback warnings (rejected model, documented correct behavior)
+- COMMIT + push (acceptance + docs), then this worklog record
+
+Stage Summary:
+- ak47.glb is NOW A COMMITTED ASSET at public/assets/models/weapons/ak47.glb — accepted for dev-only use per the user's explicit license waiver; staging is empty
+- Ledger keeps one factual condition for the future: publishing/distributing this repo would require replacing the model (CC-BY-NC) — recorded so it is not forgotten, blocks nothing in dev
+- Model quality/state unchanged: same bytes as the Task 57-62 verified tuning (0.20 pullback, 90% vm scale, mag-drop animation)

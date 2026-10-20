@@ -7,14 +7,17 @@ and it must NOT be restored from anywhere. The game runs the procedural
 soldier rig for all players until a NEW model is dropped into staging; the
 user will supply a better one later.
 
-**Weapon model status (2026-10-20): NO weapon models — staged pack REJECTED.**
+**Weapon model status (2026-10-20): ONE accepted weapon model — ak47.**
 The CC0 Quaternius "Ultimate Guns Pack" (33 GLBs staged 2026-10-19 for
 live evaluation) was **rejected by the user** ("wipe all weapon models.
 they are not good, il find new models") — every staged GLB and raw-pack
 copy was deleted (mirror included) and it must NOT be restored from
-anywhere. The game runs **fully procedural weapons** (parts-animated
-viewmodels + remote stubs) until NEW models are dropped; the drop-in
-pipeline below stays live and waiting.
+anywhere. The user's Sketchfab AK-47 (Lokeig, CC-BY-NC) was evaluated,
+tuned in-game and **accepted on 2026-10-20 for dev-only use** — committed
+at `public/assets/models/weapons/ak47.glb` (see the license ledger
+below). Every other weapon id runs **procedural** (parts-animated
+viewmodels + remote stubs); the drop-in pipeline below stays live and
+waiting for more models.
 
 `public/assets/` holds **accepted, committed** running assets. New or pending
 binaries live in **`public/staging/`** (gitignored, still web-served so the
@@ -52,13 +55,13 @@ recognize it as a downloadable file:
 - The model is preloaded while the lobby menu is open, so starting a match
   never triggers a fresh download.
 
-## Weapon GLBs (pipeline LIVE but DORMANT — no files staged)
+## Weapon GLBs (pipeline LIVE — one accepted model: ak47)
 
 Drop a GLB at **`public/staging/models/weapons/<weaponId>.glb`** (gitignored,
 evaluative) or `public/assets/models/weapons/<weaponId>.glb` (accepted,
 committed) and the game uses it immediately for **remote guns + the
 first-person viewmodel + the knife** — zero code changes. With no file an
-id simply stays procedural (current state: all of them).
+id simply stays procedural (current state: all of them except ak47).
 
 **Wired ids** (33, see `ROUTES` in `src/game/weapongltf.ts`): knife,
 glock, usp, p250, cz75, fiveseven, tec9, hkp2000, deagle, elites (dual),
@@ -143,16 +146,25 @@ Pipeline (all node-graph-safe): `prune → dedup → weld → webp → draco`.
 
 ## Staged-model license ledger (2026-10-20)
 
-| weapon | staged file (gitignored) | author | license | source |
+| weapon | file | author | license | source |
 |--------|--------------------------|--------|---------|--------|
-| ak47 | `public/staging/models/weapons/ak47.glb` (baked from `upload/ak-47.glb` via `scripts/bake-ak47.ts` + `compress-glb.sh`) | Lokeig | **CC Attribution-NonCommercial** (attribution required, commercial use forbidden) | https://sketchfab.com/3d-models/ak-47-384565b1779c450b90397232163e4e6d |
+| ak47 | `public/assets/models/weapons/ak47.glb` (committed; baked from `upload/ak-47.glb` via `scripts/bake-ak47.ts` + `compress-glb.sh`) | Lokeig | **CC Attribution-NonCommercial** (attribution required, commercial use forbidden) | https://sketchfab.com/3d-models/ak-47-384565b1779c450b90397232163e4e6d |
 
-**Acceptance verdict for ak47: NOT committable.** The NC term fails the
-project's acceptance rule (CC0 / CC-BY only). The model stays in
-**staging** for live evaluation only — it must never be `git add`ed.
-Recovery path after a staging wipe (this happened once — 2026-10-20 04:12
-UTC): `npx tsx scripts/bake-ak47.ts && bash scripts/compress-glb.sh
-scripts/.tmp/ak47-fixed.glb public/staging/models/weapons/ak47.glb`, then
-touch `src/app/api/assets/weapon/[id]/route.ts` if the dev server had a
-cached 404. The tracked bake script reproduces the staged file exactly
-(scale 0.4591, bbox z −0.602..+0.278, 516,568 bytes after Draco).
+**Acceptance verdict for ak47: ACCEPTED — DEV-ONLY (2026-10-20).** The
+user explicitly waived the license concern: "forgot about licence at
+all. i dont want publish this game. i want it for dev porpuses only."
+The model is committed at `public/assets/models/weapons/ak47.glb`
+(516,568 bytes, sha1 `605665b4…`) and is now durable against staging
+wipes. One standing condition, recorded so it is not forgotten: **if
+this project is ever published, distributed, or sold, the NC term
+applies again** — replace this model (and purge it from history) or
+re-clear it with the author before any public release. The attribution
+row above stays for reference.
+
+Re-tuning / recovery path (tracked script, reproduces the committed
+file exactly — scale 0.4591, bbox z −0.602..+0.278, 17,392 tris,
+516,568 bytes after Draco): `npx tsx scripts/bake-ak47.ts && bash
+scripts/compress-glb.sh scripts/.tmp/ak47-fixed.glb <target>.glb`
+(stage for evaluation, or overwrite the accepted copy), then touch
+`src/app/api/assets/weapon/[id]/route.ts` to drop the route's buffer
+cache.
