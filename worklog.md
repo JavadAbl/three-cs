@@ -1193,3 +1193,21 @@ Stage Summary:
 - First-person AK now renders at 90% (10% smaller linear, ~19% less screen area); remote guns + knife unchanged
 - Tuning: __eng.vmScale(0.9) shrinks 10% more (effective 0.81), vmScale(1) = baked default; tell me the scale number you like and I bake it
 - Still pending: Sketchfab license for acceptance; optional bm_magazine wiring for real mag-drop
+---
+Task ID: 62
+Agent: Super Z (main agent)
+Task: User supplied the Sketchfab source URL and asked "ok do magazine works" — license check + acceptance decision + wire the real bm_magazine* nodes into the reload animation
+
+Work Log:
+- LICENSE CHECK (user-supplied URL): "AK-47" by Lokeig — CC Attribution-NonCommercial (attribution required, commercial use forbidden) → fails the acceptance rule (CC0/CC-BY only) → the model STAYS in staging (gitignored) and must never be git-added; documented in public/assets/models/README.md "Staged-model license ledger" + committed scripts/bake-ak47.ts as the tracked recovery tool (reproduces the staged GLB exactly: scale 0.4591, bbox z -0.602..+0.278, 17,392 tris, 516,568 bytes post-Draco)
+- GLB inventory (scripts/.tmp/dump-mag-nodes.ts): the magazine = 5 sibling assembly nodes under RootNode (bm_magazine_low, bm_magazineBottom_low, bm_magazinePart1..3_low), each with a mesh child also matching /magaz/i
+- Wiring (weapongltf.ts buildGLBGunVM): collect TOPMOST /magaz/i nodes (ancestor filter skips the mesh children), reparent into a THREE.Group pivot that is a DIRECT CHILD of the vm group via attach() (world transforms preserved) so the pivot's local space is METERS — the engine's fixed 5cm slide-in needs no unit conversion; recenter pivot on the mag bbox so dropMag spawns the falling copy at the visible mag; return as vm.mag
+- Engine integration cost ZERO: the existing reload anim (hidden 18-72% of reloadMs, position.y = homeY - 0.05 slide-in 72-86%, dropMag box at reload start) drives the real mag unchanged; knife + procedural vms untouched; remote guns keep real-meter size
+- VERIFICATION: tsc clean (src/); aimhead + bugfixes + reload 6/6 ALL PASS; live: vmState object-level proof — mid-window magVisible:false at rp~0.27 (reproduced across 5+ attempts), slide-in dip observed (magY below home rising), post-reload seated at home, ammo refilled by server; VISUAL proof via in-page atomic capture (canvas.toDataURL inside rAF): VLM confirms "magazine ABSENT/MISSING (empty magazine well)" + gun dipped in reload pose + no artifacts
+- Capture saga (recorded for future sessions): host-side agent-browser screenshot latency (~2-3s) can never land inside the 0.43-1.73s hidden window; in-page async eval + sleep(650) ALSO overshoots — headless tab throttles timers ~2x AND toDataURL of the 1280x577 canvas blocks ~1.5-2s; the frame it returns is from the START of the call — so sleep(300) + single rAF + immediate toDataURL captures ~650ms deep inside the window. Round transitions (empty rooms cycle rounds instantly; bot rooms = aim-bots kill you ~1s after you fire) cancel mid-reload — drain+reload+capture must be one in-page async eval. Validity signal: vmState.magVisible===false read immediately before the rAF capture (scripts/.tmp/capture-mag-window.sh v3+)
+- Final regressions: knife glb=null intact, AK glb=ak47 + mag wired, 0 console errors. COMMIT 8fd5d67 pushed
+
+Stage Summary:
+- The staged AK-47 now has a REAL magazine animation: mag drops out of sight 18-72% of the reload (falling copy spawns), slides back in from below 72-86%, all driven by the actual bm_magazine* nodes of the user's model
+- The model is NOT accepted (CC-BY-NC) — stays staging-only for evaluation; the tracked bake script + license ledger harden it against the next staging wipe
+- Slide/bolt/pump animations still skip for GLB vms (the AK has u_dustcover* + r_barrel* nodes — wiring those is a future task if the user wants)
