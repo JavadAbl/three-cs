@@ -66,8 +66,8 @@ const want = [
   'mp5:1500',
   // Phase 4 SMGs
   'mp9:1250@CT', 'mac10:1250@T', 'mp7:1500', 'ump45:1500', 'p90:2350', 'bizon:1400',
-  'ak47:2700@T', 'm4:3100@CT',
-  // Phase 5 rifles + snipers (rifle category: 11 entries — buy menu pages)
+  'ak47:2700@T', 'ak74:2500@T', 'm4:3100@CT',
+  // Phase 5 rifles + snipers (rifle category: 12 entries — buy menu pages)
   'm4a1s:2900@CT', 'galil:1800@T', 'famas:1700@CT', 'sg553:3000@T', 'aug:3300@CT',
   'ssg08:1700', 'scar20:5000@CT', 'g3sg1:5000@T', 'awp:4750',
   // Phase 6 shotguns (shotgun category: 4 entries, first non-empty page)
@@ -86,7 +86,7 @@ check('no price-0 starters/knife/c4 in buy list',
 const groups: Record<string, string[]> = {
   pistol: ['deagle', 'p250', 'fiveseven', 'tec9', 'cz75', 'elites', 'hkp2000', 'revolver', 'taser'],
   shotgun: ['nova', 'xm1014', 'mag7', 'sawedoff'], smg: ['mp5', 'mp9', 'mac10', 'mp7', 'ump45', 'p90', 'bizon'],
-  rifle: ['ak47', 'm4', 'm4a1s', 'galil', 'famas', 'sg553', 'aug', 'ssg08', 'scar20', 'g3sg1', 'awp'],
+  rifle: ['ak47', 'ak74', 'm4', 'm4a1s', 'galil', 'famas', 'sg553', 'aug', 'ssg08', 'scar20', 'g3sg1', 'awp'],
   heavy: ['negev', 'm249'],
   equipment: ['kevlar', 'kevlarhelm', 'defusekit', 'flash', 'he', 'smoke', 'molotov', 'inc', 'decoy'],
 }
@@ -211,7 +211,7 @@ check('UMP is the slowest-moving SMG (230/250 speed scale)',
 
 // --- 10. Phase 5 rifle mechanics (schema-level) ---
 check('rifle category exceeds 9 rows → buy menu paging is required and wired',
-  client.buyEntriesFor('rifle').length === 11 &&
+  client.buyEntriesFor('rifle').length === 12 &&
   readFileSync('src/game/hud.tsx', 'utf8').includes('const PAGE = 8'))
 check('famas: 3-round burst + 400ms retrigger + 75ms cadence',
   shared.WEAPONS.famas.fireMode === 'burst' && shared.WEAPONS.famas.burstRounds === 3 &&

@@ -1415,6 +1415,10 @@ const VM_BASE = new THREE.Vector3(0.26, -0.24, -0.45)
 /** Build the first-person viewmodel for a weapon (cached by the engine). */
 export function buildViewModel(weapon: WeaponId, team: TeamId): ViewModel {
   switch (weapon) {
+    // Task 66: AK-74M procedural stand-in — the user's GLB (staged) is the
+    // primary; this reuses the AK-47 builder so fresh clones / pre-load
+    // frames show an AK silhouette instead of the knife default
+    case 'ak74': return buildAK(team)
     case 'ak47': return buildAK(team)
     case 'm4': return buildM4(team)
     case 'awp': return buildAWP(team)
@@ -1465,7 +1469,10 @@ export function vmBase(weapon: WeaponId): THREE.Vector3 {
 export function buildRemoteGun(weaponId: string): THREE.Group {
   const g = new THREE.Group()
   switch (weaponId) {
+    // Task 66: ak74 shares the ak47 remote stub (low-detail fallback; the
+    // GLB replaces it whenever the staged file loads)
     case 'ak47':
+    case 'ak74':
       P(g, box(0.05, 0.06, 0.3), 'steel_blued', {}, 0, 0, 0.02)
       P(g, cyl(0.009, 0.34), 'steel_blued', {}, 0, 0.01, -0.24, q(90))
       P(g, box(0.04, 0.045, 0.14), 'wood_laminate', {}, 0, 0.0, -0.16)

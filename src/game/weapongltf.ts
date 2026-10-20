@@ -49,7 +49,7 @@ const ROUTES: Partial<Record<string, { dual?: boolean }>> = {
   deagle: {}, elites: { dual: true }, revolver: {},
   mp5: {}, mp9: {}, mac10: {}, mp7: {}, ump45: {}, p90: {}, bizon: {},
   nova: {}, xm1014: {}, mag7: {}, sawedoff: {},
-  ak47: {}, m4: {}, m4a1s: {}, galil: {}, sg553: {}, famas: {}, aug: {},
+  ak47: {}, ak74: {}, m4: {}, m4a1s: {}, galil: {}, sg553: {}, famas: {}, aug: {},
   awp: {}, ssg08: {}, scar20: {}, g3sg1: {},
 }
 
@@ -218,18 +218,21 @@ function measureGun(g: THREE.Group): { box: THREE.Box3; tipY: number } {
 }
 
 /**
- * Topmost nodes under `root` whose name matches `re` (ancestor filter —
- * e.g. the AK's bm_magazine* assembly nodes each carry a MESH child whose
- * name also matches; only the topmost node is collected so the whole
- * subtree moves as one part).
+ * Topmost nodes under `root` whose name matches `re` but NOT `exclude`
+ * (ancestor filter — e.g. the AK's bm_magazine* assembly nodes each carry
+ * a MESH child whose name also matches; only the topmost node is collected
+ * so the whole subtree moves as one part). `exclude` drops hardware that
+ * merely references the part: the AK-74M's Magazine_Relese_low latch must
+ * stay on the receiver when the mag drops (Task 66).
  */
-function topmostMatching(root: THREE.Object3D, re: RegExp): THREE.Object3D[] {
+function topmostMatching(root: THREE.Object3D, re: RegExp, exclude?: RegExp): THREE.Object3D[] {
   const out: THREE.Object3D[] = []
   root.traverse((o) => {
     if (!re.test(o.name)) return
+    if (exclude && exclude.test(o.name)) return
     let p = o.parent
     while (p && p !== root) {
-      if (re.test(p.name)) return // a matched ancestor handles it
+      if (re.test(p.name) && !(exclude && exclude.test(p.name))) return // a matched ancestor handles it
       p = p.parent
     }
     out.push(o)
@@ -306,8 +309,10 @@ export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): Vie
   c.updateWorldMatrix(true, true)
 
   // magazine: recenter on the mag geometry so dropMag spawns the falling
-  // copy at the visible mag (staged AK: 5 sibling assembly nodes)
-  const magNodes = topmostMatching(c, /magaz/i)
+  // copy at the visible mag (AK: 5 sibling assembly nodes; AK-74M: one
+  // Magazine_low node — its Magazine_Relese latch is EXCLUDED so it stays
+  // on the receiver while the mag drops, Task 66)
+  const magNodes = topmostMatching(c, /magaz/i, /relese|release|catch|latch/i)
   let mag: THREE.Group | null = null
   if (magNodes.length) {
     mag = new THREE.Group()
@@ -323,9 +328,15 @@ export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): Vie
     g.userData.glbMagNodes = magNodes.length
   }
 
-  // dust cover (or any /dustcover/i top unit): the reciprocating top on
-  // fire. No recenter — the engine records homeZ and adds k*0.034 per shot.
-  const slideNodes = topmostMatching(c, /dustcover/i)
+  // reciprocating top on fire — a REAL bolt/carrier node when the model
+  // has one (AK-74M Bolt_low_9, charging handle included — Task 66), else
+  // the dust-cover proxy (AK-47 u_dustcover* — Task 64: the model has no
+  // separate carrier node). No recenter — the engine records homeZ and
+  // adds k*0.034 per shot.
+  const slideNodes =
+    topmostMatching(c, /bolt|charging|carrier/i).length
+      ? topmostMatching(c, /bolt|charging|carrier/i)
+      : topmostMatching(c, /dust[_.]?cover/i)
   let slide: THREE.Group | null = null
   if (slideNodes.length) {
     slide = new THREE.Group()

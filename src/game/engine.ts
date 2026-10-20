@@ -108,7 +108,7 @@ const CROUCH_TUCK = 0.55   // airborne crouch raises virtual feet (CS-style crou
 const FALL_SAFE_V = 12.5   // max safe landing speed (~2.8m drop); above this = fall damage
 
 const KICK: Partial<Record<WeaponId, number>> = {
-  ak47: 0.55, m4: 0.42, mp5: 0.22, deagle: 1.3, awp: 2.2, glock: 0.55, usp: 0.6,
+  ak47: 0.55, ak74: 0.5, m4: 0.42, mp5: 0.22, deagle: 1.3, awp: 2.2, glock: 0.55, usp: 0.6,
   // Phase 3 pistols
   p250: 0.55, fiveseven: 0.5, tec9: 0.7, cz75: 0.45, elites: 0.5,
   hkp2000: 0.55, revolver: 2.0, taser: 0.8,

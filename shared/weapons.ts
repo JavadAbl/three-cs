@@ -18,6 +18,9 @@ export type HitPart = 'head' | 'body' | 'legs'
 export type WeaponId =
   | 'knife' | 'glock' | 'usp' | 'deagle' | 'mp5'
   | 'ak47' | 'm4' | 'awp' | 'c4'
+  // Task 66: user's custom add — AK-74M (their own GLB + fire sound),
+  // T-side rifle alongside the AK-47
+  | 'ak74'
   // Phase 3 pistols — ids match the staged audio map (shared/weapons-audio.ts)
   | 'p250' | 'fiveseven' | 'tec9' | 'cz75' | 'elites'
   | 'hkp2000' | 'revolver' | 'taser'
@@ -217,6 +220,17 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     id: 'ak47', name: 'AK-47', slot: 1, category: 'rifle', price: 2700, team: 'T', damage: 36, hsMult: 4, legMult: 0.75,
     fireDelay: 100, mag: 30, reserve: 90, reloadMs: 2400, moveSpeed: 4.35,
     armorPen: 0.775, falloff10m: 0.98, auto: true, killReward: 300, accurate: 0.35,
+    fireMode: 'auto', killRewardClass: 'rifle',
+  },
+  // Task 66: user's AK-74M — T-side alternative rifle. 5.45×39 vs the
+  // AK-47's 7.62×39: slightly less damage/pen, better controllability,
+  // $200 cheaper. Fire/draw/reload sounds reuse the AK-47 family samples
+  // (plus the user's own ak74_fire recording, staged); GLB model staged
+  // from upload/ak-74m.glb via scripts/bake-ak74.ts.
+  ak74: {
+    id: 'ak74', name: 'AK-74M', slot: 1, category: 'rifle', price: 2500, team: 'T', damage: 34, hsMult: 4, legMult: 0.75,
+    fireDelay: 100, mag: 30, reserve: 90, reloadMs: 2400, moveSpeed: 4.4,
+    armorPen: 0.74, falloff10m: 0.97, auto: true, killReward: 300, accurate: 0.30,
     fireMode: 'auto', killRewardClass: 'rifle',
   },
   m4: {
