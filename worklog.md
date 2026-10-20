@@ -1358,3 +1358,26 @@ Stage Summary:
 - Nothing accepted yet: galil stays evaluative (staging, gitignored). Acceptance = mv staging→assets + git add once the user approves; ALSO needs a source/license answer — it is a Counter-Strike 2 game rip ("GalilAr_CS2_weapon_rif_galilar"), dev-only use matches the user's stated intent for this repo
 - Tuning affordances if the user wants: size via __eng.vmScale(f), depth via __eng.vmTune(dz) — both live, both reset on rejoin; baked defaults unchanged from the AK tuning round
 - Push protocol unchanged: commits are local until the user supplies a one-shot PAT (ask + remind to revoke after)
+
+---
+Task ID: 71
+Agent: Super Z (main agent)
+Task: User: "Galil accepted. but i cant but another weps, seems they are lock" — accept the Galil binaries + diagnose the locked-weapons report
+
+Work Log:
+- ACCEPTANCE: galil.glb mv staging->assets sha1-verified byte-identical (90de74470958dd2c3d4fe215482bfe1d2031d082, 621,508 B); staging empty. ANOMALY RESOLVED: commit 304e67a (platform auto-commit, UUID message, "Z User <z@container>", 2026-10-20 17:50) had already committed the assets copy — the lost-context Task-70 tail had evidently moved the file; git cat-file proved galil.glb was NOT in 5f6c11d/8b52e58 trees, and the committed blob is byte-identical to the sha1-verified mv, so 304e67a effectively IS the acceptance commit; my 9aafa86 added only docs
+- Docs: models README status header THREE accepted (ak47, ak74, galil), pipeline counts, license ledger galil row (CS2 game rip "GalilAr_CS2_weapon_rif_galilar", NOT VERIFIED, dev-only waiver), galil acceptance-verdict paragraph (merged single mesh 41,074 tris, no named parts, rotY 180° bake, recovery via tracked scripts/bake-galil.ts); route.ts accepted-set comment ak47+ak74+galil (file touch = buffer cache dropped)
+- Cold-route proof: POST /api/assets/weapon/galil -> 200, byte-identical to assets copy (staging empty = only source is assets); ak47 200 regression; knife 404 (procedural) intact
+- test-audio-map fix: suite crashed post-reset because public/staging/sounds doesn't exist (Task 70 env wipe; gitignored scratch dir) — httpCheck now skips an absent dir as "nothing staged, skipped"; suite 332/332 PASS (252 committed all 200). NOTE: the suite needs `bun` (top-level await; npx tsx resolves CJS and fails)
+- VERIFICATION BAR: test-buymenu 217/217, tsc src 0 errors, console clean (only the known-benign human.glb 404s)
+- BUG REPRODUCTION (agent-browser via :81): joined T, B->4 showed a NORMAL-looking menu (emerald prices, no lock cue), digit-buys produced only a 1.5 s "Buy time is over" toast — buyError auto-clears after 1500 ms. ROOT CAUSE: NOT a lock — the CS-style buy window (freeze 8 s + first 20 s of live 115 s) had closed; every purchase is server-rejected by design, but the menu gave no visual cue, so it reads as "weapons locked"
+- POSITIVE-PATH PROOF (the decisive evidence): in-page socket instrumentation (window.__buylog on buyOk/buyError + 1 s phase sampler) + `wait --fn canBuy===true` caught the window; three buys emitted at once landed in 7 ms: galil $1800 (money 16000->14200), ak47 $2700 (14200->11500, replaced galil in slot 1), deagle $700 (11500->10800, replaced glock in slot 2) — inventory/money math exact, server accepts everything while the window is open
+- UX FIX (src/game/hud.tsx BuyMenu): when !s.canBuy — amber banner with padlock svg "BUY TIME OVER — browsing only. Purchases unlock at the next round freeze (or the first 20 s of a live round)", every row gets an amber LOCKED tag before the price, rows dim to opacity-50, prices white/30; when open — emerald "Buy time is OPEN — digits buy instantly". Rows stay clickable so server rejections still surface as toasts. Both states live-verified in DOM text: closed = banner + 8 LOCKED tags, open = OPEN line + 0 tags
+- Screenshots saved: download/buymenu-locked.png, buymenu-locked-rifles.png, buymenu-open.png
+- EVAL LESSONS (adds to Task 70's): agent-browser eval does NOT hold long-pending async promises (an in-page while-poll of >30 s dies with "Operation timed out" in ~1 s) — use `wait --fn` (in-page polling, returns the instant the condition flips) and keep evals short/synchronous; CLI round-trip between wait and the next eval costs ~1-2 s, fine for an 8 s freeze but fatal for a live-window tail
+- COMMIT 3d2ec57 (hud.tsx fix). NOT pushed — container has no GitHub credentials; push needs a user PAT per Task 65 protocol
+
+Stage Summary:
+- Galil AR is now a DURABLE COMMITTED ASSET (model in assets, icon already committed, sounds from the CS:GO pack): third accepted weapon alongside ak47/ak74, same dev-only waiver, ledger updated
+- The "locked weapons" were NOT a bug in the buy system — it is the CS buy window; the bug was SILENT UX, now fixed with an unmistakable banner + LOCKED row tags. If the user wants free-buy-anytime (dev sandbox), that would be a small server change — offer it, don't assume
+- Buys verified working in every dimension: money, slot replacement, multi-buy, open/closed states, suites green
