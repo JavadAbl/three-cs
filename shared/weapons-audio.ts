@@ -36,9 +36,9 @@ export interface WeaponAudio {
 export const WEAPON_AUDIO: Record<string, WeaponAudio> = {
   // ---- live (accepted samples) ----
   ak47: { fire: 'ak47_fire', distant: 'ak47_distant', out: 'ak47_clipout', in: 'ak47_clipin', rack: 'ak47_bolt', draw: 'ak47_draw' },
-  // Task 66: AK-74M — the user's own ak74_fire recording (STAGED under
-  // /staging/sounds until acceptance); distant + reload + draw reuse the
-  // AK-47 family samples (same platform — accepted, already committed)
+  // Task 66/67: AK-74M — the user's own ak74_fire recording (ACCEPTED
+  // 2026-10-20, committed under /assets/sounds); distant + reload + draw
+  // reuse the AK-47 family samples (same platform — accepted, committed)
   ak74: { fire: 'ak74_fire', distant: 'ak47_distant', out: 'ak47_clipout', in: 'ak47_clipin', rack: 'ak47_bolt', draw: 'ak47_draw' },
   m4: { fire: 'm4_fire', distant: 'm4_distant', out: 'm4_clipout', in: 'm4_clipin', rack: 'm4_bolt', draw: 'm4_draw' },
   awp: { fire: 'awp_fire', distant: 'awp_distant', out: 'awp_clipout', in: 'awp_clipin', rack: 'awp_bolt', draw: 'awp_draw', bolt: 'awp_bolt' },

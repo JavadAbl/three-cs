@@ -2,7 +2,7 @@
 
 ## What these are
 
-One 240×96 transparent PNG per buy-menu row (42 entries: 33 guns, 6
+One 240×96 transparent PNG per buy-menu row (43 entries: 34 guns, 6
 grenades, kevlar / kevlar+helmet / defuse kit) — light-neutral weapon
 silhouettes in the CS 1.6 buy-menu spirit. **Accepted (policy v3 batch
 acceptance, 2026-10), including the user-feedback fix that rolled the gun
@@ -23,10 +23,15 @@ bun scripts/gen-buy-icons.ts   # -> public/staging/icons/<id>.png
 
 ## Staging (for regenerations) — `public/staging/icons/`
 
-Currently empty — the accepted set lives in this directory. The HUD
-`BuyIcon` component tries `/assets/icons/<id>.png` first and falls back
-to `/staging/icons/<id>.png` (asset-acceptance policy v3), hiding itself
-only if neither exists — so regenerated icons are live before acceptance.
+Currently empty — the accepted set lives in this directory. The one
+non-generated file is `ak74.png` (Task 66/67): a byte-copy of `ak47.png`
+staged as a stand-in and accepted with the weapon — faithful, because the
+ak74's procedural fallback reuses the exact buildAK geometry the ak47
+icon was rendered from (regenerating it would produce the same silhouette).
+The HUD `BuyIcon` component tries `/assets/icons/<id>.png` first and falls
+back to `/staging/icons/<id>.png` (asset-acceptance policy v3), hiding
+itself only if neither exists — so regenerated icons are live before
+acceptance.
 
 ## Orientation invariant
 

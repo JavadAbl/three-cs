@@ -7,7 +7,8 @@ and it must NOT be restored from anywhere. The game runs the procedural
 soldier rig for all players until a NEW model is dropped into staging; the
 user will supply a better one later.
 
-**Weapon model status (2026-10-20): ONE accepted weapon model — ak47.**
+**Weapon model status (2026-10-20): TWO accepted weapon models — ak47,
+ak74.**
 The CC0 Quaternius "Ultimate Guns Pack" (33 GLBs staged 2026-10-19 for
 live evaluation) was **rejected by the user** ("wipe all weapon models.
 they are not good, il find new models") — every staged GLB and raw-pack
@@ -15,9 +16,12 @@ copy was deleted (mirror included) and it must NOT be restored from
 anywhere. The user's Sketchfab AK-47 (Lokeig, CC-BY-NC) was evaluated,
 tuned in-game and **accepted on 2026-10-20 for dev-only use** — committed
 at `public/assets/models/weapons/ak47.glb` (see the license ledger
-below). Every other weapon id runs **procedural** (parts-animated
-viewmodels + remote stubs); the drop-in pipeline below stays live and
-waiting for more models.
+below). The user's own AK-74M upload (`upload/ak-74m.glb`) was integrated
+2026-10-20 (Task 66: model + the user's own fire sound) and **accepted
+the same day** ("accept ak74") — committed at
+`public/assets/models/weapons/ak74.glb`. Every other weapon id runs
+**procedural** (parts-animated viewmodels + remote stubs); the drop-in
+pipeline below stays live and waiting for more models.
 
 `public/assets/` holds **accepted, committed** running assets. New or pending
 binaries live in **`public/staging/`** (gitignored, still web-served so the
@@ -55,13 +59,14 @@ recognize it as a downloadable file:
 - The model is preloaded while the lobby menu is open, so starting a match
   never triggers a fresh download.
 
-## Weapon GLBs (pipeline LIVE — one accepted model: ak47)
+## Weapon GLBs (pipeline LIVE — two accepted models: ak47, ak74)
 
 Drop a GLB at **`public/staging/models/weapons/<weaponId>.glb`** (gitignored,
 evaluative) or `public/assets/models/weapons/<weaponId>.glb` (accepted,
 committed) and the game uses it immediately for **remote guns + the
 first-person viewmodel + the knife** — zero code changes. With no file an
-id simply stays procedural (current state: all of them except ak47).
+id simply stays procedural (current state: all of them except ak47 and
+ak74).
 
 **Wired ids** (33, see `ROUTES` in `src/game/weapongltf.ts`): knife,
 glock, usp, p250, cz75, fiveseven, tec9, hkp2000, deagle, elites (dual),
@@ -81,10 +86,14 @@ will sit wrong in the hand / point the wrong way / be the wrong size:
 - **upright** — top of the weapon toward +Y, sights up
 - optional: named part nodes keep the engine's parts animations alive;
   files without them silently skip those (whole-vm
-  bob/sway/recoil/reload dip/draw always run). Name contracts (Task 62/64):
-  `/magaz/i` nodes → vm.mag (reload swap), `/dustcover/i` nodes → vm.slide
-  (34mm blowback on every shot — the AK's u_dustcover* cluster); bolt/pump
-  have no contract yet
+  bob/sway/recoil/reload dip/draw always run). Name contracts
+  (Tasks 62/64/66): `/magaz/i` nodes (minus reference hardware —
+  `/relese|release|catch|latch/i` stays fixed on the receiver) → vm.mag
+  (reload swap); `/bolt|charging|carrier/i` → vm.slide (real bolt
+  reciprocation — AK-74M `Bolt_low_9` incl. charging handle), with
+  `/dust[_.]?cover/i` as fallback (cover-as-carrier proxy — AK-47's
+  `u_dustcover*` cluster, 34mm blowback per shot); pump has no contract
+  yet
 
 The one-off fixup baker that did this for the (now rejected) Quaternius
 pack lives in git history (commit `544f32e`, `scripts/stage-guns-pack.ts`)
@@ -152,6 +161,7 @@ Pipeline (all node-graph-safe): `prune → dedup → weld → webp → draco`.
 | weapon | file | author | license | source |
 |--------|--------------------------|--------|---------|--------|
 | ak47 | `public/assets/models/weapons/ak47.glb` (committed; baked from `upload/ak-47.glb` via `scripts/bake-ak47.ts` + `compress-glb.sh`) | Lokeig | **CC Attribution-NonCommercial** (attribution required, commercial use forbidden) | https://sketchfab.com/3d-models/ak-47-384565b1779c450b90397232163e4e6d |
+| ak74 | `public/assets/models/weapons/ak74.glb` (committed; baked from the user's `upload/ak-74m.glb` via `scripts/bake-ak74.ts` + `compress-glb.sh`) | the user's own upload | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/ak-74m.glb` |
 
 **Acceptance verdict for ak47: ACCEPTED — DEV-ONLY (2026-10-20).** The
 user explicitly waived the license concern: "forgot about licence at
@@ -171,3 +181,17 @@ scripts/compress-glb.sh scripts/.tmp/ak47-fixed.glb <target>.glb`
 (stage for evaluation, or overwrite the accepted copy), then touch
 `src/app/api/assets/weapon/[id]/route.ts` to drop the route's buffer
 cache.
+
+**Acceptance verdict for ak74: ACCEPTED — DEV-ONLY (2026-10-20).** The
+user supplied the file directly ("add ak74 for terror. i upload both glb
+and mp3 sound", later: "accept ak74") and approved it after live
+evaluation; no external source URL or license was given, so the row above
+records **not verified**. The same dev-only waiver as ak47 applies
+(no publish / no distribution); if this project is ever released, this
+model needs re-clearing or replacing exactly like ak47. The committed
+file: 422,676 bytes, sha1 `19c43448…`, baked parameters in
+`scripts/bake-ak74.ts` (no rotation — native −Z muzzle, scale 0.1007,
+grip anchor = `Grip_low_4` subtree). Re-tuning / recovery path:
+`npx tsx scripts/bake-ak74.ts && bash scripts/compress-glb.sh
+scripts/.tmp/ak74-fixed.glb <target>.glb`, then touch the weapon route
+to drop its buffer cache.

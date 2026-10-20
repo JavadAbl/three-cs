@@ -2,13 +2,17 @@
 
 ## Committed (accepted) — this directory
 
-**251 `.ogg` files** — the complete weapon-roster sound set (policy v3
+**252 `.ogg` files** — the complete weapon-roster sound set (policy v3
 batch acceptance, 2026-10): the original 85 CS:GO samples covering the
 launch-era roster (ak47/m4/awp/deagle/mp5/usp … knife, C4, footsteps, UI)
 plus the 166 Phase 3–8 weapons batch (pistols, SMGs, rifles, shotguns,
 machine guns, all six grenades + generic pinpull/throw/bounce). Same
 pipeline throughout: leading-silence strip (shot latency), Vorbis q3,
-44.1 kHz.
+44.1 kHz. **One accepted sample is NOT from the CS:GO pack:**
+`ak74_fire.ogg` (Task 66/67) is the user's own AK-74M fire recording
+(`upload/ak74.mp3` → mono Vorbis q4, leading silence stripped, 1.46 s);
+the AK-74M's distant/reload/draw sounds reuse the AK-47 family samples
+(same platform).
 
 ## Staging (for future batches) — `public/staging/sounds/`
 

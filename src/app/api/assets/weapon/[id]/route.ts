@@ -19,11 +19,11 @@ import path from 'node:path'
 // If neither file exists the route 404s and the caller keeps its procedural
 // model — a fresh clone runs fully procedural, nothing breaks.
 //
-// Accepted set (2026-10-20): ak47 — the user's Sketchfab AK-47 (NOT the
-// rejected CC0 Quaternius pack, which must never be restored), committed
-// at public/assets/models/weapons/ak47.glb. Accepted for DEV-ONLY use per
-// the user's explicit decision ("i dont want publish this game. i want it
-// for dev purposes only") — see the license ledger in
+// Accepted set (2026-10-20): ak47, ak74 — the user's Sketchfab AK-47
+// (Lokeig, NOT the rejected CC0 Quaternius pack, which must never be
+// restored) and the user's own AK-74M upload. Both accepted for DEV-ONLY
+// use per the user's explicit decision ("i dont want publish this game. i
+// want it for dev purposes only") — see the license ledger in
 // public/assets/models/README.md before ever distributing this repo.
 // All other ids 404 → procedural (weapon GLB contract:
 // public/assets/models/README.md).
