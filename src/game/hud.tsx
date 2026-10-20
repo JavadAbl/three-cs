@@ -126,9 +126,20 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
           <h2 className="text-xl font-bold tracking-widest text-orange-400">{catDef ? catDef.label : 'BUY'}</h2>
           <span className="font-bold tabular-nums text-emerald-400">{fmtMoney(s.money)}</span>
         </div>
-        <p className="mb-4 text-xs text-white/50">
-          {s.canBuy ? 'Buy time is open' : 'Buy time is OVER — you can browse only'}
-        </p>
+        {/* buy-window state — unmistakable lock cue (Task 71: players read the
+            silent post-window rejection as "weapons are locked"). Rows dim +
+            banner explains; rows stay clickable so the server rejection still
+            surfaces as a toast. */}
+        {!s.canBuy ? (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold tracking-wide text-amber-300">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-amber-400"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5Zm-3 8V6a3 3 0 1 1 6 0v3H9Z"/></svg>
+            BUY TIME OVER — browsing only. Purchases unlock at the next round freeze (or the first 20 s of a live round).
+          </div>
+        ) : (
+          <p className="mb-4 text-xs text-emerald-400/80">
+            Buy time is OPEN — digits buy instantly
+          </p>
+        )}
 
         {/* level 1: category list (fixed 1.6 numbering 1-6) */}
         {!cat && (
@@ -153,6 +164,7 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
           <div className="flex flex-col gap-1.5">
             {shown.map((it, i) => {
               const st = rowState(it)
+              const locked = !s.canBuy
               // grenades: kind-flavored stat lines instead of gun numbers
               const NADE_DESC: Record<string, string> = {
                 flash: 'blinds up to 5s · max 2',
@@ -169,7 +181,7 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
                 : (GEAR.find(g => g.id === it.id)?.desc ?? '')
               return (
                 <button key={it.id} onClick={() => cb.onBuy(it.id)}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left transition ${st.wrongTeam ? 'bg-zinc-800/40 opacity-40' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left transition ${st.wrongTeam ? 'bg-zinc-800/40 opacity-40' : locked ? 'bg-zinc-800 opacity-50 hover:bg-zinc-800' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
                   <span className="w-4 font-bold text-orange-400">{i + 1}.</span>
                   <BuyIcon id={it.id} />
                   <div className="flex-1">
@@ -189,7 +201,8 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
                     </div>
                     <div className="text-[10px] text-white/40">{stats}</div>
                   </div>
-                  <span className={`text-sm tabular-nums ${st.afford ? 'text-emerald-400' : 'text-red-400'}`}>${it.price}</span>
+                  {locked && <span className="text-[9px] font-bold tracking-widest text-amber-400/70">LOCKED</span>}
+                  <span className={`text-sm tabular-nums ${locked ? 'text-white/30' : st.afford ? 'text-emerald-400' : 'text-red-400'}`}>${it.price}</span>
                 </button>
               )
             })}
