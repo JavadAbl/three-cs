@@ -25,8 +25,11 @@ import path from 'node:path'
 // use per the user's explicit decision ("i dont want publish this game. i
 // want it for dev purposes only") — see the license ledger in
 // public/assets/models/README.md before ever distributing this repo.
-// All other ids 404 → procedural (weapon GLB contract:
-// public/assets/models/README.md).
+// Staged (evaluative, 2026-10-20): galil — the user's CS2-rip Galil AR,
+// re-baked orientation-correct by scripts/bake-galil.ts (Task 70; the
+// first staging rendered reversed — muzzle +Z rip + no named parts = the
+// AK-74 detect found nothing). All other ids 404 → procedural (weapon GLB
+// contract: public/assets/models/README.md).
 
 const ASSET_DIRS = ['staging', 'assets'] // staging wins
 const ID_RE = /^[a-z0-9]{2,12}$/

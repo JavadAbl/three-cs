@@ -1332,3 +1332,29 @@ Work Log:
 Stage Summary:
 - GitHub origin/main is now in sync with local main — the AK-74M integration + acceptance commits are durable remotely
 - Push protocol reaffirmed: user-supplied fine-grained PAT + one-shot inline URL (no persistence); ask user to revoke after
+
+---
+Task ID: 70
+Agent: Super Z (main agent)
+Task: Recover from platform environment reset + re-integrate the Galil AR with CORRECT orientation (user: "status", following "the weapon is reverse!! the gun stock in front")
+
+Work Log:
+- RESET DISCOVERY: the working environment had been rolled back to a Task-59-era snapshot (local HEAD 6194787, worklog ending at Task 59, staging EMPTY) — all Task 60-69 filesystem state gone. Survived: the protected upload/ mount (ak-47.glb, ak-74m.glb, ak74.mp3, galil_ar_counter_strike_2.glb all intact) AND the GitHub remote (Task 68's PAT push had landed 16 commits: ak47 acceptance, mag/slide wiring, 90% vm scale, AK-74M integration + acceptance)
+- RECOVERY: verified the local worklog's Task 59 entry was byte-contained in the remote version (nothing lost), backed up the snapshot worklog to scripts/.tmp/, then `git reset --hard origin/main` → 8b52e58. Local = remote again; committed weapon assets (ak47.glb 516KB, ak74.glb 422KB) restored to the tree
+- LOST-WORK ANALYSIS: Task 69 (first Galil staging) was never committed (staging is gitignored) and its worklog record died with the context — only the user's bug report survived: the gun rendered REVERSED ("gun stock in front")
+- ROOT CAUSE of the reversal: the Galil rip is a SINGLE merged mesh (5 nodes, 41,074 tris, ZERO named parts) — bake-ak74.ts's barrel-vs-stock node detection found nothing, and the first attempt fell back to the AK-74M assumption (muzzle −Z, no rotation). Actual rip: muzzle at +Z, stock at −Z → rendered backwards
+- Orientation determined EMPIRICALLY: 64-slice z cross-section profile (scripts/.tmp/galil-zprofile.ts) — far +Z end is a uniform ~2×2cm tube (barrel), rear −Z end is tall (h≈11.7cm, stock); two downward feet = grip (z≈+0.04..0.115, to −0.060) ahead of the deeper mag foot (z≈+0.20..0.31, to −0.129)
+- bake-galil.ts (tracked recovery tool, mirrors bake-ak47/74 technique): muzzle auto-detect by cross-section THINNESS (12% end slices: front 20×40mm vs rear 34×117mm → muzzle +Z → rotY(180°)); uniform scale 0.97m/0.7825m span = 1.2396 (IMI Galil AR real length); grip anchor = bbox center of the geometrically-detected rear bump (band z∈[0.030,0.125], y<−0.010); M = T·R·S composed into the single scene root
+- VERIFY (bake): 5 nodes / 41,074 tris survive; final bbox z=[−0.688, +0.282] (muzzle −Z, stock butt rear — textbook contract proportions next to ak47 [−0.602,+0.278] / ak74 [−0.660,+0.284]); −Z end thinness 0.050 vs +Z 0.145 = muzzle −Z PASS; grip bump center deviation 0.00mm PASS. compress-glb.sh: 5.92MB → 621.5KB (10.5%) staged at public/staging/models/weapons/galil.glb; route cache dropped (touch)
+- LIVE EVAL (agent-browser :81): route POST /api/assets/weapon/galil → 200 byte-identical to staged file; lobby preload galil='ready'; bought via in-page socket watcher (__eng.sock().emit('buy')) after the CLI-per-command overhead twice burned the 8s+20s buy window — lesson: batch timed flows into ONE in-page detached async eval
+- VLM VERIFICATION: idle — muzzle (a) forward into the scene, stock/butt ABSENT (clipped off screen bottom-right CS-style), hands/grip/mag visible lower-right, "normal CS:GO-like viewmodel"; post-fire + spray — orientation holds, no glitches; muzzle flash not frame-caught (screenshot latency vs ~50ms flash; engine flash/eject math derives from vmBasePos, unchanged — follows the now-correct muzzle automatically)
+- REGRESSIONS: knife → vmGlb null (procedural) + switch back to galil → vmGlb 'galil' (round-trip OK); wglb exactly {ak47, ak74, galil} ready, all other 29 ids 'failed' → procedural; console: zero weapon/GLB errors (2 known-benign human.glb 404 warnings — the staged human model was also wiped by the reset and was never committed; upload/ holds no human.glb copy, so players render procedural BY DESIGN until re-uploaded)
+- Route header comment updated: staged (evaluative) galil noted alongside the accepted ak47/ak74 set
+- bake-galil.ts committed as a tracked recovery tool (same pattern as bake-ak47.ts commit 8fd5d67, bake-ak74.ts)
+
+Stage Summary:
+- ENVIRONMENT RECOVERED: local = origin/main = 8b52e58 + this commit; all AK work durable on GitHub; upload/ mount is the only platform-durable path — re-stage anything gitignored after any reset
+- THE GALIL IS LIVE AND CORRECTLY ORIENTED: refresh → play T → buy Galil AR (B→4→5, $1800) — muzzle forward, stock clipped off screen, hands on grip, same CS-style framing as the accepted AKs
+- Nothing accepted yet: galil stays evaluative (staging, gitignored). Acceptance = mv staging→assets + git add once the user approves; ALSO needs a source/license answer — it is a Counter-Strike 2 game rip ("GalilAr_CS2_weapon_rif_galilar"), dev-only use matches the user's stated intent for this repo
+- Tuning affordances if the user wants: size via __eng.vmScale(f), depth via __eng.vmTune(dz) — both live, both reset on rejoin; baked defaults unchanged from the AK tuning round
+- Push protocol unchanged: commits are local until the user supplies a one-shot PAT (ask + remind to revoke after)
