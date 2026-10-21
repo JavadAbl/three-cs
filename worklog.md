@@ -1398,3 +1398,23 @@ Work Log:
 Stage Summary:
 - GitHub origin/main is in sync with local main — the Galil AR (model + orientation fix + acceptance) and the buy-window LOCKED UX fix are all durable remotely
 - Push protocol unchanged: user-supplied fine-grained PAT + one-shot inline URL (no persistence); remind to revoke after
+
+---
+Task ID: 73
+Agent: Super Z (main agent)
+Task: User: "https://ambientcg.com/ get your required textures and stuffs for details of maps and terrains" — real photo textures for the map surfaces
+
+Work Log:
+- SOURCE PIVOT: ambientcg.com is unreachable from the container (curl hangs, HTTP 000 — every endpoint), though WebFetch can read it. PolyHaven (same CC0 licensing, api.polyhaven.com + dl.polyhaven.org CDN reachable via curl at ~0.1 s/asset) became the source. Both are CC0/public-domain — the whole license-ledger burden of the weapon rips does not apply to this set
+- CURATION (from api.polyhaven.com/assets?t=textures, 869 textures): sand=aerial_sand (15 m tan compacted desert sand with ruts), wall=beige_wall_001 (outdoor sand plaster), brick=large_sandstone_blocks, concrete=concrete (dirty outdoor), crate=plywood, plank=wood_planks_dirt, metal=worn_corrugated_iron, dark=asphalt_03, door=painted_metal_shutter, doorBlue=blue_painted_planks — all chosen for the Dust2 sandstone/desert palette
+- scripts/fetch-map-textures.py (TRACKED recovery tool, Task-73 equivalent of bake-*.ts): downloads 1K diff+disp JPGs from dl.polyhaven.org (URL pattern .../jpg/1k/<id>/<id>_{diff,disp}_1k.jpg), re-encodes via PIL to albedo 1024 q82 + grayscale bump 512 q80, writes public/staging/textures/maps/<surface>{,_bump}.jpg + sources.json manifest. Staged total 2,111 KB (21 files). Re-run safe (skips existing raws)
+- LOADER (src/game/textures.ts): progressive hot-swap — surfaceMaterial() stays sync (map builds instantly on procedural canvas), then loadTexFirst() tries /assets/textures/maps first, /staging fallback (mirrors the sounds/icons policy), and swaps mat.map/bumpMap/bumpScale on the CACHED material — every merged map mesh updates, nothing rebuilds. Fresh clone/offline → both 404 → procedural look stays (zero-external-assets guarantee intact). Per-surface tuning tables: PBR[surface] = { tile (meters per texture tile → repeat = 2.86/tile against UV_PER_M 0.35), bump } — both tuning knobs. Late-created surfaces upgrade individually (upgradeSurface idempotent). __pbrState window hook for verification (mirrors __cs2hud precedent)
+- LIVE EVAL (:81): joined T, __pbrState all 10 'ready'; resource timing PROOF of the loader chain: 20 requests /assets/textures/maps/* -> 404, then 20 -> /staging -> 200, 2.5 MB real bytes (sand 202KB, crate 239KB...). tsc src 0 errors; buymenu 217/217; aimhead ALL PASS; console clean
+- VLM VERIFICATION (4 yaw screenshots at spawn, glm-5v-turbo): PHOTOGRAPHIC on all four views — sand ripples + grain, plaster roughness + color variation, plywood grain/knots/panel lines, sandstone block porosity. ZERO artifacts: no black patches, no missing textures, no grid repetition, no z-fighting. (A first wide-fog-distance shot read "flat" — that was the scene, not the textures; close/mid views are unambiguous)
+- One iteration gotcha: z-ai vision CLI prints banner lines before JSON — use -o <file> then parse, not stdout pipe
+- COMMIT bf7cb0a (code only: textures.ts loader + fetch script). The 21 staged binaries stay gitignored per AGENTS.md — acceptance on user approval ("accept textures" -> mv staging->assets + git add). CC0 = no waiver needed, no standing conditions, safe for any future distribution (unlike the weapon models)
+
+Stage Summary:
+- The map now renders photo-PBR surfaces: refresh -> play -> textured desert map (sand ripples, plaster, sandstone, plywood, corrugated iron, asphalt) with the procedural look as guaranteed fallback
+- Tunable live: PBR table in textures.ts (tile meters per surface, bump strength) — a re-tune is one number edit + reload
+- Acceptance pending: user eyeballs the new look and says the word; CC0 makes it trivial this time
