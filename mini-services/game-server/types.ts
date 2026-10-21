@@ -68,6 +68,14 @@ export interface BotBrain {
   nadesThrown: number            // throws this round (cap 2)
   flashThrown: boolean           // one site-push flash per round
   lastEnemyX: number; lastEnemyZ: number  // smoke-retreat aim memory
+  // Task 79: fair-fight + aliveness fields
+  seenX: number; seenZ: number   // last CONFIRMED-LOS enemy position (aim memory, never fired at blind)
+  burstLen: number               // shots in the current burst (spray-decay index)
+  huntUntil: number              // hunt-the-cover push expiry (goal 'hunt:<node>')
+  repositionAt: number           // next idle stance/spot shift (holders stay alive)
+  rotateAt: number               // round-pressure site-rotate cooldown (no tick-flip jitter)
+  hurtAt: number                 // last damage taken (turn-toward-shooter reaction)
+  hurtFromX: number; hurtFromZ: number
 }
 
 export type Phase = 'warmup' | 'freeze' | 'live' | 'post' | 'over'

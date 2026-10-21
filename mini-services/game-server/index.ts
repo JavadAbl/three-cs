@@ -352,7 +352,7 @@ function killPlayer(m: Match, victim: PlayerState, attacker: PlayerState | null,
   checkElimination(m)
 }
 
-function applyDamage(m: Match, victim: PlayerState, attacker: PlayerState | null, weapon: WeaponId, part: HitPart, dist: number, headshot: boolean) {
+function applyDamage(m: Match, victim: PlayerState, attacker: PlayerState | null, weapon: WeaponId, part: HitPart, dist: number, headshot: boolean, scale = 1) {
   if (!victim.alive || m.phase !== 'live') return
   const def = WEAPONS[weapon]
   if (!def) return
@@ -361,12 +361,23 @@ function applyDamage(m: Match, victim: PlayerState, attacker: PlayerState | null
     victim.armor = Math.max(0, victim.armor - armorDmg)
     if (victim.armor === 0) victim.helmet = false
   }
-  victim.hp = Math.max(0, victim.hp - dmg)
+  // Task 79: bot outgoing damage is difficulty-scaled (easy is forgiving);
+  // human attackers always pass scale=1 — their damage is untouched
+  const scaled = Math.max(1, Math.round(dmg * scale))
+  victim.hp = Math.max(0, victim.hp - scaled)
+
+  // Task 79: bots FEEL damage — remember where it came from so the brain can
+  // turn toward an unseen shooter instead of eating bullets while staring
+  if (victim.bot && victim.ai && attacker && attacker.id !== victim.id) {
+    victim.ai.hurtAt = now()
+    victim.ai.hurtFromX = attacker.x
+    victim.ai.hurtFromZ = attacker.z
+  }
 
   const hs = headshot || part === 'head'
   broadcast(m, 'hitConfirm', {
     victimId: victim.id, attackerId: attacker?.id ?? null,
-    dmg, part, hs, hp: victim.hp, victimTeam: victim.team,
+    dmg: scaled, part, hs, hp: victim.hp, victimTeam: victim.team,
   })
 
   if (victim.hp <= 0) killPlayer(m, victim, attacker, weapon, hs)
@@ -382,7 +393,7 @@ function applyDamage(m: Match, victim: PlayerState, attacker: PlayerState | null
 // hitConfirm per victim with summed damage, one kill when the total lands.
 function applyShotgunDamage(
   m: Match, victim: PlayerState, attacker: PlayerState, weapon: WeaponId,
-  pellets: Array<{ part: HitPart }>, dist: number
+  pellets: Array<{ part: HitPart }>, dist: number, scale = 1
 ) {
   if (!victim.alive || m.phase !== 'live') return 0
   const def = WEAPONS[weapon]
@@ -396,11 +407,18 @@ function applyShotgunDamage(
       victim.armor = Math.max(0, victim.armor - armorDmg)
       if (victim.armor === 0) victim.helmet = false   // armor gone: later pellets hit flesh
     }
-    victim.hp = Math.max(0, victim.hp - dmg)
-    total += dmg
+    const scaled = Math.max(1, Math.round(dmg * scale))   // Task 79: bot difficulty scaling
+    victim.hp = Math.max(0, victim.hp - scaled)
+    total += scaled
     if (pel.part === 'head') anyHead = true
   }
   if (total <= 0) return 0
+  // Task 79: shotgun pain teaches the victim where the shooter is too
+  if (victim.bot && victim.ai && attacker.id !== victim.id) {
+    victim.ai.hurtAt = now()
+    victim.ai.hurtFromX = attacker.x
+    victim.ai.hurtFromZ = attacker.z
+  }
   broadcast(m, 'hitConfirm', {
     victimId: victim.id, attackerId: attacker.id,
     dmg: total, part: 'body', hs: anyHead, hp: victim.hp, victimTeam: victim.team,
