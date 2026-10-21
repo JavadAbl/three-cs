@@ -908,10 +908,91 @@ export function surfaceMaterial(tex: SurfaceTex): THREE.MeshLambertMaterial {
     bumpMap: bumpFrom(src, tex === 'brick' ? 1.7 : 1.55),
     bumpScale,
   })
+  mat.onBeforeCompile = patchSurfaceShader           // Task 76: world-space albedo variation
+  mat.customProgramCacheKey = () => 'surface-var-1'  // patched materials share programs
   matCache.set(tex, mat)
   if (!pbrKickStarted) kickPbrUpgrade()   // first material ever: sweep what exists
   else upgradeSurface(tex)                  // late-created surface: upgrade just it
   return mat
+}
+
+// ---------------- world-space albedo variation (Task 76) ----------------
+// Large surfaces repeat their tile dozens of times (the 96 m T-back wall =
+// 32 wall tiles) and every box face used to start at the same texture phase —
+// that reads as a grid. Two complementary kills: (1) mapview/mapdetails bake
+// per-face UV phase offsets into the geometry (different pattern slice per
+// face); (2) THIS — a seamless 256x256 value-noise texture multiplied into
+// diffuse at WORLD position (~11 m period, +-7% luminance), so identical
+// tiles in different places no longer match. Patched into every cached
+// surface material via onBeforeCompile; the photo-PBR hot-swap only swaps
+// mat.map/bumpMap (no recompile), so the patch survives upgrades.
+
+let variationTex: THREE.CanvasTexture | null = null
+function variationTexture(): THREE.CanvasTexture {
+  if (variationTex) return variationTex
+  const N = 256
+  const c = document.createElement('canvas')
+  c.width = c.height = N
+  const ctx = c.getContext('2d')!
+  const img = ctx.createImageData(N, N)
+  // seamless multi-octave value noise: every octave grid size divides N so
+  // sampling wraps without a seam; deterministic seed (no Math.random)
+  const grids = [4, 8, 16]
+  const amps = [1, 0.5, 0.25]
+  const rand = grids.map(g => {
+    const a: number[] = []
+    let s = 0x9E3779B9
+    for (let i = 0; i < g * g; i++) {
+      s = Math.imul(s ^ (s >>> 15), 2246822519)
+      a.push((s >>> 0) / 4294967296)
+    }
+    return a
+  })
+  const at = (o: number, gx: number, gy: number) => {
+    const g = grids[o]
+    return rand[o][((gy % g + g) % g) * g + ((gx % g + g) % g)]
+  }
+  const smooth = (t: number) => t * t * (3 - 2 * t)
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      let v = 0
+      for (let o = 0; o < grids.length; o++) {
+        const g = grids[o]
+        const fx = (x / N) * g, fy = (y / N) * g
+        const x0 = Math.floor(fx), y0 = Math.floor(fy)
+        const tx = smooth(fx - x0), ty = smooth(fy - y0)
+        const q = (gx: number, gy: number) => at(o, gx, gy)
+        v += amps[o] * ((q(x0, y0) * (1 - tx) + q(x0 + 1, y0) * tx) * (1 - ty)
+                      + (q(x0, y0 + 1) * (1 - tx) + q(x0 + 1, y0 + 1) * tx) * ty)
+      }
+      v /= 1.75 // amp sum -> [0..1]
+      const lum = Math.round(255 * (0.87 + 0.13 * v)) // 0.87..1.0; shader gain re-centers at ~1
+      const i = (y * N + x) * 4
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = lum
+      img.data[i + 3] = 255
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  const t = new THREE.CanvasTexture(c)
+  t.wrapS = t.wrapT = THREE.RepeatWrapping
+  variationTex = t
+  return t
+}
+
+const VAR_TEX_U: THREE.IUniform = { value: null as THREE.Texture | null }
+
+/** onBeforeCompile patch: world-position varyings + diffuse multiply after map. */
+function patchSurfaceShader(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  VAR_TEX_U.value = variationTexture()
+  shader.uniforms.varTex = VAR_TEX_U
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNorm;')
+    .replace('#include <project_vertex>',
+      `#include <project_vertex>\nvWPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\nvWNorm = normalize( mat3( modelMatrix ) * objectNormal );`)
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNorm;\nuniform sampler2D varTex;')
+    .replace('#include <map_fragment>',
+      `#include <map_fragment>\n{\n  vec2 varUv = abs( vWNorm.y ) > 0.5 ? vWPos.xz : ( abs( vWNorm.x ) > 0.5 ? vWPos.zy : vWPos.xy );\n  diffuseColor.rgb *= texture2D( varTex, varUv * 0.09 ).rgb * 1.0695;\n}`)
 }
 
 // ---------------- photo-PBR upgrade (Task 73, PolyHaven CC0 set) ----------------

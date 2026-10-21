@@ -1458,3 +1458,23 @@ Work Log:
 Stage Summary:
 - The PolyHaven CC0 photo-PBR map texture set is ACCEPTED and durable: staging is empty, /assets/textures/maps serves all 20 files over HTTP, the wall renders worn_cracked_plaster 2K in-game, and the whole set (3.2 MB) is committed with a CC0 license ledger
 - Remote GitHub main now carries the complete texture upgrade chain (Tasks 73-75); future texture replacements follow the same staging->accept loop with ab-wall.sh as the in-game A/B recipe
+
+---
+Task ID: 76
+Agent: Super Z (main agent)
+Task: User: "ok first one" — the offered follow-up "per-wall UV variation to kill tiling on long walls" (from Task 74's residual nit: mild tiling on the largest flat expanses)
+
+Work Log:
+- ROOT CAUSE: mapview.boxToGeo (and mapdetails' boxGeo twin) scaled unit-box UVs by size*0.35 but every face started at uv (0,0) — every box face in the whole map shared one texture phase, so the 96x5 m T-back wall rendered 32 identical 3 m tiles in perfect global alignment ("wallpaper grid")
+- KILL #1 — per-face UV phase offsets (geometry level): facePhase() hash (box center + face index + axis, Math.imul avalanche, no Math.random — deterministic/SSR-safe) x one wall tile in UV units (1.05) baked into every box face's UVs in BOTH boxToGeo (mapview, exported) and boxGeo (mapdetails, imports it). Zero runtime cost, works with any tile size (offset is a random fraction of each surface's period), survives the PBR hot-swap because it lives in the geometry
+- KILL #2 — world-space albedo variation (shader level): variationTexture() — seamless 256x256 3-octave value-noise canvas (grid sizes 4/8/16 divide 256 -> wraps with no seam; seeded PRNG, deterministic), patchSurfaceShader() via onBeforeCompile on every cached surface material: vWPos/vWNorm varyings after project_vertex, diffuseColor.rgb *= noise(worldPos projected on the face-dominant axis, ~11 m period) * gain 1.0695 (re-centers the 0.87..1.0 canvas at ~1.0, effective +-7%). customProgramCacheKey 'surface-var-1' so patched materials share programs. Verified chunk anchors exist in three r186 meshlambert shaders (common L6/L60, project_vertex L39, map_fragment L96). No recompile on PBR hot-swap (map slot already exists; only textures swap)
+- VERIFICATION (ab-wall.sh harness, vantage (0,1.7,38) yaw 180, position-verified): BEFORE shot from the committed build, AFTER shot post-edit, labeled composite via scripts/compare-tile-fix.py (tracked tool). VLM verdict: BEFORE tiling "extremely obvious and distracting... looks like wallpaper/texture demo"; AFTER "dramatically less obvious texture tiling, visually better overall, strictly superior — believable weathered desert structure with localized variation"; new-artifact audit: NO banding/blotches/z-fighting; accepted trade-off = slight phase discontinuity at face edges (reads as natural panel breaks, "far less offensive than the original grid"). Second vantage yaw 0 regression sweep: no black patches, no banding, no broken seams, scene coherent — variation applies to all 10 surfaces, zero regressions
+- Console clean of shader/GLSL errors (only the known human.glb 404 warnings — rejected model, by design)
+- SUITES: tsc src 0 errors; test-buymenu 217/217; test-audio-map (bun) 332/332
+- Screenshots for the user: download/tile-before-after.jpg (labeled composite), download/tile-after.png, download/tile-after-yaw0.png
+- PUSH: 2 commits (the fix + this worklog) via ONE-SHOT inline credential URL — token never persisted anywhere; same PAT the user pasted this session for the Task-75 push (still apparently never revoked — advised a 4th time to revoke)
+
+Stage Summary:
+- Texture tiling on long walls is dead: per-face phase offsets de-align every box face, world-space variation makes identical tiles non-identical — VLM-verified dramatic improvement, no regressions, negligible cost (one 256x256 canvas + 3 shader lines per surface program)
+- Both effects are deterministic (seeded) — identical rendering across reloads and machines; tuning knobs: PHASE_UV (mapview/mapdetails), noise period 0.09 + gain 1.0695 + amplitude 0.13 (textures.ts variationTexture/patchSurfaceShader)
+- The variation layer is surface-agnostic: any future texture swap (staging evals, more PolyHaven upgrades) inherits it automatically

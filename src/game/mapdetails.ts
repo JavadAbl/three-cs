@@ -9,7 +9,7 @@ import * as THREE from 'three'
 import { MAPS } from './mapdata'
 import type { MapDef } from './mapdata'
 import { surfaceMaterial, signTexture, arrowSignTexture, dirtTrackTexture } from './textures'
-import { mergeGeosSafe } from './mapview'
+import { mergeGeosSafe, facePhase } from './mapview'
 import type { SurfaceTex } from './textures'
 
 export interface DetailBuild {
@@ -18,6 +18,7 @@ export interface DetailBuild {
 }
 
 const UV_PER_M = 0.35
+const PHASE_UV = 1.05 // 3 m wall tile * UV_PER_M — must match mapview's
 
 // ---------------- geometry helpers ----------------
 const M = new THREE.Matrix4()
@@ -30,9 +31,12 @@ function boxGeo(w: number, h: number, d: number, x: number, y: number, z: number
   ]
   for (let f = 0; f < 6; f++) {
     const [su, sv] = faceDims[f]
+    // Task 76: per-face phase offsets — same scheme as mapview.boxToGeo
+    const ou = facePhase(x, y, z, f, 0) * PHASE_UV
+    const ov = facePhase(x, y, z, f, 1) * PHASE_UV
     for (let v = 0; v < 4; v++) {
       const i = f * 4 + v
-      uv.setXY(i, uv.getX(i) * su * UV_PER_M, uv.getY(i) * sv * UV_PER_M)
+      uv.setXY(i, uv.getX(i) * su * UV_PER_M + ou, uv.getY(i) * sv * UV_PER_M + ov)
     }
   }
   g.applyMatrix4(M.makeScale(w, h, d))

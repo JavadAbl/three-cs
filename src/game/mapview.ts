@@ -14,6 +14,21 @@ export interface MapBuild {
 // UV density: texture meters per tile (kept from v4 so density matches server-shared geometry)
 const UV_PER_M = 0.35
 
+// Task 76 — per-face texture phase: every box face starts at a deterministic
+// pseudo-random phase of the (wrapping) surface texture instead of uv (0,0),
+// so no two boxes/regions show the same slice of the tile. Offset magnitude =
+// one wall tile in UV units (3 m x 0.35); for other tile sizes that is simply
+// a random fraction of their period — any non-zero offset shifts the phase.
+// Hashed from box center + face index: stable across reloads, SSR-safe (no
+// Math.random). Exported for mapdetails' own boxGeo.
+const PHASE_UV = 1.05 // 3 m wall tile * UV_PER_M
+export function facePhase(x: number, y: number, z: number, f: number, k: number): number {
+  let h = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791) ^ ((f + 1) * 40503 + (k + 1) * 12289)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  h ^= h >>> 16
+  return (h >>> 0) / 4294967296
+}
+
 function boxToGeo(b: Box): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(1, 1, 1)
   const uv = g.attributes.uv as THREE.BufferAttribute
@@ -24,9 +39,11 @@ function boxToGeo(b: Box): THREE.BufferGeometry {
   ]
   for (let f = 0; f < 6; f++) {
     const [su, sv] = faceDims[f]
+    const ou = facePhase(b.x, b.y, b.z, f, 0) * PHASE_UV
+    const ov = facePhase(b.x, b.y, b.z, f, 1) * PHASE_UV
     for (let v = 0; v < 4; v++) {
       const i = f * 4 + v
-      uv.setXY(i, uv.getX(i) * su * UV_PER_M, uv.getY(i) * sv * UV_PER_M)
+      uv.setXY(i, uv.getX(i) * su * UV_PER_M + ou, uv.getY(i) * sv * UV_PER_M + ov)
     }
   }
   g.applyMatrix4(new THREE.Matrix4().makeScale(b.w, b.h, b.d))
