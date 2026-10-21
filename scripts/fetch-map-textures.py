@@ -21,21 +21,28 @@ ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / 'scripts' / '.tmp' / 'acg'
 OUT = ROOT / 'public' / 'staging' / 'textures' / 'maps'
 
-# game surface -> PolyHaven asset id (all CC0)
+# game surface -> { id: PolyHaven asset (all CC0), src: 1k|2k download,
+#                   a: albedo px, b: bump px, aq/bq: jpeg quality }
+# Defaults (1k -> 1024 albedo q82 / 512 bump q80) keep every other surface
+# byte-identical to the Task-73 staged set.
+# Task 74: wall swapped beige_wall_001 (detail std 0.7 — read as a flat fill)
+#          -> worn_cracked_plaster at 2K: the wall is the map's dominant
+#          surface, so it gets the resolution budget (A/B-verified winner:
+#          warm ochre plaster, hairline cracks, grime in recesses).
 MAPPING = {
-    'sand':     'aerial_sand',           # tan compacted desert sand, tyre/foot ruts
-    'wall':     'beige_wall_001',        # outdoor sand-plaster wall (Dust2 sandstone plaster)
-    'brick':    'large_sandstone_blocks',# sandstone block wall
-    'concrete': 'concrete',              # dirty outdoor concrete
-    'crate':    'plywood',               # crate / plywood faces
-    'plank':    'wood_planks_dirt',      # weathered outdoor planks
-    'metal':    'worn_corrugated_iron',  # corrugated iron sheds
-    'dark':     'asphalt_03',            # dirty asphalt road
-    'door':     'painted_metal_shutter', # painted metal door/shutter
-    'doorBlue': 'blue_painted_planks',   # blue painted wood (doorBlue variant)
+    'sand':     {'id': 'aerial_sand'},            # tan compacted desert sand, tyre/foot ruts
+    'wall':     {'id': 'worn_cracked_plaster', 'src': '2k', 'a': 2048, 'b': 1024, 'aq': 80},  # weathered sand plaster, cracks (Dust2)
+    'brick':    {'id': 'large_sandstone_blocks'}, # sandstone block wall
+    'concrete': {'id': 'concrete'},               # dirty outdoor concrete
+    'crate':    {'id': 'plywood'},                # crate / plywood faces
+    'plank':    {'id': 'wood_planks_dirt'},       # weathered outdoor planks
+    'metal':    {'id': 'worn_corrugated_iron'},   # corrugated iron sheds
+    'dark':     {'id': 'asphalt_03'},             # dirty asphalt road
+    'door':     {'id': 'painted_metal_shutter'},  # painted metal door/shutter
+    'doorBlue': {'id': 'blue_painted_planks'},    # blue painted wood (doorBlue variant)
 }
 
-BASE = 'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k'
+CDN = 'https://dl.polyhaven.org/file/ph-assets/Textures/jpg'
 
 
 def curl(url: str, dest: Path) -> None:
@@ -52,28 +59,34 @@ def main() -> int:
     manifest = {}
     from PIL import Image
 
-    for surface, asset in MAPPING.items():
-        print(f'== {surface} <- {asset}')
-        diff = RAW / f'{asset}_diff_1k.jpg'
-        disp = RAW / f'{asset}_disp_1k.jpg'
+    for surface, spec in MAPPING.items():
+        asset = spec['id']
+        src = spec.get('src', '1k')
+        apx = spec.get('a', 1024)
+        bpx = spec.get('b', 512)
+        aq = spec.get('aq', 82)
+        bq = spec.get('bq', 80)
+        print(f'== {surface} <- {asset} ({src})')
+        diff = RAW / f'{asset}_diff_{src}.jpg'
+        disp = RAW / f'{asset}_disp_{src}.jpg'
         if not diff.exists():
-            curl(f'{BASE}/{asset}/{asset}_diff_1k.jpg', diff)
+            curl(f'{CDN}/{src}/{asset}/{asset}_diff_{src}.jpg', diff)
         if not disp.exists():
-            curl(f'{BASE}/{asset}/{asset}_disp_1k.jpg', disp)
+            curl(f'{CDN}/{src}/{asset}/{asset}_disp_{src}.jpg', disp)
 
-        # albedo: re-encode to q82 (1k sources are 300KB-1.5MB; targets ~150-300KB)
+        # albedo: re-encode to target px (1k sources are 300KB-1.5MB; targets ~150-300KB)
         albedo_out = OUT / f'{surface}.jpg'
         im = Image.open(diff).convert('RGB')
-        if im.size != (1024, 1024):
-            im = im.resize((1024, 1024), Image.LANCZOS)
-        im.save(albedo_out, 'JPEG', quality=82, optimize=True)
+        if im.size != (apx, apx):
+            im = im.resize((apx, apx), Image.LANCZOS)
+        im.save(albedo_out, 'JPEG', quality=aq, optimize=True)
 
-        # bump: displacement -> grayscale 512
+        # bump: displacement -> grayscale, target px
         bump_out = OUT / f'{surface}_bump.jpg'
         bm = Image.open(disp).convert('L')
-        if bm.size != (512, 512):
-            bm = bm.resize((512, 512), Image.LANCZOS)
-        bm.save(bump_out, 'JPEG', quality=80, optimize=True)
+        if bm.size != (bpx, bpx):
+            bm = bm.resize((bpx, bpx), Image.LANCZOS)
+        bm.save(bump_out, 'JPEG', quality=bq, optimize=True)
 
         manifest[surface] = {
             'polyhaven_id': asset,

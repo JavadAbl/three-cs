@@ -929,7 +929,7 @@ export function surfaceMaterial(tex: SurfaceTex): THREE.MeshLambertMaterial {
  * bumps. Both tables are tuning knobs, not contracts. */
 const PBR: Record<SurfaceTex, { tile: number; bump: number }> = {
   sand:     { tile: 14,  bump: 0.55 }, // aerial_sand — 15 m capture, ruts
-  wall:     { tile: 2.4, bump: 1.0  }, // beige_wall_001 — sand plaster
+  wall:     { tile: 3.0, bump: 1.0  }, // worn_cracked_plaster 2K — weathered sand plaster, cracks (Task 74; larger tile cuts visible repetition on long walls)
   brick:    { tile: 1.8, bump: 1.5  }, // large_sandstone_blocks
   concrete: { tile: 3.0, bump: 0.8  }, // concrete — dirty outdoor
   crate:    { tile: 1.2, bump: 1.3  }, // plywood — per crate face
@@ -951,7 +951,7 @@ function loadTexFirst(srgb: boolean, base: string, tile: number): Promise<THREE.
     t.wrapS = t.wrapT = THREE.RepeatWrapping
     const r = 2.86 / tile
     t.repeat.set(r, r)
-    t.anisotropy = 4
+    t.anisotropy = 8   // Task 74: 4 blurred long walls at glancing angles
     if (srgb) t.colorSpace = THREE.SRGBColorSpace
     return t
   })
