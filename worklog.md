@@ -1500,3 +1500,25 @@ Stage Summary:
 - Maps now own their texture identity: aimhead renders the ORIGINAL de_aztec look (muted olive grass, mossy temple stone, olive military crates, jungle-blue atmosphere) while dust/dust2 keep the desert set byte-identically; future maps opt in with a PBR_BY_MAP entry + a texture directory
 - The aimhead green set is STAGED for the user's eyeball: play AIM HEADSHOT and judge; "accept aimhead" (or just "accept") moves it into assets and commits it
 - Reusable additions: per-map atmosphere theming, hue-bake pipeline with recorded params, BSP miptex extraction tool, aimhead in-game harness
+
+---
+Task ID: 78
+Agent: Super Z (main agent)
+Task: User: "Accept Aimhead" — accept the staged aimhead de_aztec texture set (Task 77) per the AGENTS.md asset-acceptance policy
+
+Work Log:
+- ACCEPTANCE EXECUTED: mv public/staging/textures/maps/aimhead public/assets/textures/maps/aimhead (11 files, 1.46 MB — 5 surfaces x albedo+bump + sources.json: sand=grass_path_2 hue-baked, brick=mossy_cobblestone, dark=mossy_rock, metal=green_metal_rust, plank=moss_wood) + git add; public/staging/ removed entirely (aimhead was its only content). CC0 = no waiver needed; fresh clones now get the aztec look with zero downloads
+- SERVER PROOF (no negative-cache incident this time, unlike Task 75): curl sweep = all 11 /assets/textures/maps/aimhead/* -> 200 with byte counts EXACTLY matching sources.json (sand 278022/30145, brick 326373/30612, dark 333765/15755, metal 64431/44805, plank 357953/18281); /staging/* -> 404 (dir gone)
+- FRESH-CLIENT PROOF (the decisive one): agent-browser close --all -> brand-new browser with zero disk cache -> full join flow (ab-aimhead.sh) -> network log shows the 4-step loader chain live in ONE timestamp block: /assets/<mapId>/{sand,brick,plank,metal,dark}{,_bump} x10 -> 200 straight from the server (ZERO staging hits), aimhead/crate* -> 404 (no map-scoped crate by design) -> /staging/<mapId>/crate* -> 404 (staging gone) -> /assets/textures/maps/crate* -> 200 shared plywood fallback — exactly the designed chain, proving a fresh clone renders the full green set
+- MECHANICAL PROOF: upgradeSurface sets pbrState[key]='ready' ONLY AFTER mat.map/mat.bumpMap assignment — all six scoped keys (aimhead:sand/brick/plank/metal/dark/crate) 'ready' = every surface's material carries its own fetched texture
+- VLM PASS + the false-alarm dissection: first verdict confirmed jungle-temple identity (muted olive ground, mossy stone, clearly not desert) but flagged "everything one texture". Root cause = VANTURE: round respawns keep moving the player (positions cycled 6.4 / -17.6 / -1.6 / 7.6 / 33) and the respawn spots sit in the stone dueling bowl, where brick/dark legitimately dominate the view; two yaw-teleport shots caught the bright fog void (in-place yaw change didn't re-render). At a content-rich vantage (aim-v-y90) the VLM re-verdict: aztec identity YES, MULTIPLE distinct materials visible (mossy stone walls / stone base / olive ground), no broken/black/neon — OK. Pixel stats across shots and the user-approved aim-before-after.jpg AFTER panel agree (ground reads warm-olive in sun, brown-olive in shadow in BOTH the approved composite and the accepted shots)
+- Debugging shots removed (download/ kept clean): aimhead-accepted.png (position-verified, pos [26,2.4,-17.6] T spawn area, pbr ready) is the acceptance artifact
+- Ledger: public/assets/textures/README.md — status header now covers BOTH sets; aimhead line "(staged, pending acceptance)" -> "(ACCEPTED 2026-10-21 — \"Accept Aimhead\")"
+- SUITES: tsc src/ 0 errors (peripheral scripts unchanged, outside the bar); test-buymenu 217/217; test-audio-map (bun) 332/332 — note: its httpCheck walks assets/sounds (.ogg, 252 files) only; the Task-75 worklog's "all 252 committed public files" phrasing was imprecise (252 = the sounds count). The aimhead binaries' serving proof = the curl sweep + fresh-client network log above
+- One ops lesson: ab-aimhead.sh's `agent-browser reload || open` fallback never fires on a fresh browser (reload SUCCEEDS against about:blank) — after agent-browser close --all, open http://localhost:81/ manually before running the script
+- PUSH: acceptance commit (11 binaries + sources.json + ledger + this record) via ONE-SHOT inline credential URL (git push https://x-access-token:<token>@github.com/JavadAbl/three-cs.git main:main) — token never written to any file, git config, or this worklog
+
+Stage Summary:
+- The aimhead de_aztec texture identity is ACCEPTED and durable: staging empty, /assets/textures/maps/aimhead serves all 10 binaries over HTTP (byte-exact), fresh clients render the green set with the designed crate fallback, VLM-verified aztec identity with distinct materials
+- The per-map identity architecture has its first fully-accepted tenant; dust/dust2 keep the shared desert set untouched; future maps follow the directory + PBR_BY_MAP + staging->accept loop
+- download/aimhead-accepted.png is the in-game acceptance shot

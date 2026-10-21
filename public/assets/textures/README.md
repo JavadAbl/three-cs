@@ -1,6 +1,7 @@
 # Map surface textures — staging & acceptance workflow
 
-**Status (2026-10-21): ACCEPTED — 10 photo-PBR map surfaces (PolyHaven, CC0).**
+**Status (2026-10-21): ACCEPTED — shared desert set (10 surfaces, PolyHaven,
+CC0) + aimhead de_aztec set (5 surfaces, 10 files + sources.json).**
 Accepted by the user ("accept textures") on 2026-10-21 after the Task-74 wall
 A/B verdict; moved from `public/staging/textures/maps/` to
 `public/assets/textures/maps/` per the asset-acceptance policy (AGENTS.md)
@@ -19,7 +20,7 @@ shared one). Opt-in: only maps listed in `PBR_BY_MAP` (src/game/textures.ts)
 get their own materials/tile tuning — every other map keeps the shared path
 byte-identically. `sources.json` per directory carries the provenance.
 
-**aimhead = de_aztec identity (staged, pending acceptance).** The original
+**aimhead = de_aztec identity (ACCEPTED 2026-10-21 — "Accept Aimhead").** The original
 aim_headshot BSP references de_aztec.wad (its textures are literally named
 AzGrass/AzWll/AzStat — the "Az" prefix = Aztec, confirmed via the BSP
 worldspawn wad list), so the map gets aztec greens instead of desert tan:

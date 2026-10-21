@@ -1,0 +1,47 @@
+{
+  "sand": {
+    "polyhaven_id": "grass_path_2",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/grass_path_2",
+    "bytes": {
+      "albedo": 278022,
+      "bump": 30145
+    }
+  },
+  "brick": {
+    "polyhaven_id": "mossy_cobblestone",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/mossy_cobblestone",
+    "bytes": {
+      "albedo": 326373,
+      "bump": 30612
+    }
+  },
+  "dark": {
+    "polyhaven_id": "mossy_rock",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/mossy_rock",
+    "bytes": {
+      "albedo": 333765,
+      "bump": 15755
+    }
+  },
+  "metal": {
+    "polyhaven_id": "green_metal_rust",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/green_metal_rust",
+    "bytes": {
+      "albedo": 64431,
+      "bump": 44805
+    }
+  },
+  "plank": {
+    "polyhaven_id": "moss_wood",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/moss_wood",
+    "bytes": {
+      "albedo": 357953,
+      "bump": 18281
+    }
+  }
+}
