@@ -909,5 +909,80 @@ export function surfaceMaterial(tex: SurfaceTex): THREE.MeshLambertMaterial {
     bumpScale,
   })
   matCache.set(tex, mat)
+  if (!pbrKickStarted) kickPbrUpgrade()   // first material ever: sweep what exists
+  else upgradeSurface(tex)                  // late-created surface: upgrade just it
   return mat
+}
+
+// ---------------- photo-PBR upgrade (Task 73, PolyHaven CC0 set) ----------------
+// Progressive enhancement: real photo albedo + height maps hot-swap onto the
+// CACHED surface materials once fetched — every merged map mesh updates,
+// nothing rebuilds. Loader policy (AGENTS.md): /assets/textures/maps first,
+// /staging/textures/maps fallback; on a fresh clone both 404 and the
+// procedural canvas look stays (the zero-external-assets guarantee holds).
+// Sources + per-file provenance: public/{staging,assets}/textures/maps/sources.json
+// (scripts/fetch-map-textures.py reproduces every staged byte from polyhaven.com).
+
+/** Real-world span of one texture tile, meters — sets repeat = 2.86/tile
+ * (mapview UV_PER_M 0.35). Bump scales are retuned per surface because the
+ * PolyHaven displacement maps are gentler than the contrast-boosted canvas
+ * bumps. Both tables are tuning knobs, not contracts. */
+const PBR: Record<SurfaceTex, { tile: number; bump: number }> = {
+  sand:     { tile: 14,  bump: 0.55 }, // aerial_sand — 15 m capture, ruts
+  wall:     { tile: 2.4, bump: 1.0  }, // beige_wall_001 — sand plaster
+  brick:    { tile: 1.8, bump: 1.5  }, // large_sandstone_blocks
+  concrete: { tile: 3.0, bump: 0.8  }, // concrete — dirty outdoor
+  crate:    { tile: 1.2, bump: 1.3  }, // plywood — per crate face
+  plank:    { tile: 2.0, bump: 1.2  }, // wood_planks_dirt
+  metal:    { tile: 1.5, bump: 0.8  }, // worn_corrugated_iron
+  dark:     { tile: 3.5, bump: 0.8  }, // asphalt_03 — dirty road
+  door:     { tile: 1.1, bump: 1.0  }, // painted_metal_shutter
+  doorBlue: { tile: 1.2, bump: 0.9  }, // blue_painted_planks
+}
+
+const SURFACES = Object.keys(PBR) as SurfaceTex[]
+let pbrKickStarted = false
+export const pbrState: Record<string, 'idle' | 'loading' | 'ready' | 'failed'> = {}
+SURFACES.forEach(s => { pbrState[s] = 'idle' })
+
+function loadTexFirst(srgb: boolean, base: string, tile: number): Promise<THREE.Texture> {
+  const loader = new THREE.TextureLoader()
+  const one = (p: string) => loader.loadAsync(p).then(t => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+    const r = 2.86 / tile
+    t.repeat.set(r, r)
+    t.anisotropy = 4
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace
+    return t
+  })
+  // assets-first, staged-fallback — mirrors the sounds/icons loaders
+  return one(`/assets/textures/maps/${base}`).catch(() => one(`/staging/textures/maps/${base}`))
+}
+
+/** Upgrade one surface type (idempotent — first call wins). */
+function upgradeSurface(s: SurfaceTex) {
+  const mat = matCache.get(s)
+  if (!mat || pbrState[s] !== 'idle') return
+  pbrState[s] = 'loading'
+  Promise.all([
+    loadTexFirst(true, `${s}.jpg`, PBR[s].tile),
+    loadTexFirst(false, `${s}_bump.jpg`, PBR[s].tile),
+  ]).then(([albedo, bump]) => {
+    mat.map = albedo
+    mat.bumpMap = bump
+    mat.bumpScale = PBR[s].bump
+    mat.needsUpdate = true
+    pbrState[s] = 'ready'
+  }).catch(() => {
+    // fresh clone / offline → procedural look stays, by design
+    pbrState[s] = 'failed'
+  })
+}
+
+function kickPbrUpgrade() {
+  if (pbrKickStarted || typeof window === 'undefined') return
+  pbrKickStarted = true
+  // debugging/verification hook (harmless in production, mirrors __cs2hud)
+  ;(window as unknown as { __pbrState?: unknown }).__pbrState = pbrState
+  for (const s of SURFACES) upgradeSurface(s) // upgrades whichever are already cached
 }
