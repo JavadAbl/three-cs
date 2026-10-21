@@ -1439,3 +1439,22 @@ Stage Summary:
 - The walls now render worn_cracked_plaster (PolyHaven CC0) at 2K with a 3 m tile and aniso 8: weathered sand-plaster with cracks, pitting and grime — VLM-verified dramatic upgrade over the flat beige fill; every other surface untouched
 - The A/B harness (ab-wall.sh) is now the reusable recipe for ANY future in-game texture/visual evaluation: it defeated the server's anti-teleport via the hop-train and produces position-verified screenshots
 - Tuning knobs live in textures.ts PBR table (tile/bump per surface) — a re-tune is one number + reload; acceptance of the staged texture set still pending user eyeball
+
+---
+Task ID: 75
+Agent: Super Z (main agent)
+Task: User: "accept textures" (+ fresh PAT paste) — accept the staged PolyHaven CC0 map texture set (Task 73/74, wall = worn_cracked_plaster 2K) and push everything to GitHub
+
+Work Log:
+- ACCEPTANCE EXECUTED per AGENTS.md policy v3: mv public/staging/textures/maps public/assets/textures/maps (21 files, 3.2 MB — 10 surfaces x albedo+bump + sources.json) + git add; public/staging/ removed entirely (was textures-only). CC0 = no waiver needed; fresh clones now get the photo-PBR look with zero downloads
+- IN-GAME VERIFICATION (ab-wall.sh 'current' at the dust2 T-back-strip vantage (0,1.7,38), yaw 180 — wall box confirmed in mapdata.ts:365, T-back strip z 44..48): joined TERRORIST, hop-train reached vantage, position-verified 1280x720 shot download/wall-accepted.png; window.__pbrState = all 10 surfaces 'ready'
+- NETWORK PROOF + one gotcha: the reload initially served STALE 404s for /assets/textures/maps/* (Next dev's negative cache for public paths whose first lookup predated the mv — Task 74's session had 404'd these URLs) with browser-cached /staging 200s covering the swap (identical bytes, pure mv); within ~440ms the dev server re-checked and served the full batch /assets/textures/maps/* x20 -> 200. Direct curl now: /assets/textures/maps/wall.jpg -> 200 (993,128 bytes = sources.json exact), wall_bump -> 200, /staging/... -> 404, staging dir gone. Lesson: files moved into public/ while the dev server runs may need a dev-server restart (or a few seconds + re-request) before they serve; production builds are unaffected
+- VLM check on the acceptance shot: worn cracked sand-pl plaster confirmed (warm ochre, mottled pitting, no black patches/seams/z-fighting). Its 4/10 absolute-realism score is a headless-SwiftShader artifact (soft bump + ignored aniso) — Task 74's comparative A/B already rated this same 2K texture a dramatic win; bytes identical
+- LICENSE LEDGER: public/assets/textures/README.md added (mirrors models/README.md convention) — acceptance history, CC0 note, per-surface table (10 polyhaven ids, wall 2K note), pipeline pointers (fetch script per-surface specs, ab-wall.sh recipe, revocation command)
+- SUITES: tsc src/ 0 errors (28 pre-existing peripheral-script errors outside the bar, unchanged); test-buymenu 217/217; test-audio-map (bun) 332/332 with httpCheck now asserting ALL 252 committed public files -> 200, which includes the 21 newly accepted texture binaries — independent proof they serve
+- PUSH: 4-commit batch (bf7cb0a Task-73 loader, 1b41704 Task-73 worklog, a69f6b1 Task-74 wall upgrade, this acceptance commit) via ONE-SHOT inline credential URL (git push https://x-access-token:<token>@github.com/JavadAbl/three-cs.git main:main) — token never written to any file, git config, or this worklog; remote URL in .git/config untouched (still credential-less)
+- SECURITY: the PAT was pasted in chat AGAIN (same token string as Tasks 68/72 — still apparently never revoked) — user advised a THIRD time to REVOKE it (GitHub Settings -> Developer settings -> Fine-grained tokens) now that it served its purpose
+
+Stage Summary:
+- The PolyHaven CC0 photo-PBR map texture set is ACCEPTED and durable: staging is empty, /assets/textures/maps serves all 20 files over HTTP, the wall renders worn_cracked_plaster 2K in-game, and the whole set (3.2 MB) is committed with a CC0 license ledger
+- Remote GitHub main now carries the complete texture upgrade chain (Tasks 73-75); future texture replacements follow the same staging->accept loop with ab-wall.sh as the in-game A/B recipe

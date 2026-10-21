@@ -1,0 +1,92 @@
+{
+  "sand": {
+    "polyhaven_id": "aerial_sand",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/aerial_sand",
+    "bytes": {
+      "albedo": 206714,
+      "bump": 40691
+    }
+  },
+  "wall": {
+    "polyhaven_id": "worn_cracked_plaster",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/worn_cracked_plaster",
+    "bytes": {
+      "albedo": 993128,
+      "bump": 93481
+    }
+  },
+  "brick": {
+    "polyhaven_id": "large_sandstone_blocks",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/large_sandstone_blocks",
+    "bytes": {
+      "albedo": 195296,
+      "bump": 10347
+    }
+  },
+  "concrete": {
+    "polyhaven_id": "concrete",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/concrete",
+    "bytes": {
+      "albedo": 246747,
+      "bump": 18782
+    }
+  },
+  "crate": {
+    "polyhaven_id": "plywood",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/plywood",
+    "bytes": {
+      "albedo": 244590,
+      "bump": 43604
+    }
+  },
+  "plank": {
+    "polyhaven_id": "wood_planks_dirt",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/wood_planks_dirt",
+    "bytes": {
+      "albedo": 241698,
+      "bump": 17202
+    }
+  },
+  "metal": {
+    "polyhaven_id": "worn_corrugated_iron",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/worn_corrugated_iron",
+    "bytes": {
+      "albedo": 211442,
+      "bump": 25172
+    }
+  },
+  "dark": {
+    "polyhaven_id": "asphalt_03",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/asphalt_03",
+    "bytes": {
+      "albedo": 169255,
+      "bump": 8920
+    }
+  },
+  "door": {
+    "polyhaven_id": "painted_metal_shutter",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/painted_metal_shutter",
+    "bytes": {
+      "albedo": 144841,
+      "bump": 32999
+    }
+  },
+  "doorBlue": {
+    "polyhaven_id": "blue_painted_planks",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "albedo": "https://polyhaven.com/a/blue_painted_planks",
+    "bytes": {
+      "albedo": 238974,
+      "bump": 20285
+    }
+  }
+}
