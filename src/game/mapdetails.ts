@@ -8,7 +8,7 @@
 import * as THREE from 'three'
 import { MAPS } from './mapdata'
 import type { MapDef } from './mapdata'
-import { surfaceMaterial, signTexture, arrowSignTexture, dirtTrackTexture } from './textures'
+import { surfaceMaterial, pbrMapScope, signTexture, arrowSignTexture, dirtTrackTexture } from './textures'
 import { mergeGeosSafe, facePhase } from './mapview'
 import type { SurfaceTex } from './textures'
 
@@ -100,9 +100,10 @@ function archGeos(cx: number, cz: number, ySpring: number, span: number, rise: n
 // ---------------- batching ----------------
 const batches = new Map<THREE.Material, THREE.BufferGeometry[]>()
 const surfOf = new Map<THREE.Material, SurfaceTex>()
+let curScope: string | undefined  // Task 77: per-map texture identity, set by buildDetails
 
 function pushSurf(geo: THREE.BufferGeometry, tex: SurfaceTex) {
-  const mat = surfaceMaterial(tex)
+  const mat = surfaceMaterial(tex, curScope)
   if (!batches.has(mat)) { batches.set(mat, []); surfOf.set(mat, tex) }
   batches.get(mat)!.push(geo)
 }
@@ -127,6 +128,7 @@ export function buildDetails(map: MapDef = MAPS.dust): DetailBuild {
   const group = new THREE.Group()
   const raycastMeshes: THREE.Object3D[] = []
   batches.clear()
+  curScope = pbrMapScope(map.id)
 
   if (map.id === 'aimhead') {
     // BSP-converted map: real face geometry provides all visuals — no procedural props

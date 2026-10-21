@@ -131,6 +131,8 @@ export class Engine {
   private camera!: THREE.PerspectiveCamera
   private map!: MapBuild
   private mapDef!: MapDef
+  /** Task 77 — atmosphere handles for per-map re-theming (fog + lights). */
+  private atmo?: { hemi: THREE.HemisphereLight; ambient: THREE.AmbientLight; sun: THREE.DirectionalLight; fog: THREE.Fog }
   private fx!: Effects
   private pm!: PlayerManager
   private raycaster = new THREE.Raycaster()
@@ -292,6 +294,17 @@ export class Engine {
     this.scene = new THREE.Scene()
     this.scene.fog = new THREE.Fog(0xd9cfb4, 55, 240)
 
+    // atmosphere per map (Task 77): dust/dust2 keep the warm desert balance;
+    // aimhead gets its ORIGINAL identity — de_aztec's pale jungle-blue haze and
+    // cool green ground-bounce (a tan desert atmosphere renders the muted
+    // aztec greens brown). Re-themed on rebuildMap.
+    const aztec = this.opts.map === 'aimhead'
+    if (aztec) {
+      this.scene.fog.color.set(0xcfe0e8)
+      this.scene.fog.near = 60
+      this.scene.fog.far = 260
+    }
+
     // image-based lighting: PBR metal weapon materials need environment
     // reflections, otherwise high-metalness surfaces render near-black
     try {
@@ -305,12 +318,15 @@ export class Engine {
     this.scene.add(this.camera)
 
     // lights — warm desert balance: strong sun, warm ambient bounce,
-    // shadowed areas must read warm-grey (not blue)
-    const hemi = new THREE.HemisphereLight(0xe6e2d2, 0x8a7a5e, 0.72)
+    // shadowed areas must read warm-grey (not blue). aimhead: cooler jungle
+    // balance matching de_aztec (blue sky haze, green bounce, whiter sun)
+    const hemi = new THREE.HemisphereLight(aztec ? 0xdce8f0 : 0xe6e2d2, aztec ? 0x5e7a68 : 0x8a7a5e, 0.72)
     this.scene.add(hemi)
-    this.scene.add(new THREE.AmbientLight(0xc9b896, 0.38))
+    const ambient = new THREE.AmbientLight(aztec ? 0xb6c4bd : 0xc9b896, 0.38)
+    this.scene.add(ambient)
     // sun with shadows (matches the sky's sun disc — NE high)
-    const sun = new THREE.DirectionalLight(0xfff0d0, 1.9)
+    const sun = new THREE.DirectionalLight(aztec ? 0xfff6e0 : 0xfff0d0, 1.9)
+    this.atmo = { hemi, ambient, sun, fog: this.scene.fog }
     sun.position.set(55, 70, 18)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
@@ -2158,10 +2174,27 @@ export class Engine {
       if ((child as THREE.Group).userData?.isDetails) this.scene.remove(child)
     }
     this.mapDef = def
+    this.applyAtmosphere(mapId)   // Task 77: fog + light palette per map
     this.map = buildMap(this.scene, def)
     const details = buildDetails(def)
     details.group.userData.isDetails = true
     this.scene.add(details.group)
     this.map.raycastMeshes.push(...details.raycastMeshes)
+  }
+
+  /** Task 77 — per-map atmosphere: dust/dust2 = warm desert haze + tan bounce;
+   * aimhead = de_aztec mood (pale jungle-blue fog, cool sky hemi, green ground
+   * bounce, whiter sun). Colors only — position/intensity/shadows untouched. */
+  private applyAtmosphere(mapId: MapId) {
+    const aztec = mapId === 'aimhead'
+    const a = this.atmo
+    if (!a) return
+    a.fog.color.set(aztec ? 0xcfe0e8 : 0xd9cfb4)
+    a.fog.near = aztec ? 60 : 55
+    a.fog.far = aztec ? 260 : 240
+    a.hemi.color.set(aztec ? 0xdce8f0 : 0xe6e2d2)
+    a.hemi.groundColor.set(aztec ? 0x5e7a68 : 0x8a7a5e)
+    a.ambient.color.set(aztec ? 0xb6c4bd : 0xc9b896)
+    a.sun.color.set(aztec ? 0xfff6e0 : 0xfff0d0)
   }
 }

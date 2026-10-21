@@ -2,7 +2,7 @@
 import * as THREE from 'three'
 import { MAPS } from './mapdata'
 import type { MapDef, Box } from './mapdata'
-import { skyMesh, siteDecal, surfaceMaterial } from './textures'
+import { skyMesh, siteDecal, surfaceMaterial, pbrMapScope } from './textures'
 
 export interface MapBuild {
   group: THREE.Group
@@ -57,6 +57,7 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
   const raycastMeshes: THREE.Object3D[] = []
 
   // merge static boxes by material for performance
+  const scope = pbrMapScope(map.id)   // Task 77: per-map texture identity
   const geosByTex = new Map<Box['tex'], THREE.BufferGeometry[]>()
   for (const b of map.boxes) {
     const g = boxToGeo(b)
@@ -72,7 +73,7 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
   if (!map.bsp) {
     for (const [tex, geos] of geosByTex) {
       const g = mergeGeosSafe(geos)
-      const mat = surfaceMaterial(tex)
+      const mat = surfaceMaterial(tex, scope)
       const mesh = new THREE.Mesh(g, mat)
       mesh.userData.isMap = true
       mesh.userData.surf = tex        // fx picks impact style (sparks vs dust)
@@ -97,7 +98,7 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
         g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(grp.uv), 2))
         g.setIndex(new THREE.BufferAttribute(new Uint32Array(grp.idx), 1))
         g.computeBoundingSphere()
-        const mat = surfaceMaterial(grp.tex as Box['tex'])
+        const mat = surfaceMaterial(grp.tex as Box['tex'], scope)
         mat.side = THREE.DoubleSide // BSP face winding varies — render both sides
         const mesh = new THREE.Mesh(g, mat)
         mesh.userData.isMap = true
@@ -110,8 +111,8 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
     }).catch(() => { /* boxes already render a playable fallback */ })
   }
 
-  // sky (stored so engine can drift the clouds)
-  const sky = skyMesh()
+  // sky (stored so engine can drift the clouds) — per-map palette (Task 77)
+  const sky = skyMesh(map.id)
   scene.add(sky)
 
   // bomb site decals — must clear the thin sand top layers (A platform 2.05, B slab 0.06)

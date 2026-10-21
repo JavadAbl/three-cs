@@ -535,21 +535,32 @@ export function doorBlueTexture(rx = 1, ry = 1): THREE.Texture {
 }
 
 // ---------------- sky ----------------
-export function skyMesh(): THREE.Mesh {
+export function skyMesh(mapId?: string): THREE.Mesh {
   const W = 1024, H = 512
   const [c, ctx] = makeCanvas(W, H)
   const rnd = mulberry32(2025)
+  const aztec = mapId === 'aimhead'   // Task 77: de_aztec mood — blue down to
+  // the horizon (no desert tan band), slightly deeper zenith
   const g = ctx.createLinearGradient(0, 0, 0, H)
-  g.addColorStop(0, '#6d9ec7')
-  g.addColorStop(0.35, '#a3c4dd')
-  g.addColorStop(0.55, '#cfdde7')
-  g.addColorStop(0.68, '#e9ddb9') // haze at horizon
-  g.addColorStop(0.8, '#d9c69b')
-  g.addColorStop(1, '#c4b088')
+  if (aztec) {
+    g.addColorStop(0, '#5d8fc2')
+    g.addColorStop(0.35, '#9dc0dc')
+    g.addColorStop(0.6, '#cfdfe9')
+    g.addColorStop(0.8, '#dfe9ee')
+    g.addColorStop(1, '#c9d6d5')
+  } else {
+    g.addColorStop(0, '#6d9ec7')
+    g.addColorStop(0.35, '#a3c4dd')
+    g.addColorStop(0.55, '#cfdde7')
+    g.addColorStop(0.68, '#e9ddb9') // haze at horizon
+    g.addColorStop(0.8, '#d9c69b')
+    g.addColorStop(1, '#c4b088')
+  }
   ctx.fillStyle = g
   ctx.fillRect(0, 0, W, H)
-  // clouds (soft layered blobs)
-  for (let i = 0; i < 34; i++) {
+  // clouds (soft layered blobs) — aztec: whiter, denser jungle cover
+  const nClouds = aztec ? 44 : 34
+  for (let i = 0; i < nClouds; i++) {
     const x = rnd() * W
     const y = H * (0.08 + rnd() * 0.4)
     const rw = 45 + rnd() * 140, rh = rw * (0.22 + rnd() * 0.16)
@@ -883,10 +894,14 @@ export function soldierFace(team: 'CT' | 'T'): THREE.Texture {
 // ---------------- material factory (map + bump, shared by mapview/details) ----------------
 export type SurfaceTex = 'sand' | 'wall' | 'crate' | 'metal' | 'dark' | 'plank' | 'door' | 'doorBlue' | 'brick' | 'concrete'
 
-const matCache = new Map<SurfaceTex, THREE.MeshLambertMaterial>()
+const matCache = new Map<string, THREE.MeshLambertMaterial>()
 
-export function surfaceMaterial(tex: SurfaceTex): THREE.MeshLambertMaterial {
-  const hit = matCache.get(tex)
+/** Task 77: materials are now scoped per map — maps can carry their own
+ * texture identity (aimhead = aztec greens; dust/dust2 share the desert set
+ * via the shared/no-override key). key = mapId ? `${mapId}:${tex}` : tex. */
+export function surfaceMaterial(tex: SurfaceTex, mapId?: string): THREE.MeshLambertMaterial {
+  const key = mapId ? `${mapId}:${tex}` : tex
+  const hit = matCache.get(key)
   if (hit) return hit
   let map: THREE.Texture
   let bumpScale = 0.4
@@ -910,9 +925,11 @@ export function surfaceMaterial(tex: SurfaceTex): THREE.MeshLambertMaterial {
   })
   mat.onBeforeCompile = patchSurfaceShader           // Task 76: world-space albedo variation
   mat.customProgramCacheKey = () => 'surface-var-1'  // patched materials share programs
-  matCache.set(tex, mat)
-  if (!pbrKickStarted) kickPbrUpgrade()   // first material ever: sweep what exists
-  else upgradeSurface(tex)                  // late-created surface: upgrade just it
+  matCache.set(key, mat)
+  if (!pbrKickStarted) {
+    pendingUpgrades.push([tex, mapId]) // map-scoped mats are swept too (Task 77)
+    kickPbrUpgrade()                     // first material ever: sweep what exists
+  } else upgradeSurface(tex, mapId)        // late-created surface: upgrade just it
   return mat
 }
 
@@ -1021,12 +1038,47 @@ const PBR: Record<SurfaceTex, { tile: number; bump: number }> = {
   doorBlue: { tile: 1.2, bump: 0.9  }, // blue_painted_planks
 }
 
+/** Task 77 — per-map texture identities. A map with an entry here renders its
+ * surfaces from /textures/maps/<mapId>/<surface>.jpg instead of the shared
+ * desert set (dust/dust2 = shared). The ORIGINAL aim_headshot is built from
+ * de_aztec.wad textures (AzGrass/AzWll/AzStat... — the "Az" prefix = Aztec,
+ * confirmed via the BSP worldspawn wad list), so aimhead gets the aztec
+ * greens: grass ground, mossy temple sandstone walls, mossy statues,
+ * olive military crates, mossy trim. crate stays shared (universal CS wooden
+ * crates). Tiles/bumps re-tuned per map surface. */
+const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, { tile: number; bump: number }>>> = {
+  aimhead: {
+    // tile params derive from MEASURED BSP UV density (Task 77): geom groups
+    // carry 3.2 m/UV (ground+walls), 5.89 (plank), 1.68 (metal), 1.22 (dark);
+    // spec tile = 2.86 × target_world_m / m_per_uv. Targets: grass 5 m,
+    // cobble walls 2.5 m, trim 3 m, crate-metal 1.2 m, statue 2 m.
+    sand:  { tile: 4.5, bump: 0.8  }, // grass_ground hue-baked — aztec lawn (bump raised iter3: tuft relief)
+    brick: { tile: 2.2, bump: 1.3  }, // mossy_cobblestone hue-baked — temple walls (AzWll) (bump raised iter3: stone relief)
+    dark:  { tile: 4.7, bump: 0.9  }, // mossy_rock — center statues (AzStat)
+    metal: { tile: 2.0, bump: 0.9  }, // green_metal_rust — military crates (MltryCrte)
+    plank: { tile: 1.5, bump: 1.1  }, // moss_wood — trim (AzTrim)
+  },
+}
+
+/** Effective PBR spec for (map, surface): map override falls back to shared. */
+function pbrSpec(s: SurfaceTex, mapId?: string): { tile: number; bump: number } {
+  return (mapId && PBR_BY_MAP[mapId]?.[s]) || PBR[s]
+}
+
+/** Map id to scope materials under — only maps WITH a PBR_BY_MAP entry get
+ * their own identity; everything else stays on the shared (bare-key) path,
+ * byte-identical to pre-Task-77 behavior. */
+export function pbrMapScope(mapId?: string): string | undefined {
+  return (mapId && PBR_BY_MAP[mapId]) ? mapId : undefined
+}
+
 const SURFACES = Object.keys(PBR) as SurfaceTex[]
 let pbrKickStarted = false
+const pendingUpgrades: Array<[SurfaceTex, string | undefined]> = []
 export const pbrState: Record<string, 'idle' | 'loading' | 'ready' | 'failed'> = {}
 SURFACES.forEach(s => { pbrState[s] = 'idle' })
 
-function loadTexFirst(srgb: boolean, base: string, tile: number): Promise<THREE.Texture> {
+function loadTexFirst(srgb: boolean, base: string, tile: number, mapId?: string): Promise<THREE.Texture> {
   const loader = new THREE.TextureLoader()
   const one = (p: string) => loader.loadAsync(p).then(t => {
     t.wrapS = t.wrapT = THREE.RepeatWrapping
@@ -1036,27 +1088,37 @@ function loadTexFirst(srgb: boolean, base: string, tile: number): Promise<THREE.
     if (srgb) t.colorSpace = THREE.SRGBColorSpace
     return t
   })
-  // assets-first, staged-fallback — mirrors the sounds/icons loaders
-  return one(`/assets/textures/maps/${base}`).catch(() => one(`/staging/textures/maps/${base}`))
+  // per-map identity first (staged map set evaluates live over accepted
+  // shared), then shared desert set; assets-first, staged-fallback per the
+  // AGENTS.md acceptance policy. Map-scoped = 4-step chain, single code path.
+  if (!mapId) return one(`/assets/textures/maps/${base}`).catch(() => one(`/staging/textures/maps/${base}`))
+  return one(`/assets/textures/maps/${mapId}/${base}`)
+    .catch(() => one(`/staging/textures/maps/${mapId}/${base}`))
+    .catch(() => one(`/assets/textures/maps/${base}`))
+    .catch(() => one(`/staging/textures/maps/${base}`))
 }
 
-/** Upgrade one surface type (idempotent — first call wins). */
-function upgradeSurface(s: SurfaceTex) {
-  const mat = matCache.get(s)
-  if (!mat || pbrState[s] !== 'idle') return
-  pbrState[s] = 'loading'
+/** Upgrade one surface type (idempotent — first call wins).
+ * State key: `${mapId}:${s}` when map-scoped (bare surface otherwise). */
+function upgradeSurface(s: SurfaceTex, mapId?: string) {
+  const key = mapId ? `${mapId}:${s}` : s
+  const mat = matCache.get(key)
+  // scoped keys are NOT pre-initialized at module load — undefined === 'idle'
+  if (!mat || (pbrState[key] ?? 'idle') !== 'idle') return
+  pbrState[key] = 'loading'
+  const spec = pbrSpec(s, mapId)
   Promise.all([
-    loadTexFirst(true, `${s}.jpg`, PBR[s].tile),
-    loadTexFirst(false, `${s}_bump.jpg`, PBR[s].tile),
+    loadTexFirst(true, `${s}.jpg`, spec.tile, mapId),
+    loadTexFirst(false, `${s}_bump.jpg`, spec.tile, mapId),
   ]).then(([albedo, bump]) => {
     mat.map = albedo
     mat.bumpMap = bump
-    mat.bumpScale = PBR[s].bump
+    mat.bumpScale = spec.bump
     mat.needsUpdate = true
-    pbrState[s] = 'ready'
+    pbrState[key] = 'ready'
   }).catch(() => {
     // fresh clone / offline → procedural look stays, by design
-    pbrState[s] = 'failed'
+    pbrState[key] = 'failed'
   })
 }
 
@@ -1065,5 +1127,6 @@ function kickPbrUpgrade() {
   pbrKickStarted = true
   // debugging/verification hook (harmless in production, mirrors __cs2hud)
   ;(window as unknown as { __pbrState?: unknown }).__pbrState = pbrState
-  for (const s of SURFACES) upgradeSurface(s) // upgrades whichever are already cached
+  for (const [s, m] of pendingUpgrades) upgradeSurface(s, m) // every cached pair, scoped or bare
+  pendingUpgrades.length = 0
 }
