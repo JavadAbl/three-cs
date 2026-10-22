@@ -225,7 +225,7 @@ check('defuse kit halves the 10s channel',
 check('round reset clears all grenade entities + strips kit on death',
   srv.includes('m.nades = []; m.smokes = []; m.fires = []; m.decoys = []') && srv.includes('p.hasKit = false'))
 check('bots get the blind gate + throw ctx injection',
-  bots.includes('blindUntil') && bots.includes('botThrowGrenade') && srv.includes('setBotContext({ applyDamage, applyShotgunDamage, hasLOS, botThrowGrenade })'))
+  bots.includes('blindUntil') && bots.includes('botThrowGrenade') && srv.includes('setBotContext({ applyDamage, applyShotgunDamage, hasLOS, botThrowGrenade') && srv.includes('onShot: (m, p, weapon, origin, dir)') && srv.includes('onReload'))
 check('bot nade AI: flash-before-push (p<0.3, site goal) + HE cluster + smoke retreat',
   bots.includes("Math.random() < 0.3") && bots.includes("throwId = 'he'") && bots.includes("throwId = 'smoke'") && bots.includes("ai.flashThrown = true"))
 check('bot buy ladder stacks grenades (limits) + CT kit purchases',

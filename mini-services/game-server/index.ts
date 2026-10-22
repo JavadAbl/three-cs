@@ -206,10 +206,15 @@ function startRound(m: Match) {
   balanceTeams(m)
   const ts = teamOf(m, 'T')
   let bombCarrier: PlayerState | null = null
-  // prefer human carrier
-  const humanT = ts.find(p => !p.bot)
-  if (humanT) bombCarrier = humanT
-  else if (ts.length) bombCarrier = ts[Math.floor(Math.random() * ts.length)]
+  // aim/DM maps (bomb === false) are elimination-only: no C4, no carrier. Everything
+  // downstream — plant input (useDown requires hasBomb), plant loop, fuse, defuse,
+  // bot carrier navigation — keys off hasBomb, so skipping assignment kills the loop.
+  if (mapOf(m).bomb !== false) {
+    // prefer human carrier
+    const humanT = ts.find(p => !p.bot)
+    if (humanT) bombCarrier = humanT
+    else if (ts.length) bombCarrier = ts[Math.floor(Math.random() * ts.length)]
+  }
 
   for (const p of m.players.values()) {
     // CS rules: weapons and armor are lost on death — only survivors keep their loadout

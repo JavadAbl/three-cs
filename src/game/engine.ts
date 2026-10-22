@@ -2201,7 +2201,7 @@ export class Engine {
       gameover: this.gameover,
       buyError: this.buyError,
       pointerLocked: this.pointerLocked,
-      canPlant: this.phase === 'live' && this.alive && this.hasBomb && this.myTeam === 'T' && this.inSiteNow(),
+      canPlant: this.mapDef.bomb !== false && this.phase === 'live' && this.alive && this.hasBomb && this.myTeam === 'T' && this.inSiteNow(),
       canDefuse: this.phase === 'live' && this.alive && this.myTeam === 'CT' && this.bombPlanted && !!this.bombPos && Math.hypot(this.pos.x - this.bombPos.x, this.pos.z - this.bombPos.z) < 2,
       scoreboardOpen: this.scoreboardOpen,
       flash: this.alive ? Math.max(0, Math.min(1, (this.blindUntil - now) / 2000)) : 0,

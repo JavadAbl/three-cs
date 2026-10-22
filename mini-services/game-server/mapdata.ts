@@ -31,6 +31,8 @@ export interface MapDef {
   spawns: { CT: Vec3[]; T: Vec3[] }
   spawnYaw?: { CT: number; T: number } // team facing at spawn (default: T 0 / CT π)
   sites: { A: SiteDef; B: SiteDef }
+  bomb?: boolean                    // defuse objective (default true). aim/DM maps set false:
+                                    // no C4, no site decals, elimination-only rounds
   waypoints: WP[]
   waypointEdges: Array<[string, string]>
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number }
@@ -609,7 +611,7 @@ import { AIMHEAD } from './map-aimhead'
 export const MAPS: Record<MapId, MapDef> = {
   dust: buildDust(),
   dust2: buildDust2(),
-  aimhead: AIMHEAD,
+  aimhead: { ...AIMHEAD, bomb: false },   // aim map — pure aim duels, no bomb objective
 }
 
 export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [

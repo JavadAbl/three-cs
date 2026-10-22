@@ -18,15 +18,25 @@ let killsSeen = 0
 let results: Record<string, string> = {}
 let finished = false
 let botFill = true
+// Task 85 no-bomb regression: aim maps are elimination-only — nothing bomb-related
+// may EVER appear (old code: a T bot gets flagged carrier in startRound, c4 lands in
+// an inventory, carrier bots stream plantProgress and the planted 'bomb' event)
+let bombCarrierSeen = false
+let c4Seen = false
+let bombPlantedSeen = false
+let plantProgressSeen = false
 
 function done(k: string, ok: boolean, msg: string) { results[k] = (ok ? 'PASS' : 'FAIL') + ' — ' + msg }
 function fail(k: string, msg: string) { done(k, false, msg) }
 function finish() {
   if (finished) return
+  done('no-bomb-carrier', !bombCarrierSeen, bombCarrierSeen ? 'a player carried the C4 on an aim map' : 'no hasBomb flag in any snapshot row')
+  done('no-c4-inventory', !c4Seen, c4Seen ? 'c4 appeared in an inventory sync' : 'no c4 in any inventory sync')
+  done('no-plant-events', !bombPlantedSeen && !plantProgressSeen, (bombPlantedSeen || plantProgressSeen) ? 'plant activity streamed on an aim map' : 'no bomb/plantProgress events')
   finished = true
   console.log('\n===== RESULTS =====')
   for (const [k, v] of Object.entries(results)) console.log(`${k.padEnd(20)} ${v}`)
-  const need = ['map-served', 'spawn-standable', 'bots-move', 'round-flow']
+  const need = ['map-served', 'spawn-standable', 'bots-move', 'round-flow', 'no-bomb-carrier', 'no-c4-inventory', 'no-plant-events']
   const allPass = need.every(k => results[k]?.startsWith('PASS'))
   console.log('=====', allPass ? 'ALL PASS' : 'INCOMPLETE/FAILED', '=====')
   sock.disconnect()
@@ -66,6 +76,7 @@ sock.on('snapshot', (d: { ps: unknown[][] }) => {
     const id = row[0] as string
     const x = row[1] as number, y = row[2] as number, z = row[3] as number
     const alive = row[12] === 1
+    if (row[13] === 1 && !bombCarrierSeen) { bombCarrierSeen = true; console.log('[REGRESSION] hasBomb flag in snapshot, player:', id) }
     if (id === myId && alive && !spawnCheck && phase === 'freeze') {
       spawnCheck = `${x.toFixed(1)},${y.toFixed(1)},${z.toFixed(1)}`
       console.log(`[spawn] my position in freeze: ${spawnCheck} (y should be a floor level, x west for CT)`)
@@ -95,8 +106,17 @@ sock.on('kill', (d: { killerName: string; victimName: string }) => {
   console.log(`[kill] ${d.killerName || 'world'} → ${d.victimName} (${killsSeen})`)
 })
 
+sock.on('bomb', (d: { planted?: boolean }) => {
+  if (d.planted) { bombPlantedSeen = true; console.log('[REGRESSION] bomb planted on aim map!') }
+})
+
+sock.on('plantProgress', (d: { progress?: number }) => {
+  plantProgressSeen = true
+  console.log('[REGRESSION] plantProgress on aim map:', d.progress)
+})
+
 sock.on('invSync', (d: { inventory: string[] }) => {
-  if (d.inventory.includes('c4')) console.log('[invSync] I carry the C4 (CT got bomb?!)')
+  if (d.inventory.includes('c4')) { c4Seen = true; console.log('[REGRESSION] inventory sync carries C4:', d.inventory.join(',')) }
 })
 
 function finishIfReady() {
