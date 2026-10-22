@@ -7,8 +7,11 @@
 //      on foot instead of wallbanging (old code kept firing ~2.6 s through walls)
 //   3. "counter side always standing, no movements" → holders reposition /
 //      crouch / scan-sweep; hurt bots turn toward unseen shooters
+// TASK 80 section 4: bot gunfire/reload must ride the 'shot'/'reloadFx'
+// broadcasts — the old code applied damage silently (bot-vs-bot fights were
+// invisible pantomime: no gunshot, tracer, flash or reload for witnesses).
 // Drives updateBots directly with a stubbed ctx — no server needed.
-import { updateBots, defaultBrain, botBuy, setBotContext, DIFFS } from '../mini-services/game-server/bots'
+import { updateBots, defaultBrain, botBuy, setBotContext, DIFFS, botShoot } from '../mini-services/game-server/bots'
 import { WEAPONS } from '../shared/weapons'
 import type { TeamId } from '../shared/weapons'
 import type { PlayerState, Match } from '../mini-services/game-server/types'
@@ -286,6 +289,102 @@ function armInfinite(p: PlayerState) {
     },
     hasLOS: () => losFlag,
   })
+}
+
+// ================================================================ 4. BROADCAST (Task 80)
+// Bot shots/reloads must broadcast to witnesses. botShoot fires onShot
+// exactly once per call, hit OR miss (the damage roll is independent);
+// the reload branch broadcasts onReload on reload START only (a naive
+// per-tick emit would spam reloadFx ~24× per mag swap — the fresh check
+// pins that).
+{
+  const shots: Array<{ id: string; weapon: string; origin: number[]; dir: number[] }> = []
+  const reloads: string[] = []
+  setBotContext({
+    applyDamage: (_m, _victim, _attacker, _weapon, _part, _dist, hs, scale = 1) => {
+      dmgCalls.push({ at: 0, dmg: 25 * scale, head: hs })
+    },
+    applyShotgunDamage: (_m, _victim, _attacker, _weapon, pellets, _dist, scale = 1) => {
+      dmgCalls.push({ at: 0, dmg: pellets.length * 20 * scale, head: pellets.some(p => p.part === 'head') })
+      return pellets.length
+    },
+    hasLOS: () => losFlag,
+    onShot: (_m, p, weapon, origin, dir) => { shots.push({ id: p.id, weapon, origin: [...origin], dir: [...dir] }) },
+    onReload: (_m, p) => { reloads.push(p.id) },
+  })
+
+  const m = mkMatch('normal')
+  const bot = mkPlayer('CT', 3, -32)
+  const foe = mkPlayer('T', 0, -20)
+  armInfinite(bot)
+
+  // 4a: 200 rifle rounds → exactly 200 broadcasts, origin at the eye, unit dir
+  dmgCalls.length = 0
+  let dirBad = 0, originBad = 0, lenBad = 0
+  for (let i = 0; i < 200; i++) {
+    botShoot(m, bot, foe, WEAPONS['ak47'], Math.hypot(3, 12), DIFFS.normal, Date.now() + i * 10, bot.ai!)
+    const s = shots[shots.length - 1]
+    if (!s) { dirBad += 100000; continue }
+    if (s.weapon !== 'ak47' || s.id !== bot.id) dirBad += 1000   // (weapon/id guard, folded into dirBad)
+    const ex = foe.x - bot.x, ey = foe.y + 1.2 - (bot.y + 1.5), ez = foe.z - bot.z   // foe chest - bot eye
+    const el = Math.hypot(ex, ey, ez) || 1
+    const dot = (s.dir[0] * ex + s.dir[1] * ey + s.dir[2] * ez) / el
+    if (dot < 0.999) dirBad++
+    const len = Math.hypot(s.dir[0], s.dir[1], s.dir[2])
+    if (Math.abs(len - 1) > 0.01) lenBad++
+    if (Math.abs(s.origin[0] - bot.x) > 1e-6 || Math.abs(s.origin[1] - (bot.y + 1.5)) > 1e-6 || Math.abs(s.origin[2] - bot.z) > 1e-6) originBad++
+  }
+  check('broadcast: every bot round fires exactly one shot broadcast (hit or miss)',
+    shots.length === 200, `${shots.length}/200 (old code: 0 — bot fire was silent)`)
+  check('broadcast: shot dir is unit-length and aimed at the target chest',
+    dirBad === 0 && lenBad === 0, `${dirBad} misaimed, ${lenBad} bad lengths`)
+  check('broadcast: shot origin is the bot eye', originBad === 0, `${originBad}/200 wrong origins`)
+
+  // 4b: shotgun + knife also broadcast (shotgun dir feeds the client's seeded
+  // pellet-fan rebuild; knife rides the same path a human stab does)
+  const before = shots.length
+  botShoot(m, bot, foe, WEAPONS['nova'], Math.hypot(3, 12), DIFFS.normal, Date.now(), bot.ai!)
+  botShoot(m, bot, foe, WEAPONS['knife'], 1.5, DIFFS.normal, Date.now(), bot.ai!)
+  check('broadcast: shotgun and knife rounds broadcast too',
+    shots.length === before + 2 && shots[before].weapon === 'nova' && shots[before + 1].weapon === 'knife',
+    `${shots.slice(before).map(s => s.weapon).join(',')}`)
+
+  // 4c: reload broadcast — once per reload START, never per-tick spam.
+  // Fresh bot, empty mag, full reserve, pre-aimed at a visible foe → the
+  // engage block must arm exactly one reload (and one broadcast) in 5 s.
+  const m2 = mkMatch('normal')
+  const bot2 = mkPlayer('CT', 0, -32)
+  const foe2 = mkPlayer('T', 0, -20)
+  bot2.bot = true
+  foe2.bot = false
+  bot2.yaw = Math.atan2(-(foe2.x - bot2.x), -(foe2.z - bot2.z))
+  m2.players.set(bot2.id, bot2)
+  m2.players.set(foe2.id, foe2)
+  armInfinite(bot2)
+  const wid = bot2.inventory[0] as string
+  bot2.ammo[wid]!.mag = 0
+  losFlag = true
+  reloads.length = 0
+  const t0 = Date.now()
+  let armTick = -1
+  for (let i = 0; i < 60 && armTick < 0; i++) {
+    updateBots(m2, t0 + i * 100)
+    if (reloads.length > 0) armTick = i
+  }
+  check('broadcast: empty-mag bot emits reloadFx on reload start',
+    reloads.length >= 1, `${reloads.length} reload broadcasts`)
+  // still inside the reload window (mag 0, and the refill timer cannot fire
+  // inside a sync loop): the fresh guard must hold the broadcast to ONE — a
+  // naive per-tick emit would spam ~24 broadcasts per mag swap
+  for (let i = 1; i <= 15; i++) updateBots(m2, t0 + (armTick + i) * 100)
+  check('broadcast: reload broadcast fires ONCE per reload (no per-tick spam)',
+    reloads.length === 1, `${reloads.length - 1} extra broadcasts during the reload`)
+  // the refill timer completes (real time) → mag restored: 3 s of fed fire
+  // must not re-arm (or re-broadcast) the reload
+  bot2.ammo[wid]!.mag = 30
+  for (let i = 0; i < 30; i++) updateBots(m2, t0 + 3000 + i * 100)
+  check('broadcast: no second reload broadcast after the mag refill',
+    reloads.length === 1, `${reloads.length - 1} extra after refill`)
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

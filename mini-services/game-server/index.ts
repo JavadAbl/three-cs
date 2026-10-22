@@ -1383,7 +1383,19 @@ httpServer.listen(PORT, () => {
 })
 
 // inject damage/LOS/grenades into bot module (avoid circular imports)
-setBotContext({ applyDamage, applyShotgunDamage, hasLOS, botThrowGrenade })
+setBotContext({ applyDamage, applyShotgunDamage, hasLOS, botThrowGrenade,
+  // Task 80: bot gunfire rides the SAME 'shot' room broadcast humans emit —
+  // gunshot + tracer + muzzle flash + impact fx for every witness. Shotguns
+  // carry a deterministic seed so all clients draw the identical pellet fan.
+  onShot: (m, p, weapon, origin, dir) => {
+    const wd = WEAPONS[weapon]
+    broadcast(m, 'shot', {
+      id: p.id, weapon, origin, dir,
+      ...(wd && pelletsOf(wd) > 1 ? { seed: ((Math.random() * 0xffffffff) >>> 0) || 1 } : {}),
+    })
+  },
+  // Task 80: bot reloads broadcast 'reloadFx' exactly like a human's mag swap
+  onReload: (m, p) => { broadcast(m, 'reloadFx', { id: p.id }) } })
 
 process.on('SIGTERM', () => { httpServer.close(() => process.exit(0)) })
 process.on('SIGINT', () => { httpServer.close(() => process.exit(0)) })

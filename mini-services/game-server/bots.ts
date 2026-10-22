@@ -51,6 +51,12 @@ interface BotCtx {
   hasLOS?: (m: Match, ax: number, ay: number, az: number, bx: number, by: number, bz: number) => boolean
   // Phase 8: server-side grenade throw (validated + physics'd by index.ts)
   botThrowGrenade?: (m: Match, p: PlayerState, weapon: WeaponId, aimX: number, aimY: number, aimZ: number) => boolean
+  // Task 80: bot gunfire/reload must be audible+visible — bots ride the SAME
+  // 'shot'/'reloadFx' room broadcasts humans emit (gunshot, tracer, muzzle
+  // flash, impact fx). Before this, bot-vs-bot fights were pantomime: damage
+  // applied server-side, zero audiovisual feedback for any witness.
+  onShot?: (m: Match, p: PlayerState, weapon: WeaponId, origin: [number, number, number], dir: [number, number, number]) => void
+  onReload?: (m: Match, p: PlayerState) => void
 }
 export const botCtx: BotCtx = {}
 export function setBotContext(c: BotCtx) { Object.assign(botCtx, c) }
@@ -555,7 +561,9 @@ function updateBot(m: Match, p: PlayerState, t: number) {
         }
       } else if (am && am.reserve > 0) {
         // reload
+        const fresh = p.reloadEndsAt <= t   // Task 80: broadcast on reload START only (per-tick re-entry must stay silent)
         p.reloadEndsAt = t + w.reloadMs
+        if (fresh) botCtx.onReload?.(m, p)   // distant mag-swap clatter, same as humans
         setTimeout(() => {
           if (am.reserve > 0) {
             const need = w.mag - am.mag
@@ -769,6 +777,15 @@ function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number, diff: Diff)
 
 // exported for scripts/test-phase6-bots.ts (statistical pellet-count sim)
 export function botShoot(m: Match, p: PlayerState, target: PlayerState, w: (typeof WEAPONS)[WeaponId], d: number, diff: Diff, t: number, _ai: BotBrain) {
+  // Task 80: every fired round rides the 'shot' broadcast (hit OR miss) —
+  // origin = the bot's eye, dir = aim at the target's chest. The hit roll is
+  // simulated server-side and independent of this vector, so witnesses just
+  // get honest-looking fire toward the target.
+  const ex = eyeY(p)
+  let vx = target.x - p.x, vy = target.y + 1.2 - ex, vz = target.z - p.z
+  const vl = Math.hypot(vx, vy, vz) || 1
+  vx /= vl; vy /= vl; vz /= vl
+  botCtx.onShot?.(m, p, w.id, [p.x, ex, p.z], [vx, vy, vz])
   const pellets = pelletsOf(w)
   // Task 79: shots degrade through a burst like real recoil (the old constant
   // per-shot accuracy was the machine-gun feel). Shot index = how far into
