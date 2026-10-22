@@ -1,0 +1,51 @@
+{
+ "sand": {
+  "asset": "Ground054",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Ground054",
+  "files": {
+   "sand.jpg": 307698,
+   "sand_bump.jpg": 29692,
+   "sand_normal.jpg": 345664
+  }
+ },
+ "brick": {
+  "asset": "Bricks083",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Bricks083",
+  "files": {
+   "brick.jpg": 221224,
+   "brick_bump.jpg": 35277,
+   "brick_normal.jpg": 166893
+  }
+ },
+ "wall": {
+  "asset": "Concrete044A",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Concrete044A",
+  "files": {
+   "wall.jpg": 136594,
+   "wall_bump.jpg": 18690,
+   "wall_normal.jpg": 180895
+  }
+ },
+ "crate": {
+  "asset": "Wood092",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Wood092",
+  "files": {
+   "crate.jpg": 143978,
+   "crate_bump.jpg": 28169,
+   "crate_normal.jpg": 74345
+  }
+ },
+ "_pipeline": {
+  "fetch": "scripts/fetch-ambientcg-hf.py + extract step \u2014 HuggingFace tar mirror huggingface.co/datasets/nyuuzyou/ambientcg (ambientcg.com TCP-blocked from the build box; tar mirror carries the same CC0 bytes with original filenames; per-map license json saved as <surface>_meta.json)",
+  "pick": "VLM A/B over candidates-sheet.jpg (16 Color jpgs, 4 per surface)",
+  "conventions": "albedo 1024 q82 sRGB \u00b7 bump = displacement -> L 512 q80 \u00b7 normal = NormalGL 1024 q85 linear (OpenGL Y+ = three.js default)"
+ }
+}

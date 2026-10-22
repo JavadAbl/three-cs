@@ -1024,8 +1024,12 @@ function patchSurfaceShader(shader: THREE.WebGLProgramParametersWithUniforms): v
 /** Real-world span of one texture tile, meters — sets repeat = 2.86/tile
  * (mapview UV_PER_M 0.35). Bump scales are retuned per surface because the
  * PolyHaven displacement maps are gentler than the contrast-boosted canvas
- * bumps. Both tables are tuning knobs, not contracts. */
-const PBR: Record<SurfaceTex, { tile: number; bump: number }> = {
+ * bumps. `normal` (Task 88) = optional tangent-space normalScale when the
+ * surface ships a <s>_normal.jpg — normal maps supersede the height bump
+ * when present; the bump pair stays as the offline fallback. All tuning
+ * knobs, not contracts. */
+type PbrSpec = { tile: number; bump: number; normal?: number }
+const PBR: Record<SurfaceTex, PbrSpec> = {
   sand:     { tile: 14,  bump: 0.55 }, // aerial_sand — 15 m capture, ruts
   wall:     { tile: 3.0, bump: 1.0  }, // worn_cracked_plaster 2K — weathered sand plaster, cracks (Task 74; larger tile cuts visible repetition on long walls)
   brick:    { tile: 1.8, bump: 1.5  }, // large_sandstone_blocks
@@ -1045,8 +1049,13 @@ const PBR: Record<SurfaceTex, { tile: number; bump: number }> = {
  * confirmed via the BSP worldspawn wad list), so aimhead gets the aztec
  * greens: grass ground, mossy temple sandstone walls, mossy statues,
  * olive military crates, mossy trim. crate stays shared (universal CS wooden
- * crates). Tiles/bumps re-tuned per map surface. */
-const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, { tile: number; bump: number }>>> = {
+ * crates). Tiles/bumps re-tuned per map surface.
+ *
+ * Task 88 — aimdepot gets the first ambientCG identity (ambientcg.com, CC0:
+ * user-contributed source site). Beige river-sand yard, sandstone window
+ * walls, light-grey concrete perimeter, plywood crates — each with a real
+ * tangent-space normal map (the first _normal.jpg set in the game). */
+const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, PbrSpec>>> = {
   aimhead: {
     // tile params derive from MEASURED BSP UV density (Task 77): geom groups
     // carry 3.2 m/UV (ground+walls), 5.89 (plank), 1.68 (metal), 1.22 (dark);
@@ -1058,11 +1067,28 @@ const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, { tile: number; bump
     metal: { tile: 2.0, bump: 0.9  }, // green_metal_rust — military crates (MltryCrte)
     plank: { tile: 1.5, bump: 1.1  }, // moss_wood — trim (AzTrim)
   },
+  aimdepot: {
+    // ambientCG 1K sets (CC0, ambientcg.com — user-shared source site) — VLM
+    // A/B over 16 candidates (candidates-sheet.jpg): bright sand yard framed
+    // by dark walls. Provenance + fetch pipeline: sources.json in the
+    // aimdepot texture dir (HuggingFace tar mirror; ambientcg.com is TCP-
+    // blocked from the build box).
+    sand:  { tile: 10,  bump: 0.8, normal: 0.85 }, // Ground054 — clean bright desert sand
+    brick: { tile: 2.2, bump: 1.3, normal: 1.1  }, // Bricks083 — tan medieval sandstone blocks
+    wall:  { tile: 4.5, bump: 0.9, normal: 0.7  }, // Concrete044A — smooth charcoal concrete (tile raised 3.0->4.5 iter2: form-work band tiled visibly on the 64 m perimeter walls — Task-74 remedy)
+    crate: { tile: 1.5, bump: 1.3, normal: 1.0  }, // Wood092 — warm fine crate wood (tile 1.2->1.5 iter2: finer grain, less vertical smear)
+  },
 }
 
 /** Effective PBR spec for (map, surface): map override falls back to shared. */
-function pbrSpec(s: SurfaceTex, mapId?: string): { tile: number; bump: number } {
+function pbrSpec(s: SurfaceTex, mapId?: string): PbrSpec {
   return (mapId && PBR_BY_MAP[mapId]?.[s]) || PBR[s]
+}
+
+/** Task 88 preloader: does this (map, surface) pair ship an optional
+ * <s>_normal.jpg to warm? Only scoped identity surfaces declare one. */
+export function pbrHasNormal(s: SurfaceTex, mapId?: string): boolean {
+  return pbrSpec(s, mapId).normal !== undefined
 }
 
 /** Task 81 preloader: candidate URL chain for one surface file, in the exact
@@ -1132,6 +1158,20 @@ function upgradeSurface(s: SurfaceTex, mapId?: string) {
     mat.bumpScale = spec.bump
     mat.needsUpdate = true
     pbrState[key] = 'ready'
+    // Task 88 — optional tangent-space normal map: the real surface relief
+    // upgrade for per-map identity sets. Fails soft on purpose (fresh clone /
+    // offline keeps the height-bump look); also only surfaces whose spec
+    // declares normal: ship a _normal.jpg.
+    if (spec.normal !== undefined) {
+      loadTexFirst(false, `${s}_normal.jpg`, spec.tile, mapId).then(nrm => {
+        mat.normalMap = nrm
+        mat.normalScale.set(spec.normal!, spec.normal!)
+        // normal map supersedes the height bump — stacking the contrast-
+        // boosted height AND the photo normal over-etches every surface
+        mat.bumpMap = null
+        mat.needsUpdate = true
+      }).catch(() => { /* bump fallback stays */ })
+    }
   }).catch(() => {
     // fresh clone / offline → procedural look stays, by design
     pbrState[key] = 'failed'

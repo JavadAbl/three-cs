@@ -624,6 +624,12 @@ function buildAimDepot(): MapDef {
   wall(-32.45, 22, 32.45, 22, 6)
   wall(32, -21.55, 32, 21.55, 6)
   wall(-32, -21.55, -32, 21.55, 6)
+  // parapet caps (Task 88 iter2, decor): break the abrupt wall-top sky edge
+  // + visually terminate the long perimeter faces (VLM tiling note)
+  box(0, -22, 65.3, 1.3, 0.5, 'wall', 5.75, true)
+  box(0, 22, 65.3, 1.3, 0.5, 'wall', 5.75, true)
+  box(32, 0, 1.3, 43.5, 0.5, 'wall', 5.75, true)
+  box(-32, 0, 1.3, 43.5, 0.5, 'wall', 5.75, true)
 
   // ---------------- window walls — the three-lane split ----------------
   // x +/-10, z -9..9. Low band 0..1.2 = duck cover; upper band 3.0..5.2.

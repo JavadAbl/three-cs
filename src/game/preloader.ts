@@ -24,7 +24,7 @@
 // The wrapper is deliberately conservative: same-origin only, GET/POST only,
 // /assets/, /staging/, /draco/ and the GLB API routes only, and request.cache
 // === 'no-cache' (the skins manifest's freshness policy) passes through.
-import { texChain, pbrMapScope, PBR_SURFACES } from './textures'
+import { texChain, pbrMapScope, pbrHasNormal, PBR_SURFACES } from './textures'
 import { WEAPON_GLB_IDS } from './weapongltf'
 import { WEAPON_TEX_KEYS } from './weaponmodels'
 import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '../../shared/weapons-audio'
@@ -277,13 +277,17 @@ function weaponTextureItems(): Item[] {
   return items
 }
 
-/** Map PBR surfaces × albedo+bump × the loadTexFirst URL chain, scoped the
- * same way mapview scopes them (pbrMapScope). */
+/** Map PBR surfaces × albedo+bump(+normal) × the loadTexFirst URL chain,
+ * scoped the same way mapview scopes them (pbrMapScope). Task 88: surfaces
+ * whose spec declares normal: (scoped identity sets) also warm their
+ * _normal.jpg — unscoped maps ship none, so nothing is probed for them. */
 function mapTextureItems(mapId: string | undefined): Item[] {
   const scope = pbrMapScope(mapId)
   const items: Item[] = []
   for (const s of PBR_SURFACES) {
-    for (const base of [`${s}.jpg`, `${s}_bump.jpg`]) {
+    const bases = [`${s}.jpg`, `${s}_bump.jpg`]
+    if (pbrHasNormal(s, scope)) bases.push(`${s}_normal.jpg`)
+    for (const base of bases) {
       items.push({ chain: texChain(base, scope).map(url => ({ url })) })
     }
   }

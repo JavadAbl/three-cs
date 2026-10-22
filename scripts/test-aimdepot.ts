@@ -5,6 +5,7 @@
 import { io } from 'socket.io-client'
 
 const URL = 'http://localhost:3003'
+const WEB = process.env.WEB_BASE ?? 'http://localhost:3000'   // Next dev/prod host serving /assets
 const ROOM = 'aimdepot-test-' + Math.random().toString(36).slice(2, 6)
 const sock = io(URL, { path: '/' })
 
@@ -37,7 +38,7 @@ function finish() {
   finished = true
   console.log('\n===== RESULTS =====')
   for (const [k, v] of Object.entries(results)) console.log(`${k.padEnd(20)} ${v}`)
-  const need = ['map-served', 'spawn-standable', 'bots-move', 'round-flow', 'no-bomb-carrier', 'no-c4-inventory', 'no-plant-events']
+  const need = ['map-served', 'spawn-standable', 'bots-move', 'round-flow', 'identity-files-served', 'no-bomb-carrier', 'no-c4-inventory', 'no-plant-events']
   const allPass = need.every(k => results[k]?.startsWith('PASS'))
   console.log('=====', allPass ? 'ALL PASS' : 'INCOMPLETE/FAILED', '=====')
   sock.disconnect()
@@ -45,6 +46,24 @@ function finish() {
 }
 
 sock.on('connect', () => {
+  // Task 88: the per-map ambientCG identity set must ship with the repo —
+  // 4 surfaces x (albedo, height bump, normal map), all 200 over HTTP. Any
+  // 404 = the loader chain silently falls back to the shared desert set and
+  // the aimdepot identity is gone without any other test noticing.
+  ;(async () => {
+    const surfaces = ['sand', 'brick', 'wall', 'crate']
+    const suffixes = ['', '_bump', '_normal']
+    const missing: string[] = []
+    for (const s of surfaces) {
+      for (const suf of suffixes) {
+        const r = await fetch(`${WEB}/assets/textures/maps/aimdepot/${s}${suf}.jpg`, { method: 'HEAD' })
+        if (r.status !== 200) missing.push(`${s}${suf}.jpg=${r.status}`)
+      }
+    }
+    done('identity-files-served', missing.length === 0,
+      missing.length === 0 ? 'all 12 aimdepot identity files (albedo+bump+normal x 4 surfaces) served'
+        : `missing: ${missing.join(', ')}`)
+  })().catch(e => done('identity-files-served', false, `fetch error: ${e}`))
   sock.emit('join', { name: 'MapTester', room: ROOM, team: 'CT', map: 'aimdepot', botFill: true, botDifficulty: 'easy', winTarget: 16 })
 })
 
