@@ -1647,3 +1647,18 @@ Stage Summary:
 - aim_headshot is now a true aim map: elimination-only rounds (frag out or time), no C4 anywhere, no carrier, no site markers, no plant/defuse UX — bots just fight
 - Defuse maps untouched and verified live: dust2 carrier assignment, C4 slot 4, carrier hint, and a bot-carried plant all work on the new code
 - Future maps get a one-liner switch: bomb: false in the registry entry makes any layout an aim/DM map; everything else scales automatically
+
+---
+Task ID: 86
+Agent: Super Z (main agent)
+Task: User provided a GitHub fine-grained PAT — publish the local Task-85 commit to github.com/JavadAbl/three-cs
+
+Work Log:
+- Verified token via API: belongs to JavadAbl (Mohammad Javad Abolhassani Far), full push/admin permission on JavadAbl/three-cs (public, ~20 MB, default branch main)
+- Local state: main was ahead of origin/main by exactly 1 commit — c01f142 (Task 85: aim_headshot bomb-free elimination arena, 17 files +254/−17, working tree clean)
+- Pushed via one-time tokened URL (x-access-token:***@github.com/JavadAbl/three-cs.git) WITHOUT persisting the token in .git/config or any file on disk; push result: a0224ca..c01f142 main -> main
+- git fetch origin re-synced the tracking ref (main...origin/main in sync); remote HEAD verified via authenticated API = c01f142 (Task-85 commit) on top of a0224ca/aacc06b; unauthenticated API probe failed only due to anonymous rate-limiting (not a repo issue)
+
+Stage Summary:
+- github.com/JavadAbl/three-cs is now current through Task 85 — the entire CS2-clone build (maps, bots, economy, audio, preloader, join gate, all fixes) is public on GitHub
+- Token hygiene: used as a one-time push credential only, never written to any file; user advised to rotate/revoke it since it was pasted into chat
