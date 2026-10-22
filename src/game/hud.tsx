@@ -480,7 +480,12 @@ export function Hud({ s, cb, settings, open }: {
             }
             shown.push({
               key: `s-${i}`,
-              label: `${i + 1} ${def?.slot === 4 ? 'C4' : WEAPON_SHORT[w] ?? w}`,
+              // Task 84: number by the REAL switch key (WEAPONS.slot — the digit
+              // switchSlot() answers), not by inventory position. On short
+              // loadouts (aimhead pistol rounds) positions diverge from keys
+              // ("1 Glock / 3 C4" while the keys are 2 and 4) and the "press 4"
+              // carrier hint contradicts the list.
+              label: `${def?.slot ?? i + 1} ${def?.slot === 4 ? 'C4' : WEAPON_SHORT[w] ?? w}`,
               active: i === s.wIdx,
             })
           }

@@ -883,6 +883,8 @@ export class Engine {
         this.deathBy = null
         this.spectating = false
         this.specIdx = 0
+        this.plantBar = null        // round reset cancels any in-flight plant/defuse —
+        this.defuseBar = null       // updateBomb() drops them silently (no progress:0 broadcast)
         this.wIdx = 0
         this.reloadEndsAt = 0
         this.cancelReloadSfx()
@@ -1046,6 +1048,7 @@ export class Engine {
     socket.on('bomb', (d: { planted?: boolean; exploded?: boolean; defused?: boolean; pos?: number[]; explodeIn?: number }) => {
       if (d.planted && d.pos) {
         this.bombPlanted = true
+        this.plantBar = null          // plant completed — drop the progress bar (it has no terminal event otherwise and would stick on screen)
         this.bombPos = new THREE.Vector3(d.pos[0], d.pos[1], d.pos[2])
         this.bombExplodeAt = performance.now() + (d.explodeIn ?? ROUND.bombMs)
         this.bombMesh = buildBombMesh()
@@ -1054,6 +1057,7 @@ export class Engine {
         audio.bombPlanted()
         this.pushToast('The bomb has been planted!')
       } else if (d.exploded && d.pos) {
+        this.defuseBar = null         // a defuse cut short by the explosion leaves no progress:0 event — clear it here
         const ex = new THREE.Vector3(d.pos[0], d.pos[1] + 0.5, d.pos[2])
         this.fx.explosion(ex)
         audio.bombExplode()
