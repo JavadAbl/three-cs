@@ -1702,3 +1702,17 @@ Stage Summary:
 - Aim Depot is the first map with REAL normal maps: the PBR pipeline now speaks albedo+height+normal (Lambert-verified hot-swap, per-map identity scope, preloader-aware), and every future map can opt in per-surface with one spec field + a texture directory
 - ambientCG content IS integrated despite the network block: the CC0 bytes arrive via the HuggingFace mirror with original filenames and license sidecars; the fetch scripts (fetch-ambientcg-hf.py, extract-ambientcg-candidates.py, process-aimdepot-textures.py) reproduce every committed byte
 - Aim Depot now has its own look: bright sand yard + tan sandstone window walls + charcoal concrete perimeter with parapet caps + warm wood crates — distinct from dust2 (shared desert) and aimhead (aztec greens)
+
+---
+Task ID: 89
+Agent: Super Z (main agent)
+Task: User provided a NEW GitHub fine-grained PAT (Task-86 token revoked after chat exposure) — publish the two pending Task-88 commits to github.com/JavadAbl/three-cs
+
+Work Log:
+- State on arrival: main ahead of origin/main by exactly 2 commits — ea9790e (Task 88: aimdepot ambientCG identity + normal-map pipeline) + ce54e21 (worklog: Task 88), working tree clean; remote HEAD still 2a069bb (Task 87)
+- Token verified in two stages: authenticated ls-remote (read path) resolved OK, and the push itself proved the Contents:Write grant — 2a069bb..ce54e21 main -> main via one-time tokened URL (x-access-token:***@github.com/JavadAbl/three-cs.git); token NEVER written to .git/config or any file on disk; API /user identifies the owner (JavadAbl / Mohammad Javad Abolhassani Far)
+- Post-push verification: git fetch origin re-synced the tracking ref (main...origin/main 0/0 ahead/behind); authenticated ls-remote confirms refs/heads/main = ce54e21 — local and remote identical
+
+Stage Summary:
+- github.com/JavadAbl/three-cs is now current through Task 88: the whole 4-map build (dust, dust2, aim_headshot, AIM DEPOT) plus the ambientCG CC0 PBR pipeline (real normal maps, per-map identity scope, reproducible fetch scripts) is public on GitHub
+- Token hygiene: one-time push credential only, nothing persisted on disk; user advised to rotate this PAT too since it was pasted into chat
