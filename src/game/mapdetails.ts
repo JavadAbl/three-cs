@@ -130,8 +130,11 @@ export function buildDetails(map: MapDef = MAPS.dust): DetailBuild {
   batches.clear()
   curScope = pbrMapScope(map.id)
 
-  if (map.id === 'aimhead') {
-    // BSP-converted map: real face geometry provides all visuals — no procedural props
+  if (map.id === 'aimhead' || map.id === 'aimdepot') {
+    // BSP-converted map (aimhead): real face geometry provides all visuals.
+    // aimdepot: hand-built aim arena — boxes carry the whole look; the
+    // generic dust prop builders are hard-positioned for the dust layout
+    // and must NOT run here.
     return { group, raycastMeshes }
   }
 

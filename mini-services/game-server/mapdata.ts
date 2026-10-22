@@ -9,7 +9,7 @@
 //           mid doors + xbox, window room (mid -> B), upper/lower tunnels, B site
 // ============================================================
 
-export type MapId = 'dust' | 'dust2' | 'aimhead'
+export type MapId = 'dust' | 'dust2' | 'aimhead' | 'aimdepot'
 
 export interface Box {
   x: number; y: number; z: number   // center
@@ -604,6 +604,151 @@ function buildDust2(): MapDef {
 }
 
 // ============================================================
+// AIM DEPOT — classic crate-yard aim arena (Task 87)
+// Rifle-duel counterpart to aim_headshot's pistol shoebox: flat sandy
+// yard 64 x 44, CT north / T south (standard orientation), three lanes
+// split by two WINDOW WALLS — a 1.2 m duck-cover band below an open
+// 1.2..3.0 window band (LOS + bullets pass through the band), symmetric
+// crate cover, a mid monolith stack. Registered bomb:false — pure
+// elimination rounds, no C4 anywhere (Task 85 semantics).
+// ============================================================
+function buildAimDepot(): MapDef {
+  const { boxes, box, wall } = newBuilder()
+
+  // ---------------- ground (top y = 0) ----------------
+  box(0, 0, 64, 44, 0.2, 'sand', -0.2)        // x -32..32 · z -22..22
+
+  // ---------------- perimeter (N/S own the corners) ----------------
+  wall(-32.45, -22, 32.45, -22, 6)
+  wall(-32.45, 22, 32.45, 22, 6)
+  wall(32, -21.55, 32, 21.55, 6)
+  wall(-32, -21.55, -32, 21.55, 6)
+
+  // ---------------- window walls — the three-lane split ----------------
+  // x +/-10, z -9..9. Low band 0..1.2 = duck cover; upper band 3.0..5.2.
+  // The 1.2..3.0 gap is a real shoot-through window: standing eye height
+  // (~1.6) sees and fires through it, crouchers hide behind the low band.
+  box(-10, 0, 0.8, 18, 1.2, 'brick')          // west low band
+  box(-10, 0, 0.8, 18, 2.2, 'brick', 3.0)    // west upper band
+  box(10, 0, 0.8, 18, 1.2, 'brick')         // east low band
+  box(10, 0, 0.8, 18, 2.2, 'brick', 3.0)     // east upper band
+
+  // ---------------- spawn shields (forward spawn cover) ----------------
+  // Center gap x -2..2 stays open; sides open past x +/-10.
+  box(-6, -14, 8, 0.8, 1.4, 'wall')          // CT west shield x -10..-2
+  box(6, -14, 8, 0.8, 1.4, 'wall')           // CT east shield x 2..10
+  box(-6, 14, 8, 0.8, 1.4, 'wall')           // T west shield
+  box(6, 14, 8, 0.8, 1.4, 'wall')            // T east shield
+
+  // ---------------- crate cover ----------------
+  // center monolith (the aim_map landmark)
+  box(0, 0, 2.2, 2.2, 2.2, 'crate')
+  box(0.35, -0.35, 1.6, 1.6, 1.6, 'crate', 2.2)
+  // ring crates around the monolith (1.8 cubes)
+  box(-7, -5.5, 1.8, 1.8, 1.8, 'crate')
+  box(7, -5.5, 1.8, 1.8, 1.8, 'crate')
+  box(-7, 5.5, 1.8, 1.8, 1.8, 'crate')
+  box(7, 5.5, 1.8, 1.8, 1.8, 'crate')
+  // lane cover: singles near lane entries + one stack per lane
+  box(-23, -8, 1.8, 1.8, 1.8, 'crate')
+  box(-23, 8, 1.8, 1.8, 1.8, 'crate')
+  box(23, -8, 1.8, 1.8, 1.8, 'crate')
+  box(23, 8, 1.8, 1.8, 1.8, 'crate')
+  box(-26, 0, 2, 2, 2, 'crate')
+  box(-26, 0, 1.5, 1.5, 1.5, 'crate', 2)
+  box(26, 0, 2, 2, 2, 'crate')
+  box(26, 0.35, 1.5, 1.5, 1.5, 'crate', 2)
+  // corner crates (2.0 cubes)
+  box(-27, -16, 2, 2, 2, 'crate')
+  box(27, -16, 2, 2, 2, 'crate')
+  box(-27, 16, 2, 2, 2, 'crate')
+  box(27, 16, 2, 2, 2, 'crate')
+
+  // ---------------- skyline (decor — visual only, no LOS/collision) ----------------
+  box(-38, -12, 12, 16, 8, 'wall', 6, true)
+  box(-39, 11, 14, 16, 6, 'brick', 6, true)
+  box(38, -13, 12, 14, 7, 'wall', 6, true)
+  box(39, 12, 10, 16, 9, 'brick', 6, true)
+  box(-13, 26, 18, 8, 5, 'wall', 6, true)
+  box(12, 26, 16, 8, 4, 'wall', 6, true)
+  box(-10, -26, 16, 8, 4, 'brick', 6, true)
+  box(14, -26, 18, 8, 5, 'brick', 6, true)
+
+  // CT north (z -18/-20.5), T south — default team yaw (T faces north, CT south)
+  return finishMap('aimdepot', 'Aim Depot', 1, { boxes, box, wall } as Builder, {
+    CT: [
+      { x: 0, y: 0, z: -17.5 }, { x: -3, y: 0, z: -17.5 }, { x: 3, y: 0, z: -17.5 },
+      { x: -6, y: 0, z: -17.5 }, { x: 6, y: 0, z: -17.5 }, { x: -9, y: 0, z: -17.5 },
+      { x: 9, y: 0, z: -17.5 }, { x: 0, y: 0, z: -20.5 }, { x: -4.5, y: 0, z: -20.5 },
+      { x: 4.5, y: 0, z: -20.5 },
+    ],
+    T: [
+      { x: 0, y: 0, z: 17.5 }, { x: -3, y: 0, z: 17.5 }, { x: 3, y: 0, z: 17.5 },
+      { x: -6, y: 0, z: 17.5 }, { x: 6, y: 0, z: 17.5 }, { x: -9, y: 0, z: 17.5 },
+      { x: 9, y: 0, z: 17.5 }, { x: 0, y: 0, z: 20.5 }, { x: -4.5, y: 0, z: 20.5 },
+      { x: 4.5, y: 0, z: 20.5 },
+    ],
+  }, {
+    // strategic anchors for bots on a no-bomb map (sites carry no objective)
+    A: { x: 0, z: -14, r: 5, y: 0 },
+    B: { x: 0, z: 14, r: 5, y: 0 },
+  }, [
+    // CT side
+    { id: 'ctSpawn', x: 0, z: -18, y: 0 },
+    { id: 'ctL', x: -20, z: -18, y: 0 },
+    { id: 'ctR', x: 20, z: -18, y: 0 },
+    { id: 'ctMid', x: 0, z: -12, y: 0 },
+    { id: 'ctWJ', x: -10, z: -13, y: 0 },     // west junction (window wall ends at z -9)
+    { id: 'ctEJ', x: 10, z: -13, y: 0 },      // east junction
+    { id: 'ctWL', x: -21, z: -10, y: 0 },     // west lane entry
+    { id: 'ctER', x: 21, z: -10, y: 0 },      // east lane entry
+    // lanes (outside the window walls)
+    { id: 'laneWN', x: -21, z: -4, y: 0 },
+    { id: 'laneWS', x: -21, z: 4, y: 0 },
+    { id: 'laneEN', x: 21, z: -4, y: 0 },
+    { id: 'laneES', x: 21, z: 4, y: 0 },
+    // mid corridor
+    { id: 'midN', x: 0, z: -8, y: 0 },
+    { id: 'midS', x: 0, z: 8, y: 0 },
+    { id: 'midW', x: -4.5, z: 0, y: 0 },
+    { id: 'midE', x: 4.5, z: 0, y: 0 },
+    // hub ring around the monolith
+    { id: 'hNW', x: -4, z: -4, y: 0 },
+    { id: 'hNE', x: 4, z: -4, y: 0 },
+    { id: 'hSW', x: -4, z: 4, y: 0 },
+    { id: 'hSE', x: 4, z: 4, y: 0 },
+    // T side
+    { id: 'tMid', x: 0, z: 12, y: 0 },
+    { id: 'tWJ', x: -10, z: 13, y: 0 },
+    { id: 'tEJ', x: 10, z: 13, y: 0 },
+    { id: 'tWL', x: -21, z: 10, y: 0 },
+    { id: 'tER', x: 21, z: 10, y: 0 },
+    { id: 'tL', x: -20, z: 18, y: 0 },
+    { id: 'tR', x: 20, z: 18, y: 0 },
+    { id: 'tSpawn', x: 0, z: 18, y: 0 },
+  ], [
+    // spawn web
+    ['ctSpawn', 'ctMid'], ['ctSpawn', 'ctL'], ['ctSpawn', 'ctR'],
+    ['tSpawn', 'tMid'], ['tSpawn', 'tL'], ['tSpawn', 'tR'],
+    ['tL', 'tWL'], ['tR', 'tER'], ['ctL', 'ctWL'], ['ctR', 'ctER'],
+    // CT approach
+    ['ctMid', 'ctWJ'], ['ctMid', 'ctEJ'], ['ctWJ', 'ctWL'], ['ctEJ', 'ctER'],
+    ['ctWJ', 'midN'], ['ctEJ', 'midN'],
+    // lanes run north-south
+    ['ctWL', 'laneWN'], ['ctER', 'laneEN'],
+    ['laneWN', 'laneWS'], ['laneEN', 'laneES'],
+    ['laneWS', 'tWL'], ['laneES', 'tER'],
+    // T approach (mirror)
+    ['tMid', 'tWJ'], ['tMid', 'tEJ'], ['tWJ', 'tWL'], ['tEJ', 'tER'],
+    ['tWJ', 'midS'], ['tEJ', 'midS'],
+    // mid corridor + hub ring around the monolith
+    ['midN', 'hNW'], ['midN', 'hNE'], ['midS', 'hSW'], ['midS', 'hSE'],
+    ['hNW', 'hNE'], ['hSW', 'hSE'], ['hNW', 'hSW'], ['hNE', 'hSE'],
+    ['hNW', 'midW'], ['hSW', 'midW'], ['hNE', 'midE'], ['hSE', 'midE'],
+  ], { minX: -32, maxX: 32, minZ: -22, maxZ: 22 })
+}
+
+// ============================================================
 // registry
 // ============================================================
 import { AIMHEAD } from './map-aimhead'
@@ -612,10 +757,12 @@ export const MAPS: Record<MapId, MapDef> = {
   dust: buildDust(),
   dust2: buildDust2(),
   aimhead: { ...AIMHEAD, bomb: false },   // aim map — pure aim duels, no bomb objective
+  aimdepot: { ...buildAimDepot(), bomb: false },   // aim map — crate-yard arena, no bomb objective
 }
 
 export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
   { id: 'dust', name: 'Dust', desc: 'The original three-lane classic layout' },
   { id: 'dust2', name: 'Dust II', desc: 'Long, mid, tunnels · catwalk · pit · window room' },
   { id: 'aimhead', name: 'Aim Headshot', desc: 'CS 1.6 BSP import · slit-wall aim arena' },
+  { id: 'aimdepot', name: 'Aim Depot', desc: 'Crate-yard aim arena · window walls · three lanes' },
 ]

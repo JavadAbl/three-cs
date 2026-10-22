@@ -141,6 +141,31 @@ const GRAPHS: Record<string, MapGraph> = {
       ah1360: [-25, 0], ah1168: [-25, 0], ah323: [25, 0], ah237: [25, 0],
     },
   }),
+  aimdepot: buildGraph(MAPS.aimdepot, {
+    // CT north / T south crate-yard: CTs hold their half + the lane entries,
+    // Ts push via mid junction or the outside lanes. plantA/plantB are inert
+    // (bomb:false) but must be valid node ids. Watch: holders face the
+    // enemy half (CT -> south/+z, T -> north/-z).
+    aHold: ['ctWJ', 'ctEJ', 'ctMid', 'midN'],
+    bHold: ['tWJ', 'tEJ', 'tMid', 'midS'],
+    midHold: ['hNW', 'hNE', 'midN', 'midS'],
+    aRoutes: [['tSpawn', 'ctMid'], ['tEJ', 'midN']],
+    bRoutes: [['ctSpawn', 'tMid'], ['ctEJ', 'midS']],
+    tHoldA: 'tWJ',
+    tHoldB: 'tEJ',
+    plantA: 'ctMid',
+    plantB: 'tMid',
+    watch: {
+      // CT-side holders face south (+z)
+      ctSpawn: [0, 20], ctMid: [0, 20], ctWJ: [4, 14], ctEJ: [-4, 14],
+      ctWL: [4, 12], ctER: [-4, 12], midN: [0, 20], midW: [0, 18], midE: [0, 18],
+      hNW: [5, 12], hNE: [-5, 12], laneWN: [-14, 16], laneWS: [-14, 20],
+      laneEN: [14, 16], laneES: [14, 20],
+      // T-side holders face north (-z)
+      tSpawn: [0, -20], tMid: [0, -20], tWJ: [-4, -14], tEJ: [4, -14],
+      tWL: [-4, -12], tER: [4, -12], midS: [0, -20], hSW: [5, -12], hSE: [-5, -12],
+    },
+  }),
 }
 
 function graphFor(m: Match): MapGraph {
