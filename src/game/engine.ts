@@ -383,6 +383,7 @@ export class Engine {
         ammo: () => ({ weapon: this.inventory[this.wIdx], ammo: this.ammo[this.inventory[this.wIdx]], all: { ...this.ammo }, reloadEndsIn: Math.max(0, this.reloadEndsAt - performance.now()) }),
         reload: () => this.tryReload(),
         fire: () => this.tryFire(),
+        gas: () => this.fx.aliveKinds(),
         players: () => [...this.pm.players.values()].map(p => ({
           id: p.id, team: p.team, w: p.weapon, alive: p.alive,
           pos: p.root.position.toArray().map((v: number) => Math.round(v * 100) / 100),

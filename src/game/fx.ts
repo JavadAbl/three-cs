@@ -79,7 +79,17 @@ function ringTex(): THREE.Texture {
 
 const sparkTex = () => radialTex('rgba(255,255,230,1)', 'rgba(255,180,60,0)', 32)
 
-interface FxItem { obj: THREE.Object3D; born: number; life: number; vel?: THREE.Vector3; kind: string; mat?: THREE.Material }
+interface FxItem {
+  obj: THREE.Object3D; born: number; life: number; vel?: THREE.Vector3; kind: string; mat?: THREE.Material
+  /** per-item renderer overrides (Task 83) — let ONE caller shrink itself
+   * without touching the shared kind defaults (explosion smoke must stay
+   * big while the muzzle wisp shrinks). */
+  base?: number   // smoke/puff-family start size
+  grow?: number   // smoke/puff-family growth over life
+  op?: number     // peak opacity
+  grav?: number   // per-item gravity (negative = float up)
+  scMul?: number  // flash-family scale multiplier
+}
 
 const MAX_DECALS = 48
 
@@ -173,7 +183,7 @@ export class Effects {
           const s = it.obj as THREE.Sprite
           const sm = s.material as THREE.SpriteMaterial
           sm.opacity = 1 - k
-          const sc = 0.22 + k * 0.5
+          const sc = (0.22 + k * 0.5) * (it.scMul ?? 1)
           s.scale.set(sc, sc, sc)
           break
         }
@@ -189,14 +199,14 @@ export class Effects {
           const s = it.obj as THREE.Sprite
           if (it.vel) {
             it.obj.position.addScaledVector(it.vel, dt)
-            const g = it.kind === 'spark' ? 9 : it.kind === 'blood' ? 6 : it.kind === 'smoke' ? -1.1 : 1.2
+            const g = it.grav ?? (it.kind === 'spark' ? 9 : it.kind === 'blood' ? 6 : it.kind === 'smoke' ? -1.1 : 1.2)
             it.vel.y -= g * dt
             it.vel.multiplyScalar(1 - (it.kind === 'spark' ? 1.5 : 3.2) * dt)
           }
           const sm = s.material as THREE.SpriteMaterial
-          sm.opacity = (1 - k) * (it.kind === 'smoke' ? 0.5 : it.kind === 'spark' ? 1 : 0.85)
-          const base = it.kind === 'spark' ? 0.05 : it.kind === 'smoke' ? 1.1 : 0.12
-          const grow = it.kind === 'spark' ? 0.01 : it.kind === 'smoke' ? 2.4 : it.kind === 'blood' ? 0.15 : 0.4
+          sm.opacity = (1 - k) * (it.op ?? (it.kind === 'smoke' ? 0.5 : it.kind === 'spark' ? 1 : 0.85))
+          const base = it.base ?? (it.kind === 'spark' ? 0.05 : it.kind === 'smoke' ? 1.1 : 0.12)
+          const grow = it.grow ?? (it.kind === 'spark' ? 0.01 : it.kind === 'smoke' ? 2.4 : it.kind === 'blood' ? 0.15 : 0.4)
           const sc = base + k * grow
           s.scale.set(sc, sc, sc)
           break
@@ -291,20 +301,32 @@ export class Effects {
 
   /** small=true: suppressed muzzle (m4a1s/usp/mp5) — tiny star, dim glow, no light punch */
   muzzleFlash(at: THREE.Vector3, small = false) {
+    // suppressed multiplier — Task 83: finally affects the VISUALS too; the
+    // old spawn-time scale.set(...*.4) was dead code, overwritten by the
+    // renderer every frame, so suppressed flashes rendered full-size
+    const m = small ? 0.45 : 1
     // hot star core
     const s = this.sprite(this.starSpriteTex, at, true)
-    s.scale.set(0.22, 0.22, 0.22).multiplyScalar(small ? 0.4 : 1)
-    this.items.push({ obj: s, born: performance.now(), life: 0.055, kind: 'flash' })
+    s.scale.set(0.22 * m, 0.22 * m, 0.22 * m)
+    this.items.push({ obj: s, born: performance.now(), life: 0.055, kind: 'flash', scMul: m })
     // wide glow
     const g = this.sprite(this.flashSpriteTex, at, true)
-    g.scale.set(0.4, 0.4, 0.4).multiplyScalar(small ? 0.35 : 1)
-    this.items.push({ obj: g, born: performance.now(), life: 0.08, kind: 'flash' })
-    // smoke wisp
+    g.scale.set(0.4 * m, 0.4 * m, 0.4 * m)
+    this.items.push({ obj: g, born: performance.now(), life: 0.08, kind: 'flash', scMul: m })
+    // gas wisp — Task 83 ("reduce amount of gas exit from weapon"): was the
+    // shared smoke branch = a 1.1→3.5 m cloud at 50% opacity per shot, living
+    // 0.6 s and rising at 0.7 m/s — on auto fire ~6 giant clouds churned over
+    // the barrel. Now a 0.3→0.85 m wisp at 30% opacity, gone in a third of a
+    // second, drifting gently up: at peak ~50x less gas by area×opacity×time,
+    // still a visible exhaust. Explosion/blood smoke keep the big defaults.
+    // A/B measured live via __eng.gas() probe: OLD birth 1.11 m @ 50% op
+    // (peaks 3.5 m), NEW 0.33 m @ 30% op peak.
     const sm = this.sprite(this.smokeSpriteTex, at, false, 0xcbb693)
-    sm.scale.set(0.1, 0.1, 0.1).multiplyScalar(small ? 0.5 : 1)
+    sm.scale.set(0.1 * m, 0.1 * m, 0.1 * m)
     this.items.push({
-      obj: sm, born: performance.now(), life: 0.6, kind: 'smoke',
-      vel: new THREE.Vector3(0, 0.7, 0),
+      obj: sm, born: performance.now(), life: 0.32, kind: 'smoke',
+      vel: new THREE.Vector3(0, 0.35, 0),
+      base: 0.3 * m, grow: 0.55 * m, op: 0.3, grav: -0.3,
     })
     this.flashLight.position.copy(at)
     this.flashLight.intensity = small ? 0.9 : 3.2
@@ -344,6 +366,25 @@ export class Effects {
     }
     // bullet hole decal
     this.hole(at, n)
+  }
+
+  /** debug/testing hook (Task 83 gas verification): live sprite census by
+   * kind — count, max scale, and peak opacity of everything currently
+   * alive. Lets an in-page probe measure the muzzle gas at runtime without
+   * external screenshot frame-lottery (headless rAF throttling made
+   * screenshot A/B unreliable). */
+  aliveKinds(): Record<string, { n: number; maxSize: number; maxOp: number }> {
+    const out: Record<string, { n: number; maxSize: number; maxOp: number }> = {}
+    for (const it of this.items) {
+      const s = it.obj as THREE.Sprite
+      const scale = s?.scale?.x ?? 0
+      const op = ((s?.material as THREE.SpriteMaterial)?.opacity ?? 0) as number
+      const e = out[it.kind] ?? (out[it.kind] = { n: 0, maxSize: 0, maxOp: 0 })
+      e.n++
+      if (scale > e.maxSize) e.maxSize = Math.round(scale * 100) / 100
+      if (op > e.maxOp) e.maxOp = Math.round(op * 100) / 100
+    }
+    return out
   }
 
   private hole(at: THREE.Vector3, n: THREE.Vector3) {
