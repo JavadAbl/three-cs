@@ -1065,6 +1065,20 @@ function pbrSpec(s: SurfaceTex, mapId?: string): { tile: number; bump: number } 
   return (mapId && PBR_BY_MAP[mapId]?.[s]) || PBR[s]
 }
 
+/** Task 81 preloader: candidate URL chain for one surface file, in the exact
+ * order loadTexFirst tries them (below) — preloading the same URLs the
+ * loader will ask for is what makes the loader's own fetch an instant cache
+ * hit. Keep in sync with loadTexFirst. */
+export function texChain(base: string, mapId?: string): string[] {
+  if (!mapId) return [`/assets/textures/maps/${base}`, `/staging/textures/maps/${base}`]
+  return [
+    `/assets/textures/maps/${mapId}/${base}`,
+    `/staging/textures/maps/${mapId}/${base}`,
+    `/assets/textures/maps/${base}`,
+    `/staging/textures/maps/${base}`,
+  ]
+}
+
 /** Map id to scope materials under — only maps WITH a PBR_BY_MAP entry get
  * their own identity; everything else stays on the shared (bare-key) path,
  * byte-identical to pre-Task-77 behavior. */
@@ -1073,6 +1087,8 @@ export function pbrMapScope(mapId?: string): string | undefined {
 }
 
 const SURFACES = Object.keys(PBR) as SurfaceTex[]
+/** Task 81 preloader: every surface the map view will PBR-upgrade. */
+export const PBR_SURFACES: SurfaceTex[] = SURFACES
 let pbrKickStarted = false
 const pendingUpgrades: Array<[SurfaceTex, string | undefined]> = []
 export const pbrState: Record<string, 'idle' | 'loading' | 'ready' | 'failed'> = {}

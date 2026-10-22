@@ -65,6 +65,9 @@ let waiter: Promise<void> | null = null
 
 for (const id of Object.keys(ROUTES)) assets.set(id, { state: 'idle', proto: null })
 
+/** Task 81 preloader: every GLB route the match may ask for. */
+export const WEAPON_GLB_IDS: string[] = Object.keys(ROUTES)
+
 function loadOne(id: string): Promise<void> {
   const a = assets.get(id)!
   a.state = 'loading'

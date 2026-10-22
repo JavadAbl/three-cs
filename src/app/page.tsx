@@ -8,6 +8,8 @@ import { Hud } from '@/game/hud'
 import type { HudState, Engine } from '@/game/engine'
 import type { MapId } from '@/game/mapdata'
 import { MAP_LIST } from '@/game/mapdata'
+import { installAssetCache, preloadGameAssets, stageLabel } from '@/game/preloader'
+import type { LoadProgress } from '@/game/preloader'
 
 const LS_KEY = 'cs2web-settings-v1'
 
@@ -38,10 +40,54 @@ const phaseLabel: Record<string, string> = {
   warmup: 'WARMUP', freeze: 'FREEZE', live: 'LIVE', post: 'ROUND END', over: 'MATCH OVER',
 }
 
+// Task 81 loading bar state — the overlay between PLAY and the match. The
+// three asset stages come from preloadGameAssets; the warm stages
+// (textures/sounds/shaders) from engine.warmup()
+interface LoadPhase {
+  stage: string
+  done: number
+  total: number
+  pct: number    // 0..1 across BOTH halves (preload 0-70, warmup 70-100)
+  cached: boolean
+}
+
+const WARM_PCT: Record<string, number> = { textures: 0.78, sounds: 0.88, shaders: 0.96 }
+
+// Task 81 — CS2-style loading screen: map name, real progress bar, stage
+// text driven by the preloader + engine warmup. Shows "served from cache"
+// when the whole preload was IDB hits (every game after the first).
+function LoadingOverlay({ phase, mapName }: { phase: LoadPhase; mapName: string }) {
+  const WARM_LABEL: Record<string, string> = {
+    textures: 'PREPARING TEXTURES', sounds: 'DECODING SOUNDS', shaders: 'COMPILING SHADERS',
+  }
+  const label = phase.stage.startsWith('warmup:')
+    ? WARM_LABEL[phase.stage.slice(7)] ?? 'FINISHING'
+    : phase.stage === 'done'
+      ? (phase.cached ? 'READY — SERVED FROM CACHE' : 'READY')
+      : `${stageLabel(phase.stage)} · ${phase.done}/${phase.total}`
+  const pct = Math.round(phase.pct * 100)
+  return (
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black">
+      <div className="w-[560px] max-w-[85vw]">
+        <div className="mb-1 font-mono text-xs font-bold tracking-[0.4em] text-orange-500">LOADING</div>
+        <div className="mb-6 font-mono text-4xl font-black tracking-widest text-zinc-100">{mapName}</div>
+        <div className="h-3 w-full overflow-hidden rounded-full bg-zinc-800 ring-1 ring-zinc-700">
+          <div className="h-full rounded-full bg-orange-500 transition-all duration-200" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="mt-3 flex items-baseline justify-between font-mono text-xs tracking-widest text-zinc-400">
+          <span>{label}</span>
+          <span className="text-zinc-200">{pct}%</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const [screen, setScreen] = useState<'lobby' | 'game'>('lobby')
   const [hud, setHud] = useState<HudState | null>(null)
   const [open, setOpen] = useState({ buy: false, chat: false })
+  const [loadPhase, setLoadPhase] = useState<LoadPhase | null>(null)
   const [settings, setSettings] = useState<Settings>({ sens: 1, vol: 0.8, fov: 75 })
 
   // lobby form
@@ -65,9 +111,15 @@ export default function Home() {
   const openRef = useRef(open)
   const watchSockRef = useRef<Socket | null>(null)
   const engineOptsRef = useRef<{ room: string; map: MapId } | null>(null)
+  const loadGenRef = useRef(0)
 
   useEffect(() => { setSettings(loadSettings()) }, [])
   useEffect(() => { openRef.current = open }, [open])
+
+  // Task 81: install the persistent asset cache FIRST, so even the lobby
+  // warm-ups below (human model, weapon GLBs) populate it instead of pulling
+  // the same bytes again at PLAY.
+  useEffect(() => { installAssetCache() }, [])
 
   // Warm the character model (human.glb, ~7.6 MB) while the player is still
   // browsing the menu: the download then happens during lobby time, so hitting
@@ -164,17 +216,52 @@ export default function Home() {
   }, [screen])
 
   const quit = useCallback(() => {
+    loadGenRef.current++           // cancel any in-flight load pipeline
     engineRef.current?.dispose()
     engineRef.current = null
     setOpen({ buy: false, chat: false })
     setHud(null)
+    setLoadPhase(null)
     setScreen('lobby')
   }, [])
 
   const enterGame = useCallback((roomId: string, mapId: MapId) => {
     engineOptsRef.current = { room: roomId, map: mapId }
     setJoining(false)
-    setScreen('game')
+    const gen = ++loadGenRef.current
+    setLoadPhase({ stage: 'textures', done: 0, total: 1, pct: 0, cached: false })
+    setScreen('game')   // engine mounts in parallel; its fetches dedupe into the preload
+    ;(async () => {
+      const t0 = performance.now()
+      try {
+        await preloadGameAssets(mapId, (p) => {
+          if (loadGenRef.current !== gen) return
+          setLoadPhase(l => l ? { ...l, stage: p.stage, done: p.done, total: p.total, pct: p.pct * 0.7 } : l)
+        })
+        if (loadGenRef.current !== gen) return
+        const cached = performance.now() - t0 < 3000   // near-instant = IDB hits, not downloads
+        // engine mounts on screen==='game' while the preload runs — wait for it
+        let eng: Engine | null = null
+        for (let i = 0; i < 100 && loadGenRef.current === gen; i++) {
+          eng = engineRef.current
+          if (eng) break
+          await new Promise<void>(r => setTimeout(r, 100))
+        }
+        if (loadGenRef.current !== gen) return
+        if (eng) {
+          await eng.warmup((stage) => {
+            if (loadGenRef.current !== gen) return
+            setLoadPhase(l => l ? { ...l, stage: `warmup:${stage}`, pct: WARM_PCT[stage] ?? 0.9 } : l)
+          })
+        }
+        if (loadGenRef.current !== gen) return
+        setLoadPhase(l => l ? { ...l, stage: 'done', pct: 1, cached } : l)
+        console.log(`[preload] match ready in ${((performance.now() - t0) / 1000).toFixed(1)}s${cached ? ' (cached)' : ''}`)
+        setTimeout(() => { if (loadGenRef.current === gen) setLoadPhase(null) }, 300)
+      } catch {
+        if (loadGenRef.current === gen) setLoadPhase(null)   // never trap the player on the bar
+      }
+    })()
   }, [])
 
   const createServer = useCallback(() => {
@@ -407,10 +494,13 @@ export default function Home() {
   }
 
   // ---------------------------------------------------------------- game
+  const mapMeta = MAP_LIST.find(m => m.id === engineOptsRef.current?.map)
   return (
     <div className="fixed inset-0 bg-black">
       <canvas ref={canvasRef} className="block h-full w-full" />
-      {hud ? (
+      {loadPhase ? (
+        <LoadingOverlay phase={loadPhase} mapName={mapMeta?.name.toUpperCase() ?? 'MATCH'} />
+      ) : hud ? (
         <Hud s={hud} open={open} settings={settings} cb={{
           onBuy: (item) => engineRef.current?.buy(item),
           onChat: (text) => engineRef.current?.sendChat(text),

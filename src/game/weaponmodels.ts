@@ -76,6 +76,10 @@ const FALLBACK: Record<TexKey, { color: number; metalness: number; roughness: nu
   pcb_green:     { color: 0x1c3a26, metalness: 0.30, roughness: 0.60, density: 4.0 },
 }
 
+/** Task 81 preloader: every viewmodel material texture set (albedo/_n/_r —
+ * see getTex's three-suffix fetch). */
+export const WEAPON_TEX_KEYS: TexKey[] = Object.keys(FALLBACK) as TexKey[]
+
 function getTex(key: TexKey): TexEntry {
   let e = texDB.get(key)
   if (e) return e

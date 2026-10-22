@@ -16,6 +16,7 @@ import { PlayerManager } from './players'
 import { Effects, buildBombMesh, buildNadeMesh, SmokeCloud, FireZone } from './fx'
 import type { WorldFx } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
+import { pbrState } from './textures'
 import { preloadWeaponModels, buildGLBKnifeVM, buildGLBGunVM, weaponModelsState, GLB_VM_SCALE } from './weapongltf'
 import { userModelState } from './usermodel'
 import type { ViewModel } from './weaponmodels'
@@ -538,6 +539,52 @@ export class Engine {
     this.running = true
     this.lastT = performance.now()
     this.loop()
+  }
+
+  /**
+   * Task 81: settle every async asset job that would otherwise hitch mid-round,
+   * while the loading bar still covers the screen:
+   *   1. PBR upgrades — with the preloader's cache these resolve in
+   *      milliseconds instead of popping in mid-round with a shader recompile
+   *   2. sound pack decode — 252 .oggs; from cached blobs this is pure CPU
+   *      decode, done here rather than at first-listen
+   *   3. shader programs — renderer.compileAsync warms every program the
+   *      current scene needs, killing the classic first-look stutter
+   * Best-effort with deadlines: warm-up never blocks the game forever (a
+   * timeout just means the old lazy behavior for whatever is left).
+   */
+  async warmup(onStage?: (stage: string) => void): Promise<void> {
+    const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+    const deadline1 = performance.now() + 8000
+    onStage?.('textures')
+    while (performance.now() < deadline1) {
+      const busy = Object.values(pbrState).some(v => v === 'loading')
+      if (!busy) break
+      await sleep(80)
+    }
+    const deadline2 = performance.now() + 12000
+    onStage?.('sounds')
+    while (performance.now() < deadline2) {
+      const i = audio.info()
+      if (i.loaded + i.errors.length >= i.total) break
+      await sleep(120)
+    }
+    onStage?.('shaders')
+    try {
+      const rd = this.renderer as unknown as { compileAsync?: (s: THREE.Scene, c: THREE.Camera) => Promise<unknown> }
+      if (rd?.compileAsync) {
+        // deadline: on weak/software GPUs a full-scene compile can take tens of
+        // seconds — give it a head start behind the bar, then let the rest
+        // finish in the background (programs still warm up on first render)
+        await new Promise<void>((resolve) => {
+          let settled = false
+          const t = setTimeout(() => { if (!settled) { settled = true; resolve() } }, 15000)
+          rd.compileAsync!.call(this.renderer, this.scene, this.camera)
+            .then(() => { if (!settled) { settled = true; clearTimeout(t); resolve() } })
+            .catch(() => { if (!settled) { settled = true; clearTimeout(t); resolve() } })
+        })
+      }
+    } catch { /* warm-up is best-effort */ }
   }
 
   private bindEvents() {
