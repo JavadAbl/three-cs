@@ -87,6 +87,14 @@ export interface EngineOpts {
   sensitivity: number
   volume: number
   fov: number
+  /**
+   * Task 82 — join gate. While pending, connect() withholds the 'join' emit;
+   * the server's phase machine keeps the match dormant in 'warmup' (no
+   * startRound, no updateBots — bots can't fire and can't be heard) until a
+   * human joins, so nothing starts behind the loading bar. Resolve OR reject
+   * => join fires. Omitted => join fires on connect (legacy behavior).
+   */
+  readyGate?: Promise<unknown>
 }
 
 const PLAYER_R = 0.4
@@ -703,20 +711,43 @@ export class Engine {
   }
 
   // ---------------------------------------------------------------- net
+  // Task 82 — 'join' is deferred behind opts.readyGate (page.tsx resolves it
+  // when the loading bar finishes). Matches park in 'warmup' server-side
+  // (rounds + bot ticks only start when a human joins), so withholding join
+  // means bots can't shoot — and their gunfire can't reach this client —
+  // while assets are still downloading behind the bar.
+  private joinGateSettled = false
+
   private connect() {
     const socket = io('/?XTransformPort=3003', { path: '/' })
     this.socket = socket
 
     socket.on('connect', () => {
-      socket.emit('join', {
-        name: this.opts.name,
-        room: this.opts.room,
-        team: this.opts.team,
-        map: this.mapDef.id,
-        botFill: this.opts.botFill,
-        botDifficulty: this.opts.botDifficulty,
-        winTarget: this.opts.winTarget,
-      })
+      const emitJoin = () => {
+        if (this.disposed) return
+        socket.emit('join', {
+          name: this.opts.name,
+          room: this.opts.room,
+          team: this.opts.team,
+          map: this.mapDef.id,
+          botFill: this.opts.botFill,
+          botDifficulty: this.opts.botDifficulty,
+          winTarget: this.opts.winTarget,
+        })
+      }
+      const gate = this.opts.readyGate
+      if (this.joinGateSettled || !gate) {
+        this.joinGateSettled = true
+        return emitJoin()
+      }
+      const go = () => {
+        this.joinGateSettled = true
+        // Only emit while actually connected: if the socket dropped mid-load,
+        // a buffered emit + the reconnect path ('connect' → settled branch)
+        // would double-join. Let the next 'connect' carry the join instead.
+        if (socket.connected) emitJoin()
+      }
+      void Promise.resolve(gate).then(go, go)
     })
 
     socket.on('joinError', (d: { msg: string }) => {

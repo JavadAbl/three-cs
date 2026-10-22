@@ -67,7 +67,7 @@ function LoadingOverlay({ phase, mapName }: { phase: LoadPhase; mapName: string 
       : `${stageLabel(phase.stage)} · ${phase.done}/${phase.total}`
   const pct = Math.round(phase.pct * 100)
   return (
-    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black">
+    <div data-loading="1" className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black">
       <div className="w-[560px] max-w-[85vw]">
         <div className="mb-1 font-mono text-xs font-bold tracking-[0.4em] text-orange-500">LOADING</div>
         <div className="mb-6 font-mono text-4xl font-black tracking-widest text-zinc-100">{mapName}</div>
@@ -110,7 +110,7 @@ export default function Home() {
   const engineRef = useRef<Engine | null>(null)
   const openRef = useRef(open)
   const watchSockRef = useRef<Socket | null>(null)
-  const engineOptsRef = useRef<{ room: string; map: MapId } | null>(null)
+  const engineOptsRef = useRef<{ room: string; map: MapId; readyGate?: Promise<unknown> } | null>(null)
   const loadGenRef = useRef(0)
 
   useEffect(() => { setSettings(loadSettings()) }, [])
@@ -173,6 +173,7 @@ export default function Home() {
         team,
         room: engineOptsRef.current.room,
         map: engineOptsRef.current.map,
+        readyGate: engineOptsRef.current.readyGate,
         botFill,
         botDifficulty,
         winTarget,
@@ -226,7 +227,15 @@ export default function Home() {
   }, [])
 
   const enterGame = useCallback((roomId: string, mapId: MapId) => {
-    engineOptsRef.current = { room: roomId, map: mapId }
+    // Task 82 — the match is withheld behind the loading bar: the engine
+    // mounts and connects immediately (its fetches dedupe into the preload)
+    // but 'join' waits on this gate, and the server keeps the room dormant
+    // (warmup: no rounds, no bot ticks) until a human joins. Released when
+    // the bar finishes — or on any preload failure, so a broken asset can
+    // never lock the player out of the match.
+    let releaseJoin!: () => void
+    const readyGate = new Promise<void>(res => { releaseJoin = res })
+    engineOptsRef.current = { room: roomId, map: mapId, readyGate }
     setJoining(false)
     const gen = ++loadGenRef.current
     setLoadPhase({ stage: 'textures', done: 0, total: 1, pct: 0, cached: false })
@@ -257,9 +266,13 @@ export default function Home() {
         if (loadGenRef.current !== gen) return
         setLoadPhase(l => l ? { ...l, stage: 'done', pct: 1, cached } : l)
         console.log(`[preload] match ready in ${((performance.now() - t0) / 1000).toFixed(1)}s${cached ? ' (cached)' : ''}`)
+        releaseJoin()   // bar finished — the match may begin
         setTimeout(() => { if (loadGenRef.current === gen) setLoadPhase(null) }, 300)
       } catch {
-        if (loadGenRef.current === gen) setLoadPhase(null)   // never trap the player on the bar
+        // never trap the player: drop the bar AND open the gate even if the
+        // preload failed — worst case assets stream live, as pre-Task-81
+        if (loadGenRef.current === gen) setLoadPhase(null)
+        releaseJoin()
       }
     })()
   }, [])

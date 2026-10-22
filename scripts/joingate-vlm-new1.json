@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the image provided, this is a **loading screen** for the map \"Dust II\" (a famous map from Counter-Strike). It is **not** a live 3D game scene.\n\nHere are the specific details visible:\n\n*   **Loading Text:** The word \"**LOADING**\" is displayed in orange text above the map name.\n*   **Map Name:** \"**DUST II**\" is shown in large, bold white letters.\n*   **Progress Bar:** There is a horizontal progress bar that is currently very short (mostly dark grey with a small orange segment at the start).\n*   **Status Information:** Below the bar, it reads \"**LOADING TEXTURES · 10/327**\".\n*   **Percentage:** To the right of the status text, it shows \"**2%**\".\n\nThere is no HUD, scoreboard, killfeed, or pause menu present. The background is entirely black.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792681986,
+  "id": "2026102223130313b8565af7e14d1b",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102223130313b8565af7e14d1b",
+  "usage": {
+    "completion_tokens": 191,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1110,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1301
+  }
+}
