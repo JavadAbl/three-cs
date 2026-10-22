@@ -1594,3 +1594,19 @@ Stage Summary:
 - The match can no longer start behind the loading bar: 'join' is withheld until the bar finishes (or the preload fails open); the server keeps unjoined rooms dormant (warmup — no rounds, no bot ticks), so nothing can be heard while assets download
 - A/B socket evidence: OLD 27 bot shots DURING the 21s bar (init at 5%); NEW 0 events before join across a 119s cold bar (init at 98.5%), full match flow after — bots fire 793 times in the post-load window, so gameplay is delayed, never disabled
 - Caching (user's SW question): no service worker — Cache API + fetch interception + session memo (Task 81), verified persistent across reloads
+---
+Task ID: 83
+Agent: Super Z (main agent)
+Task: User: "reduse amount of gase exit from weapon when firing" — the per-shot muzzle gas/smoke was oversized
+
+Work Log:
+- ROOT CAUSE (fx.ts muzzleFlash): every shot — human or bot, any gun — spawned a 'smoke'-kind wisp that rode the SHARED smoke branch of the fx renderer: base 1.1 m growing 2.4 to a 3.5 m cloud at 50% opacity, living 0.6 s and rising at 0.7 m/s (negatively buoyant). On auto fire (~10 rps) that kept ~6 overlapping giant clouds churning over the barrel — the reported "gas". Explosion smoke-column and blood mist share that branch, so shrinking the defaults would have broken grenades
+- FIX (per-item renderer overrides, +34/−14 in fx.ts): FxItem gained optional base/grow/op/grav/scMul; the smoke/puff-family branch prefers per-item values over kind defaults; the flash branch honors scMul. muzzleFlash now tunes its own gas: a 0.3→0.85 m wisp at 30% opacity, 0.32 s life, rising 0.35 m/s with grav −0.3 (~50x less gas at peak by area×opacity×time, still a visible exhaust); suppressed guns multiply everything by 0.45. SIDE FIX discovered en route: the old spawn-time scale.set(...×0.4 for suppressed) was DEAD CODE — the renderer overwrote scale every frame, so suppressed muzzle flashes rendered FULL SIZE; scMul finally makes 'small' shrink the star+glow too
+- VERIFICATION WAR STORY: the first attempt (screenshot A/B mid-burst, Task-80-style) was defeated by the harness — headless rAF throttling (~4 fps) made setInterval clamp to ~1 Hz (2 shots in 3.2 s) and the 0.6 s clouds fell between screenshot frames; BOTH old and new frames showed "no gas" to the VLM — inconclusive. Built the deterministic tool instead: Effects.aliveKinds() census + __eng.gas() debug accessor, sampled from WITHIN the page per-rAF (immune to external latency). Then a live temp-swap A/B (old wisp restored in-place, probe kept): OLD single shot measured 1.11 m @ 50% op at first update (the k=0 floor of a curve that peaks 3.5 m at 60 fps; gone ~0.6-0.8 s), NEW single shot 0.15 m @ 29% op (k≈0 sample of the 0.3→0.85 curve; gone by ~0.32-0.75 s); in an active firefight 11 concurrent NEW wisps never exceeded 0.33 m / 30% op. Logs: scripts/muzzle-probe-{old,new}.json, muzzle-{old,new}.json, muzzle-vlm-*.json
+- REGRESSIONS: tsc src/ 0; bots-ai 26/26; buymenu 217/217; audio-map 332/332. Grenade/blood smoke untouched (shared defaults preserved — verified by the override-fallback path the old-side temp-swap exercised live)
+- OPS NOTES: (1) bare `return` at agent-browser eval top level is a SyntaxError — bursts must be IIFEs or they silently never arm; (2) "wait for overlay gone" probes must FIRST wait for the overlay to APPEAR (PLAY→render gap races the poll the other way)
+
+Stage Summary:
+- Muzzle gas per shot reduced ~50x at peak: 3.5 m cloud @ 50% opacity for 0.6 s → 0.85 m wisp @ 30% for 0.32 s, gently drifting; suppressed weapons now render genuinely small flashes too (previously full-size due to the dead-code bug)
+- Explosion/blood smoke unchanged; per-item override fields let any future fx caller tune itself without touching shared kind defaults
+- Live-measured A/B: old wisp 1.11 m birth size alone was 3.4x the new wisp's peak (0.33 m) measured in-game
