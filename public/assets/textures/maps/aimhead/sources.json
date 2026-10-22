@@ -5,8 +5,10 @@
     "albedo": "https://polyhaven.com/a/grass_path_2",
     "bytes": {
       "albedo": 278022,
-      "bump": 30145
-    }
+      "bump": 30145,
+      "normal": 289053
+    },
+    "normal": "https://polyhaven.com/a/grass_path_2 (1k nor_gl \u2014 OpenGL Y+)"
   },
   "brick": {
     "polyhaven_id": "mossy_cobblestone",
@@ -14,8 +16,10 @@
     "albedo": "https://polyhaven.com/a/mossy_cobblestone",
     "bytes": {
       "albedo": 326373,
-      "bump": 30612
-    }
+      "bump": 30612,
+      "normal": 264180
+    },
+    "normal": "https://polyhaven.com/a/mossy_cobblestone (1k nor_gl \u2014 OpenGL Y+)"
   },
   "dark": {
     "polyhaven_id": "mossy_rock",
@@ -23,8 +27,10 @@
     "albedo": "https://polyhaven.com/a/mossy_rock",
     "bytes": {
       "albedo": 333765,
-      "bump": 15755
-    }
+      "bump": 15755,
+      "normal": 256396
+    },
+    "normal": "https://polyhaven.com/a/mossy_rock (1k nor_gl \u2014 OpenGL Y+)"
   },
   "metal": {
     "polyhaven_id": "green_metal_rust",
@@ -32,8 +38,10 @@
     "albedo": "https://polyhaven.com/a/green_metal_rust",
     "bytes": {
       "albedo": 64431,
-      "bump": 44805
-    }
+      "bump": 44805,
+      "normal": 36057
+    },
+    "normal": "https://polyhaven.com/a/green_metal_rust (1k nor_gl \u2014 OpenGL Y+)"
   },
   "plank": {
     "polyhaven_id": "moss_wood",
@@ -41,7 +49,9 @@
     "albedo": "https://polyhaven.com/a/moss_wood",
     "bytes": {
       "albedo": 357953,
-      "bump": 18281
-    }
+      "bump": 18281,
+      "normal": 313693
+    },
+    "normal": "https://polyhaven.com/a/moss_wood (1k nor_gl \u2014 OpenGL Y+)"
   }
 }

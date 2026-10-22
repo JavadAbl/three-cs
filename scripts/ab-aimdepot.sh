@@ -1,73 +1,63 @@
 #!/bin/bash
-# Task 87 live proof: the AIM DEPOT crate-yard arena renders + plays as a
-# proper aim map. Joins as T (spawn 0,18 faces north over the arena):
-# - asserts map=aimdepot, inventory glock+knife (no c4), hasBomb/canPlant false
-# - 45s bot-fight census: shots/kills stream on the new waypoint graph,
-#   ZERO bomb/plantProgress events (Task 85 regression class)
-# - teleport-hop tour (<=13m hops @ >=500ms — Task-85 snap-back lesson):
-#   spawn view (covers the site-B decal zone) -> mid monolith view ->
-#   site A floor (red-pixel scan; decal must be absent)
-# Usage: ab-aimdepot.sh <out-prefix>
+# Task 90 Part A: position-verified in-game shots of the AIM DEPOT ambientCG
+# identity (the Task-88 set — bright sand yard, sandstone window walls,
+# charcoal concrete perimeter, warm wood crates, real normal maps).
+# Vantages: T-spawn panorama (spawn faces the yard, no teleport needed),
+# window-wall close-up (6,1.7,0) yaw 270 facing the x=+10 wall, and the mid
+# monolith from (0,1.7,6) yaw 0.
+# Usage: ab-aimdepot.sh <out-prefix>   (writes <prefix>-{spawn,windowwall,mid}.png)
 set -u
-ROOT=/home/z/my-project
-PRE="${1:-aimdepot-live}"
-mkdir -p "$ROOT/download" "$ROOT/scripts"
+PREFIX="$1"
 
 agent-browser set viewport 1280 720 >/dev/null 2>&1 || true
-agent-browser open http://localhost:81/ >/dev/null 2>&1
-sleep 6
+agent-browser open http://localhost:3000/ >/dev/null 2>&1
+sleep 7
 
-# difficulty -> normal
-agent-browser eval "(function(){var s=document.querySelector('select'); if(!s) return 'no select'; var setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set; setter.call(s,'normal'); s.dispatchEvent(new Event('change',{bubbles:true})); return 'difficulty='+s.value})()" 2>&1 | tail -1
-
-# map -> AIM DEPOT (4th map card)
-MAPBTN=$(agent-browser snapshot -i 2>/dev/null | rg -i "aim depot" | rg -o "e[0-9]+" | head -1 || true)
+MAPBTN=$(agent-browser snapshot -i 2>/dev/null | rg "AIM DEPOT" | rg -o "e[0-9]+" | head -1 || true)
 [ -n "$MAPBTN" ] && agent-browser click @$MAPBTN >/dev/null 2>&1 && echo "map: aim depot"
-
-# team -> TERRORIST
 TBTN=$(agent-browser snapshot -i 2>/dev/null | rg "TERRORIST" | rg -o "e[0-9]+" | head -1 || true)
 [ -n "$TBTN" ] && agent-browser click @$TBTN >/dev/null 2>&1 && echo "team: terrorist"
-
 PLAY=$(agent-browser snapshot -i 2>/dev/null | rg "▶ PLAY" | rg -o "e[0-9]+" | head -1 || true)
 [ -n "$PLAY" ] && agent-browser click @$PLAY >/dev/null 2>&1 && echo "launched play"
 
-# loading bar (cold context: up to ~125s) -> pause menu RESUME
-agent-browser wait --fn "document.body && document.body.innerText.toUpperCase().includes('RESUME')" --timeout 150000 >/dev/null 2>&1 || echo "WARN: no pause menu"
-agent-browser find text "RESUME" click >/dev/null 2>&1 || true
-agent-browser wait --fn "document.pointerLockElement !== null" --timeout 8000 >/dev/null 2>&1 || agent-browser eval "(function(){var o=document.querySelector('.z-50'); if(o){o.style.display='none'; return 'overlay hidden'} return 'no overlay'})()" 2>&1 | tail -1
-
-sleep 4
-# assert joined map + aim-map inventory state at spawn
-agent-browser eval "(function(){var e=window.__eng.state(); var h=window.__cs2hud; return JSON.stringify({map:e.map, phase:h.phase, inv:h.inventory, hasBomb:h.hasBomb, canPlant:h.canPlant, planted:h.bombPlanted})})()" 2>/dev/null | tee "$ROOT/scripts/${PRE}-spawn.json" | tail -1
-
-# arm the ONE-TIME census (rolling-buffer discipline + single onAny arm — Task-84/85 ops notes)
-agent-browser eval "(function(){var s=window.__eng.sock(); window.__ev={shots:0,kills:0,plantEv:0,rounds:0,other:{}}; s.onAny(function(t){ if(t==='shot')window.__ev.shots++; else if(t==='kill')window.__ev.kills++; else if(t==='bomb'||t==='plantProgress')window.__ev.plantEv++; else if(t==='round')window.__ev.rounds++; else if(t!=='snapshot'&&t!=='plantProgress')window.__ev.other[t]=(window.__ev.other[t]||0)+1 }); return 'census armed'})()" 2>&1 | tail -1
-
-# shot 1: spawn view — T at (0,18) facing north: full arena + the site-B decal
-# zone (0,14) sits 4m ahead — a decal would be unmissable if the gate failed
-agent-browser screenshot "$ROOT/download/${PRE}-1-spawn.png" >/dev/null 2>&1 && echo "shot 1: spawn view"
-
-# 45s bot-fight window (normal difficulty: rifle buys, mid + lane pushes)
-sleep 45
-agent-browser eval "JSON.stringify(window.__ev)" 2>/dev/null | tee "$ROOT/scripts/${PRE}-census.json" | tail -1
-
-# hop-train to mid monolith view: (0,18) -> (0,8) -> (-4,4); yaw 0 = face north
-agent-browser eval "(function(){window.__eng.teleport(0,0.05,8,0); return 'hop1 midS (0,8)'})()" 2>&1 | tail -1
-sleep 0.7
-agent-browser eval "(function(){window.__eng.teleport(-4,0.05,4,0); return 'hop2 hSW (-4,4)'})()" 2>&1 | tail -1
+agent-browser wait --fn "document.body && document.body.innerText.toUpperCase().includes('RESUME')" --timeout 240000 >/dev/null 2>&1 || echo "WARN: no pause menu appeared"
 sleep 1
-agent-browser screenshot "$ROOT/download/${PRE}-2-mid.png" >/dev/null 2>&1 && echo "shot 2: mid monolith view"
+agent-browser find text "RESUME" click >/dev/null 2>&1 || echo "WARN: RESUME click failed"
+agent-browser wait --fn "document.pointerLockElement !== null" --timeout 8000 >/dev/null 2>&1 \
+  || agent-browser eval "(function(){var o=document.querySelector('.z-50'); if(o){o.style.display='none'; return 'overlay hidden'} return 'no overlay'})()" 2>&1 | tail -1
 
-# hop-train on to site A floor: (-4,4) -> (0,-3) -> (0,-12)
-agent-browser eval "(function(){window.__eng.teleport(0,0.05,-3,0); return 'hop3 (0,-3)'})()" 2>&1 | tail -1
-sleep 0.7
-agent-browser eval "(function(){window.__eng.teleport(0,0.05,-12,0); return 'hop4 site A (0,-12)'})()" 2>&1 | tail -1
-sleep 1
-agent-browser screenshot "$ROOT/download/${PRE}-3-siteA.png" >/dev/null 2>&1 && echo "shot 3: site A floor view"
+agent-browser wait --fn "window.__pbrState && window.__pbrState['aimdepot:sand'] === 'ready'" --timeout 30000 >/dev/null 2>&1 || echo "WARN: aimdepot:sand not ready"
+sleep 2   # normal-map hot-swaps land shortly AFTER the 'ready' state
 
-echo "=== final state ==="
-agent-browser eval "(function(){var h=window.__cs2hud; return JSON.stringify({phase:h.phase, planted:h.bombPlanted, canPlant:h.canPlant, ev:window.__ev})})()" 2>/dev/null | tee "$ROOT/scripts/${PRE}-final.json" | tail -1
+# shot 1: spawn panorama (T spawn faces the yard — no teleport needed)
+agent-browser screenshot "$PREFIX-spawn.png" >/dev/null 2>&1
+echo "shot: $PREFIX-spawn.png"
 
-echo "=== red-pixel scans (decal detector; HUD-cluster-only == decal-free, Task-85 baseline ~40-50) ==="
-python3 "$ROOT/scripts/red-pixel-scan.py" "$ROOT/download/${PRE}-1-spawn.png" 2>&1 | tail -2
-python3 "$ROOT/scripts/red-pixel-scan.py" "$ROOT/download/${PRE}-3-siteA.png" 2>&1 | tail -2
+# teleports only stick during live (freeze enforces a 1.5 m server leash)
+agent-browser wait --fn "window.__eng && window.__eng.state().phase === 'live'" --timeout 90000 >/dev/null 2>&1 || echo "WARN: never live"
+sleep 0.5
+
+hop() {
+  agent-browser eval "(function(){ if (window.__hop) clearInterval(window.__hop); window.__hop = setInterval(function(){ var s = window.__eng.state(); var dx = $1 - s.pos[0], dz = $3 - s.pos[2]; var d = Math.hypot(dx, dz); if (d < 0.4) { clearInterval(window.__hop); window.__hop = null; return } var k = Math.min(d, 9) / d; window.__eng.teleport(s.pos[0] + dx * k, $2, s.pos[2] + dz * k, $4) }, 150); return 'hop armed' })()" >/dev/null 2>&1
+  agent-browser wait --fn "window.__hop === null || window.__hop === undefined" --timeout 30000 >/dev/null 2>&1 || echo "WARN: hop train to $1,$3 unfinished"
+  agent-browser eval "window.__eng.teleport($1, $2, $3, $4)" >/dev/null 2>&1
+  sleep 0.8
+}
+
+shot() {
+  agent-browser screenshot "$1" >/dev/null 2>&1
+  POS=$(agent-browser eval "JSON.stringify(window.__eng.state().pos)" 2>/dev/null | tr -d '"' || echo "?")
+  echo "shot: $1 (pos $POS)"
+}
+
+# shot 2: window-wall close-up — x=+10 wall from 4 m, sandstone brick relief
+hop 6 1.7 0 270
+shot "$PREFIX-windowwall.png"
+
+# shot 3: mid monolith from the south lane — crates + yard + far window wall
+hop 0 1.7 6 0
+shot "$PREFIX-mid.png"
+
+NORMLOADED=$(agent-browser eval "(function(){ var r = performance.getEntriesByType('resource').filter(function(e){return e.name.indexOf('_normal.jpg') >= 0}).map(function(e){return e.name.split('/').pop()}); return JSON.stringify(r) })()" 2>/dev/null | tail -1)
+echo "normal-jpg resources fetched: $NORMLOADED"
+echo "done: $PREFIX-{spawn,windowwall,mid}.png"
