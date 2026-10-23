@@ -10,8 +10,11 @@ set -u
 PREFIX="$1"
 
 agent-browser set viewport 1280 720 >/dev/null 2>&1 || true
-agent-browser open http://localhost:3000/ >/dev/null 2>&1
-sleep 7
+agent-browser open http://localhost:81/ >/dev/null 2>&1
+# menu wait: a cold Next compile (fresh session or a src swap) delays first paint
+# past any fixed sleep — poll until the menu's map cards render, then click
+for _ in $(seq 1 45); do agent-browser snapshot -i 2>/dev/null | rg -q "QUICK PLAY" && break; sleep 1; done
+sleep 1
 
 MAPBTN=$(agent-browser snapshot -i 2>/dev/null | rg "AIM DEPOT" | rg -o "e[0-9]+" | head -1 || true)
 [ -n "$MAPBTN" ] && agent-browser click @$MAPBTN >/dev/null 2>&1 && echo "map: aim depot"
@@ -20,7 +23,7 @@ TBTN=$(agent-browser snapshot -i 2>/dev/null | rg "TERRORIST" | rg -o "e[0-9]+" 
 PLAY=$(agent-browser snapshot -i 2>/dev/null | rg "▶ PLAY" | rg -o "e[0-9]+" | head -1 || true)
 [ -n "$PLAY" ] && agent-browser click @$PLAY >/dev/null 2>&1 && echo "launched play"
 
-agent-browser wait --fn "document.body && document.body.innerText.toUpperCase().includes('RESUME')" --timeout 240000 >/dev/null 2>&1 || echo "WARN: no pause menu appeared"
+agent-browser wait --fn "document.body && document.body.innerText.toUpperCase().includes('RESUME')" --timeout 360000 >/dev/null 2>&1 || echo "WARN: no pause menu appeared"
 sleep 1
 agent-browser find text "RESUME" click >/dev/null 2>&1 || echo "WARN: RESUME click failed"
 agent-browser wait --fn "document.pointerLockElement !== null" --timeout 8000 >/dev/null 2>&1 \

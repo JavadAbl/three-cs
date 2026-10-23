@@ -1,9 +1,13 @@
 // E2E test for the aimhead BSP-converted map
 // - join aimhead room with bots
-// - verify: spawn positions sane (standable), round flow, bots navigate, LOS boxes exist
+// - verify: spawn positions sane (standable), round flow, bots navigate,
+//   the identity-files-served guard (Task 90: 5 aztec surfaces x albedo+bump+normal
+//   must ship with the repo — any 404 = silent shared-fallback / bump-only downgrade),
+//   and the Task-85 no-bomb trio (aim maps are elimination-only)
 import { io } from 'socket.io-client'
 
 const URL = 'http://localhost:3003'
+const WEB = process.env.WEB_BASE ?? 'http://localhost:3000'   // Next dev/prod host serving /assets
 const ROOM = 'aimhead-test-' + Math.random().toString(36).slice(2, 6)
 const sock = io(URL, { path: '/' })
 
@@ -36,7 +40,7 @@ function finish() {
   finished = true
   console.log('\n===== RESULTS =====')
   for (const [k, v] of Object.entries(results)) console.log(`${k.padEnd(20)} ${v}`)
-  const need = ['map-served', 'spawn-standable', 'bots-move', 'round-flow', 'no-bomb-carrier', 'no-c4-inventory', 'no-plant-events']
+  const need = ['map-served', 'spawn-standable', 'bots-move', 'round-flow', 'identity-files-served', 'no-bomb-carrier', 'no-c4-inventory', 'no-plant-events']
   const allPass = need.every(k => results[k]?.startsWith('PASS'))
   console.log('=====', allPass ? 'ALL PASS' : 'INCOMPLETE/FAILED', '=====')
   sock.disconnect()
@@ -44,6 +48,21 @@ function finish() {
 }
 
 sock.on('connect', () => {
+  // Task 90: the aimhead identity dir ships 5 aztec surfaces x (albedo+bump+normal).
+  // All 15 must be 200 over HTTP — a 404 would silently fall back to the shared
+  // desert set (albedo/bump) or the bump-only look (normal) with no other test noticing.
+  ;(async () => {
+    const missing: string[] = []
+    for (const s of ['sand', 'brick', 'dark', 'metal', 'plank']) {
+      for (const suffix of ['', '_bump', '_normal']) {
+        const r = await fetch(`${WEB}/assets/textures/maps/aimhead/${s}${suffix}.jpg`, { method: 'HEAD' })
+        if (r.status !== 200) missing.push(`${s}${suffix}.jpg=${r.status}`)
+      }
+    }
+    done('identity-files-served', missing.length === 0,
+      missing.length === 0 ? 'all 15 aimhead identity files served'
+        : `missing: ${missing.join(', ')}`)
+  })().catch(e => done('identity-files-served', false, `fetch error: ${e}`))
   sock.emit('join', { name: 'MapTester', room: ROOM, team: 'CT', map: 'aimhead', botFill: true, botDifficulty: 'easy', winTarget: 16 })
 })
 
