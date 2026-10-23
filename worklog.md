@@ -1735,3 +1735,19 @@ Stage Summary:
 - The real-normal PBR upgrade now covers all four maps: aimdepot (ambientCG set, Task 88) + dust2 (scoped shared-set normals) + aimhead (aztec normals); every identity file set is guarded by a standing files-served test (12+15+10)
 - The relief upgrade is proven at three layers: network fetch lists (before [] / after full), VLM A/B verdicts (both maps: relief wins, look preserved), and pixel statistics (aimhead artifact claim disproven 11.2% -> 1.0% dark)
 - The parallel-session collision is fully reconciled in history: 43c1063 (reworded Task 90 content) + b9dcba5 (merge with the already-pushed cf295a7); lesson banked — check the worklog + reflog + origin/main BEFORE starting work in this repo, another session may be mid-flight
+
+---
+Task ID: 91
+Agent: Super Z (main agent)
+Task: User: "ok push updates" — verify the GitHub publish state for the Task-90 work (the handoff summary was stale: it predated the Task-90 execution and claimed Task 90 unstarted / remote at cf295a7)
+
+Work Log:
+- State on arrival contradicted the stale handoff summary on both counts: local HEAD was already 60fa3bc (Task 90 complete — content 43c1063, reconciliation merge b9dcba5, tests+worklog 60fa3bc), working tree clean, git status 0/0 vs origin/main — nothing was ever pending
+- Live remote verification: anonymous ls-remote → refs/heads/main = 60fa3bcf = local HEAD exactly; main is the only ref in the repo (no forgotten branches or tags); anonymous read works = repo public
+- Publish forensics (why no record existed): reflog shows origin/main fast-forwarded cf295a7 → 60fa3bc at 2026-10-23 16:07:53 UTC via `fetch origin`, five seconds after the 60fa3bc commit (16:07:48) — the prior session ran its standard commit → push → fetch-verify sequence but ran out of context before appending a publish note; the Task-90 worklog entry lives INSIDE 60fa3bc so it cannot record its own push
+- Remote content spot-checks (raw.githubusercontent @ 60fa3bc, 8/8 HTTP 200): dust2/sources.json, dust2/wall_normal.jpg, dust2/sand_normal.jpg, aimhead/sand_normal.jpg, aimdepot/sources.json, scripts/fetch-normal-maps.py, scripts/test-dust2.ts, src/game/textures.ts — and the atomic-ref rule (GitHub advances a ref only after every object has landed) makes full content completeness certain beyond the samples
+- No credential needed or used this session: nothing was pushed because nothing was pending; all earlier PATs were chat-exposed and should stay revoked/rotated
+
+Stage Summary:
+- Task 90 (dust2 + aim_headshot real-normal PBR) is CONFIRMED PUBLISHED: github.com/JavadAbl/three-cs main = 60fa3bc, byte-identical to local — all four maps' PBR work is public on GitHub
+- The worklog publish-record gap is closed; THIS entry is the only commit not yet on origin — publish it with the user's next fresh PAT (pasted tokens get revoked by policy)
