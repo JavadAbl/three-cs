@@ -1,13 +1,14 @@
 {
  "sand": {
-  "asset": "Ground054",
+  "asset": "PavingStones034",
   "site": "ambientcg.com",
   "license": "CC0 1.0",
-  "url": "https://ambientcg.com/a?id=Ground054",
+  "url": "https://ambientcg.com/a?id=PavingStones034",
+  "task": "92 \u2014 user: ground should not be sand (popular-list pick); VLM A/B over 8 hardscape candidates (scripts/.tmp/ground-candidates-t92)",
   "files": {
-   "sand.jpg": 307698,
-   "sand_bump.jpg": 29692,
-   "sand_normal.jpg": 345664
+   "sand.jpg": 325439,
+   "sand_bump.jpg": 50332,
+   "sand_normal.jpg": 436985
   }
  },
  "brick": {

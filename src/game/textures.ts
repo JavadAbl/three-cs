@@ -1079,11 +1079,10 @@ const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, PbrSpec>>> = {
   },
   aimdepot: {
     // ambientCG 1K sets (CC0, ambientcg.com — user-shared source site) — VLM
-    // A/B over 16 candidates (candidates-sheet.jpg): bright sand yard framed
-    // by dark walls. Provenance + fetch pipeline: sources.json in the
-    // aimdepot texture dir (HuggingFace tar mirror; ambientcg.com is TCP-
-    // blocked from the build box).
-    sand:  { tile: 10,  bump: 0.8, normal: 0.85 }, // Ground054 — clean bright desert sand
+    // A/B picks (Tasks 88 + 92): grey pavement yard framed by dark walls.
+    // Provenance + fetch pipeline: sources.json in the aimdepot texture dir
+    // (HuggingFace tar mirror; ambientcg.com is TCP-blocked from the box).
+    sand:  { tile: 8,   bump: 0.8, normal: 0.85 }, // PavingStones034 — city pavement pavers (Task 92: user — ground must not be sand; VLM pick of 8 hardscape candidates, mid-grey depot fit; tile 10->8 for believable paver scale)
     brick: { tile: 2.2, bump: 1.3, normal: 1.1  }, // Bricks083 — tan medieval sandstone blocks
     wall:  { tile: 4.5, bump: 0.9, normal: 0.7  }, // Concrete044A — smooth charcoal concrete (tile raised 3.0->4.5 iter2: form-work band tiled visibly on the 64 m perimeter walls — Task-74 remedy)
     crate: { tile: 1.5, bump: 1.3, normal: 1.0  }, // Wood092 — warm fine crate wood (tile 1.2->1.5 iter2: finer grain, less vertical smear)

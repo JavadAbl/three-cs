@@ -1751,3 +1751,22 @@ Work Log:
 Stage Summary:
 - Task 90 (dust2 + aim_headshot real-normal PBR) is CONFIRMED PUBLISHED: github.com/JavadAbl/three-cs main = 60fa3bc, byte-identical to local — all four maps' PBR work is public on GitHub
 - The worklog publish-record gap is closed; THIS entry is the only commit not yet on origin — publish it with the user's next fresh PAT (pasted tokens get revoked by policy)
+
+---
+Task ID: 92
+Agent: Super Z (main agent)
+Task: User: "aim depot ground should not be sand. change it." (+ ambientCG popular-list link) and "also there is 2 hanging arcs. remove them"
+
+Work Log:
+- FORENSICS on the "2 hanging arcs": no arc geometry exists in mapdata/details — live VLM over ab-aimdepot shots + 3 rapid same-vantage frames identified them as BOT TRACER STREAKS: the 10-bot aimdepot duels spray ~a dozen 75 ms additive cylinder streaks across the yard at once (gas() census: 11 alive mid-firefight, 0 during quiet), the long cross-map ones read as slightly-curved white lines "hanging" over the arena. Freeze-phase census tracer=0 proved NO cleanup bug — purely visual density
+- FIX 1 (arcs): fx.ts Effects gains `tracersOff` (checked in tracer()); engine sets it from mapDef.id === 'aimdepot' at construction AND in rebuildMap (map switches stay correct). Muzzle flashes + impacts still telegraph every firefight; other maps keep tracers
+- FIX 2 (ground): re-skinned the aimdepot ground slot from Ground054 desert sand to PavingStones034 (city pavement pavers — ambientCG CC0, popular list). ambientcg.com still TCP-blocked; candidates came from the HuggingFace tar mirror: the ranged binary-search fetch was too slow (10 min timeout), so scripts/fetch-ground-candidates-t92b.py downloads tar_00+tar_02 in full via curl -C - (foreground — the platform reaper kills background survivors, re-learned) and extracts locally; 8 hardscape candidates extracted (PavingStones034/013/061, Concrete026/037, Asphalt013, Gravel023/035), VLM A/B picked PavingStones034 (mid-grey depot fit, clean 8-10 m tiling) with Concrete037 runner-up and 061/026 flagged as bad-tiling risks
+- Files: aimdepot sand.jpg/sand_bump.jpg/sand_normal.jpg/sand_meta.json overwritten via scripts/process-aimdepot-ground-t92.py (Task-88 conventions: albedo 1024 q82, disp->bump 512 q80, NormalGL 1024 q85 linear; game surface key stays 'sand' so mapdata is untouched — both copies included); PBR_BY_MAP aimdepot.sand retuned tile 10->8 (believable paver scale), sources.json provenance updated
+- VERIFY-LIVE (the :81 entry, ab-aimdepot.sh): first AFTER pass showed tracers gone but ground STILL sand — browser HTTP cache held the old sand.jpg (same filename); busted via fetch(...,{cache:'reload'}) on the 3 ground files + page reload. Second pass VLM: ground = grey city-pavement pavers, fits tan sandstone + charcoal concrete, no tiling seams, NO white streaks, no render bugs; live gas() tracer=0 through firefights; pbrState aimdepot:sand ready
+- REGRESSIONS: aimdepot 8/8, aimhead 8/8, dust2 6/6 (incl. positive bomb-carrier), game-server clean (rounds=1, 176 snapshots), bugfixes ALL PASS, bots 26/26, buymenu 217/217, audio 332/332 (bun — npx tsx chokes on its top-level await, CJS transform); tsc src/ + mini-services/ = 0 (baseline noise confined to scripts/examples/skills)
+- 1.7 GB mirror tars deleted after extraction (reproducible: curl -C - the two dataset URLs; candidates kept in scripts/.tmp/ground-candidates-t92)
+
+Stage Summary:
+- AIM DEPOT ground is now grey city-pavement pavers (PavingStones034, CC0) — the sandy yard look is gone, depot aesthetic complete; provenance + fetch scripts committed for reproduction
+- The "hanging arcs" are gone: aimdepot runs tracer-free by design (map-scoped fx.tracersOff flag — one-line opt-in for any future map), muzzle flash + impacts carry the firefight readability
+- Not yet pushed (no PAT): Task 91 (worklog) + this commit await the user's next fresh token

@@ -358,6 +358,9 @@ export class Engine {
     this.scene.add(details.group)
     this.map.raycastMeshes.push(...details.raycastMeshes)
     this.fx = new Effects(this.scene)
+    // Task 92: no tracer streaks in the crate-yard arena (10 bots dueling
+    // across the lanes read as permanent hanging arcs over the yard)
+    this.fx.tracersOff = this.mapDef.id === 'aimdepot'
     this.pm = new PlayerManager(this.scene, this.myTeam)
     // start weapon PBR texture downloads early so viewmodels never pop in mid-round
     preloadWeaponTextures()
@@ -2258,6 +2261,8 @@ export class Engine {
     }
     this.mapDef = def
     this.applyAtmosphere(mapId)   // Task 77: fog + light palette per map
+    // Task 92: tracers return on every other map, die on the aim arena
+    if (this.fx) this.fx.tracersOff = mapId === 'aimdepot'
     this.map = buildMap(this.scene, def)
     const details = buildDetails(def)
     details.group.userData.isDetails = true

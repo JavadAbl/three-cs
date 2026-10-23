@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the three frames provided:\n\n*   **Persistence:** The bright white elongated streaks (bullet tracers) are **transient**. They **do not** stay in the same place across all three frames. \n    *   In the **first frame**, there are two prominent, slightly curved white streaks visible in the background on the right side of the screen.\n    *   In the **second frame**, these streaks have completely **vanished**.\n    *   In the **third frame**, a new, single prominent white streak has appeared near the bottom center/right of the screen.\n\n*   **Shape and Count:** Yes, the streaks in the first frame appear slightly **curved like an arc**. There are **not** exactly two prominent ones across all frames; there are two in the first frame, zero in the second, and one in the third.\n\n**Description of the two most prominent streaks' positions in each frame:**\n*   **Frame 1:** Two prominent, curved white streaks are located in the background on the **right side** of the image, appearing to arc upwards and to the right behind the menu.\n*   **Frame 2:** There are **no** prominent white streaks visible; the background is clear of tracers.\n*   **Frame 3:** One prominent, straight/vertical white streak is located in the lower portion of the screen, slightly to the **right of the center**, extending upwards from the bottom edge.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792781489,
+  "id": "20261024025124f02c51a59ce1473d",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261024025124f02c51a59ce1473d",
+  "usage": {
+    "completion_tokens": 305,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 3277,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3582
+  }
+}

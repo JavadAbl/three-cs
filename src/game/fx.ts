@@ -95,6 +95,10 @@ const MAX_DECALS = 48
 
 export class Effects {
   private scene: THREE.Scene
+  /** Task 92: map-level tracer kill-switch (aimdepot: bots' constant cross-yard
+   *  fire painted ~a dozen 75 ms streaks across the sky at once — the user's
+   *  "2 hanging arcs"). Impacts/muzzle flashes unaffected. */
+  tracersOff = false
   private items: FxItem[] = []
   private decals: Array<{ mesh: THREE.Mesh; mat: THREE.Material; born: number; life: number }> = []
   private flashSpriteTex = flashTex()
@@ -284,6 +288,10 @@ export class Effects {
   }
 
   tracer(from: THREE.Vector3, to: THREE.Vector3) {
+    // Task 92: aimdepot's 10-bot constant cross-yard duels fill the sky with
+    // these 75 ms streaks — the user reads them as "hanging arcs". Maps can
+    // silence them wholesale; muzzle flash + impacts still read the firefight.
+    if (this.tracersOff) return
     const len = from.distanceTo(to)
     if (len < 1) return
     const geo = new THREE.CylinderGeometry(0.02, 0.02, len, 5, 1, true)
