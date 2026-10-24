@@ -408,7 +408,7 @@ interface RifleSpec {
 const RIFLES: Record<'galil' | 'famas' | 'sg553' | 'aug' | 'm4a1s', RifleSpec> = {
   // T budget rifle: polymer AK-ish, tall front sight, long 35-rd curved mag
   galil: { layout: 'conv', bodyLen: 0.26, bodyH: 0.07, bodyW: 0.05, bodyCol: 0x25282a, handLen: 0.15, handCol: 0x25282a, barrelR: 0.010, barrelLen: 0.13, muzzleZ: -0.50, magLen: 0.20, magSegs: 4, stockCol: 0x25282a },
-  // CT bullpup: carry handle, mag ahead of the grip, 3-round burst
+  // CT bullpup: carry handle, mag behind the grip (full-auto since Task 105)
   famas: { layout: 'bullpup', bodyLen: 0.34, bodyH: 0.06, bodyW: 0.048, bodyCol: 0x2a2d30, handLen: 0.16, handCol: 0x25282a, barrelR: 0.009, barrelLen: 0.08, muzzleZ: -0.42, magLen: 0.13, magSegs: 2, stockCol: 0x1f2224, carryHandle: true },
   // T scoped: compact optic, 100% armor pen, skeleton stock
   sg553: { layout: 'conv', bodyLen: 0.24, bodyH: 0.06, bodyW: 0.05, bodyCol: 0x232629, handLen: 0.16, handCol: 0x25282a, barrelR: 0.010, barrelLen: 0.12, muzzleZ: -0.48, magLen: 0.17, magSegs: 3, stockCol: 0x25282a, optic: 'small' },

@@ -38,11 +38,11 @@ for (const id of NEW) {
 
 // --- 2. mechanics schema ---
 const famas = WEAPONS.famas
-check('famas is the 3-round burst gun (schema)',
-  famas.fireMode === 'burst' && famas.burstRounds === 3 && famas.burstDelayMs === 75 &&
-  famas.fireDelay === 400 && famas.auto === false && fireModeOf(famas) === 'burst')
-check('famas is the ONLY burst weapon',
-  Object.values(WEAPONS).every(w => w.id === 'famas' ? w.fireMode === 'burst' : w.fireMode !== 'burst'))
+check('famas is full-auto (Task 105: user retired the burst)',
+  famas.fireMode === 'auto' && famas.auto === true && famas.fireDelay === 90 &&
+  famas.burstRounds === undefined && famas.burstDelayMs === undefined && fireModeOf(famas) === 'auto')
+check('NO weapon is burst anymore (machinery dormant)',
+  Object.values(WEAPONS).every(w => w.fireMode !== 'burst'))
 check('scoped rifles: sg553/aug 1 level + zoomFov 25',
   scopeLevelsOf(WEAPONS.sg553) === 1 && zoomFovOf(WEAPONS.sg553) === 25 &&
   scopeLevelsOf(WEAPONS.aug) === 1 && zoomFovOf(WEAPONS.aug) === 25)

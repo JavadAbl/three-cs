@@ -7,8 +7,8 @@ and it must NOT be restored from anywhere. The game runs the procedural
 soldier rig for all players until a NEW model is dropped into staging; the
 user will supply a better one later.
 
-**Weapon model status (2026-10-24): FOUR accepted weapon models — ak47,
-ak74, galil, m4.**
+**Weapon model status (2026-10-24): FIVE accepted weapon models — ak47,
+ak74, galil, m4, famas.**
 The CC0 Quaternius "Ultimate Guns Pack" (33 GLBs staged 2026-10-19 for
 live evaluation) was **rejected by the user** ("wipe all weapon models.
 they are not good, il find new models") — every staged GLB and raw-pack
@@ -23,7 +23,16 @@ the same day** ("accept ak74") — committed at
 (`upload/galil_ar_counter_strike_2.glb`, a Counter-Strike 2 game rip) was
 integrated 2026-10-20 (Task 70, orientation fixed via cross-section muzzle
 detect + rotY 180°) and **accepted 2026-10-21** ("Galil accepted.") —
-committed at `public/assets/models/weapons/galil.glb`. Every other weapon
+committed at `public/assets/models/weapons/galil.glb`. The user's Sketchfab
+M4 upload (`upload/m4.glb`) was integrated 2026-10-24 (Task 104, model +
+the user's own fire sound) and accepted the same day with the request
+itself ("replace m4a4 with this new one") — committed at
+`public/assets/models/weapons/m4.glb`. The user's Sketchfab FAMAS upload
+with the "Plasmas" CS:GO skin (`upload/famas_-_csgo__plasmas.glb`) was
+integrated 2026-10-24 (Task 105, same instruction pattern — "change famas
+model to this"; the burst was retired to full-auto in the same task) and
+accepted with the request itself — committed at
+`public/assets/models/weapons/famas.glb`. Every other weapon
 id runs **procedural** (parts-animated viewmodels + remote stubs); the
 drop-in pipeline below stays live and waiting for more models.
 
@@ -63,7 +72,7 @@ recognize it as a downloadable file:
 - The model is preloaded while the lobby menu is open, so starting a match
   never triggers a fresh download.
 
-## Weapon GLBs (pipeline LIVE — three accepted models: ak47, ak74, galil)
+## Weapon GLBs (pipeline LIVE — five accepted models: ak47, ak74, galil, m4, famas)
 
 Drop a GLB at **`public/staging/models/weapons/<weaponId>.glb`** (gitignored,
 evaluative) or `public/assets/models/weapons/<weaponId>.glb` (accepted,
@@ -177,6 +186,7 @@ Served as plain static files (fetched lazily by `attachNightSky` on aimdepot onl
 | ak74 | `public/assets/models/weapons/ak74.glb` (committed; baked from the user's `upload/ak-74m.glb` via `scripts/bake-ak74.ts` + `compress-glb.sh`) | the user's own upload | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/ak-74m.glb` |
 | galil | `public/assets/models/weapons/galil.glb` (committed; baked from the user's `upload/galil_ar_counter_strike_2.glb` via `scripts/bake-galil.ts` + `compress-glb.sh`) | the user's own upload (Counter-Strike 2 game rip, internal name `GalilAr_CS2_weapon_rif_galilar`) | **not verified** (game-rip asset, no license; dev-only waiver applies) | uploaded directly to `upload/galil_ar_counter_strike_2.glb` |
 | m4 | `public/assets/models/weapons/m4.glb` (committed; baked from the user's `upload/m4.glb` via `scripts/bake-m4.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab export, generator "Sketchfab-12.65.0", FBX conversion) | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/m4.glb` (with `upload/m4.mp3`, the new fire sound) |
+| famas | `public/assets/models/weapons/famas.glb` (committed; baked from the user's `upload/famas_-_csgo__plasmas.glb` via `scripts/bake-famas.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab export, generator "Sketchfab-12.66.0", "FAMAS - CSGO | Plasmas" skin, PNG baseColor) | **not verified** (game-rip-derived skin, no license; dev-only waiver applies) | uploaded directly to `upload/famas_-_csgo__plasmas.glb` |
 
 **Acceptance verdict for ak47: ACCEPTED — DEV-ONLY (2026-10-20).** The
 user explicitly waived the license concern: "forgot about licence at
@@ -248,3 +258,26 @@ scripts/bake-m4.ts && bash scripts/compress-glb.sh
 scripts/.tmp/m4-fixed.glb <target>.glb`, then touch the weapon route to
 drop its buffer cache. The old CS:GO `m4_fire.ogg` sample is recoverable
 from git history (`git checkout HEAD~1 -- public/assets/sounds/m4_fire.ogg`).
+
+**Acceptance verdict for famas: ACCEPTED — DEV-ONLY (2026-10-24).** The
+user supplied the model with the replacement instruction itself ("change
+famas model to this. also change the fire rate to auto, instead of
+burst", `upload/famas_-_csgo__plasmas.glb`) — the acceptance was in the
+instruction, so the staged GLB went live and was committed after
+evaluation (Task 105; the burst→auto change lives in `shared/weapons.ts`,
+fireDelay 400→90 = the real 666 RPM cyclic rate). Sketchfab rip with the
+"Plasmas" CS:GO skin: 5 nodes, 3 unnamed `Object_N` meshes, 10,384 tris,
+single PBR material with a PNG baseColor (metal 0, rough  0.6,
+doubleSided), **no named part nodes** — parts animations silently skip,
+whole-vm motion still runs (galil class). No source URL was supplied —
+the row above records **not verified** under the same dev-only waiver as
+ak47/ak74/galil/m4. The committed file: 180,248 bytes (1.67MB pre-Draco,
+10.8%), baked parameters in `scripts/bake-famas.ts` (rotY(180°) — unlike
+the m4 the raw lies along +Z with the muzzle at +Z: thin flash-hider tip
+at +Z vs the tall butt plate at −Z, plus the bullpup signature — deep
+mag at z −4.2..2.1 BEHIND the pistol-grip band at z 3.3..7.1; uniform
+scale 0.02152 to the 0.757 m FAMAS length; anchor = bbox center of the
+grip band z∈[3.3,7.1] y<−1.2 — the model HAS a real pistol grip, unlike
+the m4). Re-tuning / recovery path: `npx tsx scripts/bake-famas.ts &&
+bash scripts/compress-glb.sh scripts/.tmp/famas-fixed.glb <target>.glb`,
+then touch the weapon route to drop its buffer cache.

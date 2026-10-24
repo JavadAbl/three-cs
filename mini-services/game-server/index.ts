@@ -1140,6 +1140,8 @@ io.on('connection', (socket) => {
     // fire rate + ammo validation. Burst guns (plan 5.2): in-burst shots are
     // gated by burstDelayMs and capped at burstRounds per window; the next
     // burst needs a fireDelay gap — the anti-cheat lives HERE, not client-side.
+    // (DORMANT since Task 105 — the famas is full-auto now, no current gun is
+    // burst; the branch stays wired for future burst weapons.)
     //
     // Machine guns (plan 7.1, m249/negev): sustained ~13 rps needs NO batch
     // validation and puts ZERO pressure on the 20 Hz tick — this gate is two

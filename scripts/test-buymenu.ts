@@ -155,13 +155,14 @@ for (const w of Object.values(shared.WEAPONS)) {
 
 // 7e. future-phase fields stay absent on the current roster except where a
 //     phase owns them: pellets ONLY on the 4 Phase-6 shotguns; throwables
-//     ONLY on the 6 Phase-8 grenades; no recoil seeds; burst ONLY on famas
-check('pellets only on shotguns; throwables only on the 6 grenades; burst only on famas',
+//     ONLY on the 6 Phase-8 grenades; no recoil seeds; NO burst guns at all
+//     (Task 105 retired the famas burst — machinery dormant)
+check('pellets only on shotguns; throwables only on the 6 grenades; no burst guns',
   Object.values(shared.WEAPONS).every(w =>
     (['nova', 'xm1014', 'mag7', 'sawedoff'].includes(w.id) ? (w.pellets ?? 0) > 1 : w.pellets === undefined) &&
     (w.category === 'grenade' ? !!w.throwable : w.throwable === undefined) &&
     w.recoilPattern === undefined &&
-    (w.id === 'famas' ? w.burstRounds === 3 : w.burstRounds === undefined)))
+    w.burstRounds === undefined))
 
 // --- 8. Phase 3 pistol mechanics (schema-level) ---
 check('cz75 is the only full-auto pistol (800 RPM)',
@@ -213,10 +214,11 @@ check('UMP is the slowest-moving SMG (230/250 speed scale)',
 check('rifle category exceeds 9 rows → buy menu paging is required and wired',
   client.buyEntriesFor('rifle').length === 12 &&
   readFileSync('src/game/hud.tsx', 'utf8').includes('const PAGE = 8'))
-check('famas: 3-round burst + 400ms retrigger + 75ms cadence',
-  shared.WEAPONS.famas.fireMode === 'burst' && shared.WEAPONS.famas.burstRounds === 3 &&
-  shared.WEAPONS.famas.burstDelayMs === 75 && shared.WEAPONS.famas.fireDelay === 400 &&
-  shared.fireModeOf(shared.WEAPONS.famas) === 'burst')
+check('famas: full-auto 666 RPM (Task 105 — burst retired by user)',
+  shared.WEAPONS.famas.fireMode === 'auto' && shared.WEAPONS.famas.auto === true &&
+  shared.WEAPONS.famas.burstRounds === undefined &&
+  shared.WEAPONS.famas.fireDelay === 90 &&
+  shared.fireModeOf(shared.WEAPONS.famas) === 'auto')
 check('sg553 armorPen 1.0 (helmet one-tap quirk); m4a1s suppressed',
   shared.WEAPONS.sg553.armorPen === 1.0 && shared.WEAPONS.m4a1s.suppressed === true)
 check('auto-snipers: auto + $100; ssg08 scout: $300 + semi',

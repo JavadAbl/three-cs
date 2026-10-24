@@ -79,7 +79,7 @@ export interface WeaponDef {
 
   // --- Phase 1+ extensions (optional; defaults via helpers) ---
   fireMode?: FireMode        // default: auto ? 'auto' : 'semi' (fireModeOf)
-  burstRounds?: number       // rounds per trigger pull when fireMode 'burst' (famas)
+  burstRounds?: number       // rounds per trigger pull when fireMode 'burst' (DORMANT — no current gun is burst; kept for future burst weapons)
   burstDelayMs?: number      // cadence inside a burst — server validates (Phase 5)
   pellets?: number           // >1 = multi-pellet shotgun ballistics (Phase 6)
   pelletSpread?: number      // pellet cone half-angle, degrees (Phase 6)
@@ -241,9 +241,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   // ---------------------------------------------- Phase 5 rifles + snipers (CS:GO values)
   // Prices per plan 5.1-5.4; damage/armorPen/RPM/mags per CS:GO wiki
-  // (fandom stats tables). fireDelay is the RETRIGGER gate for burst guns
-  // (famas: 3-rd burst, 0.4s between pulls); scopeLevels per plan; snipers
-  // keep 2-level scopes, scoped rifles 1 level.
+  // (fandom stats tables). Task 105: the famas burst was retired by user
+  // request (burst → auto at the real 666 RPM cyclic rate) — the burst
+  // machinery (engine queue + server anti-cheat) stays wired but dormant;
+  // scopeLevels per plan; snipers keep 2-level scopes, scoped rifles 1 level.
   m4a1s: {
     id: 'm4a1s', name: 'M4A1-S', slot: 1, category: 'rifle', price: 2900, team: 'CT', damage: 38, hsMult: 4, legMult: 0.75,
     fireDelay: 100, mag: 20, reserve: 80, reloadMs: 3100, moveSpeed: 4.5,
@@ -258,9 +259,9 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
   famas: {
     id: 'famas', name: 'FAMAS', slot: 1, category: 'rifle', price: 1700, team: 'CT', damage: 30, hsMult: 4, legMult: 0.75,
-    fireDelay: 400, mag: 25, reserve: 90, reloadMs: 3300, moveSpeed: 4.8,
-    armorPen: 0.70, falloff10m: 0.97, auto: false, killReward: 300, accurate: 0.45,
-    fireMode: 'burst', burstRounds: 3, burstDelayMs: 75, killRewardClass: 'rifle', // 3-rd burst, 0.4s between pulls
+    fireDelay: 90, mag: 25, reserve: 90, reloadMs: 3300, moveSpeed: 4.8,
+    armorPen: 0.70, falloff10m: 0.97, auto: true, killReward: 300, accurate: 0.45,
+    fireMode: 'auto', killRewardClass: 'rifle', // Task 105: user retired the 3-rd burst — full-auto, 666 RPM cyclic
   },
   sg553: {
     id: 'sg553', name: 'SG 553', slot: 1, category: 'rifle', price: 3000, team: 'T', damage: 30, hsMult: 4, legMult: 0.75,

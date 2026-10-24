@@ -202,7 +202,9 @@ export class Engine {
   private slashAt = -1e9
   private slideLeft = false   // dual berettas: which gun fires next
   private vmKick = 0
-  // Phase 5 burst fire: queued rounds of the current burst (famas)
+  // Phase 5 burst fire: queued rounds of the current burst (DORMANT — no
+  // current weapon is burst since Task 105 retired the famas burst;
+  // machinery stays wired for future burst guns)
   private burstRemaining = 0
   private bobPhase = 0
   private lastW = 0
@@ -1478,6 +1480,7 @@ export class Engine {
     if (fm === 'burst') {
       // Phase 5 burst: in-burst cadence gate + retrigger gate (fireDelay).
       // The burst completes itself once triggered, even after mouse-up.
+      // (DORMANT — no current weapon is burst since Task 105; kept wired)
       const gap = now - this.lastShotAt
       if (this.burstRemaining > 0) {
         if (gap < (w.burstDelayMs ?? 75)) return

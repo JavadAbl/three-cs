@@ -1,9 +1,9 @@
 // PHASE 5 E2E — the 8 new rifles through the REAL game server
 // Timeline (freeze + buy window):
 //  1. CT buys m4a1s ($2900) then famas ($1700): slot-1 replacement, money trail
-//  2. FAMAS BURST ANTI-CHEAT (plan 5.2 — the critical server proof):
-//     shots at 0/70/140ms accepted (3-round burst at 75ms cadence), a 4th at
-//     +210ms REJECTED (burst cap), a +540ms shot accepted (400ms retrigger gap)
+//  2. FAMAS FULL-AUTO CADENCE PROOF (Task 105 — burst retired by user):
+//     100ms-gap shots accepted (666 RPM cyclic, gate 90-12=78ms), two 40ms
+//     spam shots rate-REJECTED, reload after 4 fired rounds
 //  3. famas reload round-trip: 4 fired → mag 21 → refill 25/86
 //  4. aug + ssg08 + scar20 buys; scar20 auto-sniper cadence: 300ms gap
 //     accepted, 100ms follow-up REJECTED
@@ -88,26 +88,29 @@ function runSequence() {
   setTimeout(tick, 400)
 }
 
-// --- phase B: famas burst proof + reload, then the rest of the roster ---
-// t0: prior accepted shot (m4a1s) ≥ 700ms ago.
+// --- phase B: famas full-auto cadence proof + reload, then the roster ---
+// t0: prior accepted shot (m4a1s) ≥ 700ms ago. Rate gate: 90-12=78ms.
 function phaseB() {
-  shoot('famas')                     // burst 1/3 (opens the burst)
+  shoot('famas')                     // 1/4: accepted (opens the sequence)
   setTimeout(() => {
-    shoot('famas')                   // 2/3: 70ms ≥ cadence 65 ✓
+    shoot('famas')                   // +40: gap 40 < 78 → REJECTED
     setTimeout(() => {
-      shoot('famas')                 // 3/3: 70ms ✓ (burst full)
+      shoot('famas')                 // gap 140 ≥ 78 ✓ (2/4)
       setTimeout(() => {
-        shoot('famas')               // +210: gap 70 < 388 AND burstShots=3 → REJECTED
+        shoot('famas')               // gap 100 ≥ 78 ✓ (3/4)
         setTimeout(() => {
-          shoot('famas')             // +540: gap 400 ≥ 388 → new burst, accepted
+          shoot('famas')             // +40: gap 40 < 78 → REJECTED
           setTimeout(() => {
-            sock.emit('reload', { weapon: 'famas' })   // mag 21 → 25/86
-            setTimeout(phaseC, 3700) // reloadMs 3300 + margin
-          }, 330)
-        }, 330)
-      }, 70)
-    }, 70)
-  }, 70)
+            shoot('famas')           // gap 140 ≥ 78 ✓ (4/4)
+            setTimeout(() => {
+              sock.emit('reload', { weapon: 'famas' })   // mag 21 → 25/86
+              setTimeout(phaseC, 3700) // reloadMs 3300 + margin
+            }, 100)
+          }, 40)
+        }, 100)
+      }, 100)
+    }, 40)
+  }, 40)
 }
 
 // --- phase C: aug / ssg08 / scar20 + auto-sniper cadence proof ---
@@ -166,11 +169,11 @@ function finish() {
     witnessBuyTrail[1].money === 9200 && witnessBuyTrail[1].inventory[0] === 'g3sg1',
     witnessBuyTrail.map(b => `${b.inventory.join(',')} @ $${b.money}`).join(' | '))
 
-  // 3. famas burst: exactly 4 accepted famas shots (3 burst + 1 retrigger);
-  //    the +210 4th-in-burst was rejected by the server
+  // 3. famas full-auto cadence: exactly 4 accepted shots (100ms+ gaps);
+  //    the two 40ms spam shots were rate-rejected by the server
   const famasCount = witnessShots.filter(w => w === 'famas').length
-  done('famas-burst-anticheat', famasCount === 4,
-    '3 burst shots accepted, 4th-in-burst rejected, +540ms retrigger accepted')
+  done('famas-auto-cadence', famasCount === 4,
+    '100ms auto shots accepted (666 RPM), 40ms spam rate-rejected ×2')
 
   // 4. sniper cadence: scar20 fires twice (300ms gap ok, 100ms rejected)
   const scarCount = witnessShots.filter(w => w === 'scar20').length
@@ -186,7 +189,7 @@ function finish() {
   done('shots-broadcast', JSON.stringify(witnessShots) === JSON.stringify(wantShots), witnessShots.join(' '))
 
   const need = ['buy-money-trail', 'slot1-replacement', 'wrong-team-rejected', 'witness-buys-galil-g3sg1',
-    'famas-burst-anticheat', 'scar20-cadence', 'famas-reload-round-trip', 'shots-broadcast']
+    'famas-auto-cadence', 'scar20-cadence', 'famas-reload-round-trip', 'shots-broadcast']
   const allPass = need.every(k => results[k]?.startsWith('PASS'))
   console.log('\n===== RESULTS =====')
   for (const [k, v] of Object.entries(results)) console.log(`${k.padEnd(24)} ${v}`)

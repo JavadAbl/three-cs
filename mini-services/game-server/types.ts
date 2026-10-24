@@ -29,7 +29,7 @@ export interface PlayerState {
   ammo: Partial<Record<WeaponId, Ammo>>
   lastShotAt: number
   reloadEndsAt: number
-  burstShots: number    // Phase 5: shots fired in the current burst window (famas anti-cheat)
+  burstShots: number    // Phase 5: shots fired in the current burst window (DORMANT burst anti-cheat — no current gun is burst since Task 105)
   // Phase 6: the shotgun shell currently in flight — seed + aim dir (for
   // pellet-cone validation) and the per-shot pellet-claim budget (anti
   // split-resend). Undefined for single-ray weapons / between shots.
