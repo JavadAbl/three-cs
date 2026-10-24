@@ -1928,3 +1928,18 @@ Work Log:
 Stage Summary:
 - Night sky v2: ~1/3 the stars (7.6k, dimmer), moon dead-center over the yard axis at 30-deg elevation with a softer glow, whole night rig dimmed ~25% — VLM-verified readable, pixel-verified thinner
 - The asset-refresh protocol is now proven end-to-end: change asset -> bump ASSET_CACHE_VERSION -> fresh for everyone; documented in preloader + nightsky comments
+---
+Task ID: 103
+Agent: main
+Task: "the weapon aiming pointer is broken. check it" — diagnose & fix the crosshair
+
+Work Log:
+- Reproduced live on AIM DEPOT (ab-crosshair-check.sh): engine spread state healthy (0.45 at rest), crosshair DOM present at exact screen center — but tick-by-tick getBoundingClientRect showed the RIGHT tick glued at x=640 overlapping the center dot while the left tick sat 8px out; top/bottom fine
+- Root cause (hud.tsx crosshair map): the tick style object used a COMPUTED key for the offset ([pos==='right'?'left':...]: gap) and then set `left: (pos==='left'||pos==='right') ? 'auto' : 0` LATER in the same literal — JS object literals: later key wins. For pos==='right' the computed `left: gap` was silently overwritten by `left:'auto'`, so the right tick had NO offset at all and collapsed to its static position (0,0 of the h-0/w-0 container = exact center). Present since the original crosshair commit (ef6dea7) — a latent bug, finally reported
+- Fix: rebuilt per-tick style objects explicitly (no computed keys) — horiz ticks: {w:7,h:2,translateY(-50%),top:0, left:gap | right:gap}; vert: {w:2,h:7,translateX(-50%),left:0, top:gap | bottom:gap} + comment documenting the computed-key-vs-literal-key collision
+- Live verify (ab-crosshair-verify.sh): at spread=1.0 all four ticks symmetric — left ends 632, right starts 648, top 345-352, bottom 368-375, dot 639-641; VLM on fire-screenshot: "4 ticks top/bottom/left/right, left-right symmetric, top-bottom symmetric"
+- REGRESSIONS: bugfixes ALL PASS, aimdepot/dust/dust2/aimhead ALL PASS, bots 26/26, buymenu 217/217, audio 336/336, game-server exit-0; tsc 0 src errors
+
+Stage Summary:
+- Crosshair right-tick fixed: the aiming pointer is now a proper symmetric dynamic crosshair; all four ticks spread with recoil/movement again
+- Live lesson: NEVER mix a computed style key with a literal same-name key in one React style object — later literal silently overwrites; build per-variant style objects explicitly

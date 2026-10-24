@@ -269,15 +269,20 @@ export function Hud({ s, cb, settings, open }: {
       {s.alive && !s.scoped && (
         <div className="absolute left-1/2 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2">
           <div className="relative h-0 w-0">
-            {(['top', 'bottom', 'left', 'right'] as const).map(pos => (
-              <div key={pos} className="absolute bg-[#3cff5e]" style={{
-                width: pos === 'left' || pos === 'right' ? 7 : 2,
-                height: pos === 'left' || pos === 'right' ? 2 : 7,
-                [pos === 'left' ? 'right' : pos === 'right' ? 'left' : pos === 'top' ? 'bottom' : 'top']: `${4 + spreadPx}px`,
-                transform: pos === 'left' || pos === 'right' ? 'translateY(-50%)' : 'translateX(-50%)',
-                left: pos === 'left' || pos === 'right' ? 'auto' : 0,
-              } as React.CSSProperties} />
-            ))}
+            {/* Task 102b: the four tick offsets are built EXPLICITLY per
+                position. The old one-liner used a computed style key for the
+                offset and then set `left` again in the same object — for the
+                RIGHT tick the later `left: 'auto'` silently overwrote the
+                computed `left: gap`, so that tick collapsed to the static
+                position (glued to the center dot, never spreading). */}
+            {(['top', 'bottom', 'left', 'right'] as const).map(pos => {
+              const gap = `${4 + spreadPx}px`
+              const horiz = pos === 'left' || pos === 'right'
+              const style: React.CSSProperties = horiz
+                ? { width: 7, height: 2, transform: 'translateY(-50%)', top: 0, ...(pos === 'right' ? { left: gap } : { right: gap }) }
+                : { width: 2, height: 7, transform: 'translateX(-50%)', left: 0, ...(pos === 'bottom' ? { top: gap } : { bottom: gap }) }
+              return <div key={pos} className="absolute bg-[#3cff5e]" style={style} />
+            })}
             <div className="absolute h-[2px] w-[2px] bg-[#3cff5e] -translate-x-1/2 -translate-y-1/2" />
           </div>
         </div>
