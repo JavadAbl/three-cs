@@ -1,0 +1,11 @@
+{
+  "purpose": "AIM DEPOT night sky (Task 101) — replaces the Task-100 canvas-painted moon/stars",
+  "origin": "GLB models supplied by the game owner (uploaded 2026-10-24, Sketchfab exports)",
+  "files": {
+    "moon.bin": "moon.glb raw accessor slices: f32 pos[3223] + f32 norm[3223] + f32 uv[3223] + u32 idx[17664] — unit sphere, engine scales x12",
+    "moon_diffuse.jpg": "extracted from moon.glb (KHR_materials_pbrSpecularGlossiness diffuseTexture — the extension three r166+ GLTFLoader no longer parses, hence the extraction)",
+    "stars-night.bin": "star_cluster_-_15k_stars_model.glb converted to camera-facing points: u32 nBuckets, then per bucket {u32 count, f32 size, count*(f32 pos[3]+f32 col[3])}; quad centers normalized onto the 285-330 dome (below-horizon stars culled); sizes/colors derived from quad edge length + per-mesh emissive tints (desaturated 55%)",
+    "star-sprite.png": "extracted from the star cluster GLB (soft radial glow, black = zero emission for additive blending)"
+  },
+  "note": "License is whatever the Sketchfab source listings state — supplied by the repo owner for this game. Do not claim CC0 here."
+}

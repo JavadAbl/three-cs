@@ -160,6 +160,15 @@ Pipeline (all node-graph-safe): `prune → dedup → weld → webp → draco`.
 - Decode cost is one-time per file at lobby preload — a ~15k-tri viewmodel
   decodes in a few ms, never mid-round.
 
+## Night sky models (AIM DEPOT — Task 101, accepted 2026-10-24)
+
+The user supplied two GLBs (`upload/moon.glb`, Sketchfab; `upload/star_cluster_-_15k_stars_model.glb`, "15k stars") to replace the Task-100 canvas-painted night sky. They are **converted at authoring time** into engine-native assets (`scripts/make-night-sky-assets-t101.mjs` → `public/assets/models/sky/`, provenance in its `sources.json`):
+
+- **moon** — `moon.bin` (raw geometry slices, unit sphere) + `moon_diffuse.jpg` (equirect lunar albedo). The GLB used the legacy `KHR_materials_pbrSpecularGlossiness` workflow that three r166+ no longer parses (the diffuse map would silently not attach), so the buffers are sliced directly and the material is rebuilt in `src/game/nightsky.ts`. The mesh is a perfect unit sphere, so the node chain's ×100 scale / axis swap are moot.
+- **stars** — `stars-night.bin`: the 45k-quad cluster converted to camera-facing points (only ~30% of the raw quads face the blob center; viewed from inside, half would render edge-on). Quad centers are normalized onto the 285–330 sky dome, below-horizon half culled (22,518 stars kept), sizes/colors derived from quad edge lengths + the model's 3 emissive tint tiers (desaturated 55% toward white), bucketed into 7 `THREE.Points` clouds. 6.6MB GLB → 540KB bin.
+
+Served as plain static files (fetched lazily by `attachNightSky` on aimdepot only, never by the preloader); license **not verified** — the user's own uploads, same **dev-only waiver** as ak47/ak74/galil (if this project is ever published, re-clear or replace).
+
 ## Staged-model license ledger (2026-10-20)
 
 | weapon | file | author | license | source |

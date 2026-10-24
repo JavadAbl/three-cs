@@ -1935,8 +1935,10 @@ export class Engine {
     if (this.alive && (this.burstRemaining > 0 || (this.firing && fireModeOf(cw) === 'burst'))) this.tryFire()
 
     // slow cloud drift + skybox follows camera (never clips through far plane)
+    // Task 101: night sky (aimdepot) drifts 10x slower — the 3D moon + star
+    // field wheel gently instead of sliding out of the spawn view in minutes
     if (this.map.sky) {
-      this.map.sky.rotation.y += dt * 0.004
+      this.map.sky.rotation.y += dt * (this.mapDef.id === 'aimdepot' ? 0.0004 : 0.004)
       this.map.sky.position.set(this.camera.position.x, 0, this.camera.position.z)
     }
 

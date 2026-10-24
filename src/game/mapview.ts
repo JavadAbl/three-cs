@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { MAPS } from './mapdata'
 import type { MapDef, Box } from './mapdata'
 import { skyMesh, siteDecal, surfaceMaterial, pbrMapScope } from './textures'
+import { attachNightSky } from './nightsky'
 
 export interface MapBuild {
   group: THREE.Group
@@ -113,6 +114,9 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
 
   // sky (stored so engine can drift the clouds) — per-map palette (Task 77)
   const sky = skyMesh(map.id)
+  // Task 101: real 3D moon + 22.5k-star field from the user's GLB models
+  // (children of the sky mesh: free disposal on map switch + camera follow)
+  if (map.id === 'aimdepot') attachNightSky(sky)
   scene.add(sky)
 
   // bomb site decals — defuse maps only: aim maps (bomb === false) carry no objective,
