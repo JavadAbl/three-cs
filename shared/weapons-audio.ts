@@ -138,6 +138,9 @@ export const NON_WEAPON_FILES: string[] = [
   // misc + music stingers
   'buy', 'cant_buy', 'uiclick', 'zoom',
   'round_start', 'round_win', 'round_lose',
+  // Task 98 — announcer VOICE lines (TTS-generated, license-clean — see
+  // public/assets/sounds/README.md): team-neutral round outcomes + bomb state
+  'announce_t_win', 'announce_ct_win', 'announce_planted', 'announce_defused',
 ]
 
 /** All names a WEAPON_AUDIO entry references (deduped). */

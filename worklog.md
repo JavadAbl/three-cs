@@ -1843,3 +1843,19 @@ Work Log:
 Stage Summary:
 - github.com/JavadAbl/three-cs current through Task 96: ALL FOUR MAPS (dust, dust2, aim_headshot, AIM DEPOT) now ship real normal-map PBR, public on GitHub
 - Push credential flow is now tokenless-from-user: /home/z/.gh-pat persists for future pushes per user instruction
+
+---
+Task ID: 98
+Agent: Super Z (main agent)
+Task: User: "we need sounds for terrorist wins, counter terrorist wins, bomb planted, bomb defused"
+
+Work Log:
+- FORENSICS: the wiring scaffold already existed (audio.roundWin/roundLose team-relative stingers + c4_plant/c4_disarmfinish mechanical beeps) — what was missing was the CS-style announcer VOICE. CS:GO's announcer samples are copyrighted (pack-licensing constrained), so the 4 lines are ORIGINAL z-ai TTS synthesis (voice kazi, speed 0.95): 'Terrorists win.' / 'Counter-Terrorists win.' / 'The bomb has been planted.' / 'The bomb has been defused.' Pipeline: WAV -> lead/tail silence strip (-45dB) -> Vorbis q3 44.1kHz (same convention as the weapon pack); scripts/make-announcer-sounds-t98.sh reproduces all 4 bytes; 15-27KB each, max_volume ~-3dB, durations 1.7-3.7s
+- WIRING: announce_t_win/announce_ct_win/announce_planted/announce_defused registered in NON_WEAPON_FILES (so FILES/preloader warm them automatically); audio.announce(name) public method (returns false when the sample is missing so callers fall back); engine post-round now plays the TEAM-NEUTRAL announcer (names the WINNING team, heard by ALL players — CS behavior) with roundWin/roundLose stingers as fallback only; bomb planted -> announcer at +700ms after the c4_plant beep; defused -> +500ms after c4_disarmfinish
+- DEBUG: audio.info() gained announceLog [{name, played, t}] (capped 8) — played=false would mean a silent fallback-to-stingers regression no other test could catch; exposed via the existing __eng.sfx() debug hook
+- REGRESSIONS: audio-map 336/336 (332 -> 336: the 4 new names mapped + served HTTP 200; README counts 252 -> 256 oggs); tsc 0 src errors (28 baseline); maps dust 6/6, dust2 6/6, aimhead 8/8, aimdepot 8/8; bugfixes ALL PASS; bots 26/26; buymenu 217/217; game-server exit-0
+- LIVE E2E (ab-dust2.sh into :81, bots easy): ALL FOUR lines fired with played:true in real match play — announce_ct_win (elimination), announce_t_win (T elimination win), announce_planted (T bot planted; caught mid-round), announce_ct_win + announce_defused (CT defused 18.4s into the plant). Server untouched (client-only change; no restart needed)
+
+Stage Summary:
+- The game now has a full announcer VOICE layer, all four requested events covered: round outcomes (team-neutral, names the winner) + bomb planted/defused layered over the mechanical C4 samples — verified live with all four played:true in one continuous match
+- The lines are TTS originals: zero CS:GO-pack licensing exposure, reproducible in one script, and the announceLog debug hook makes future regressions (silent fallback) testable from the browser

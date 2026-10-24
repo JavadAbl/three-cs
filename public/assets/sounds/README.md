@@ -14,6 +14,18 @@ pipeline throughout: leading-silence strip (shot latency), Vorbis q3,
 the AK-74M's distant/reload/draw sounds reuse the AK-47 family samples
 (same platform).
 
+**Task 98 — 4 announcer VOICE lines** (256 `.ogg` total):
+`announce_t_win`, `announce_ct_win`, `announce_planted`,
+`announce_defused` ("Terrorists win." / "Counter-Terrorists win." /
+"The bomb has been planted." / "The bomb has been defused."). These are
+**original TTS synthesis (z-ai TTS, voice `kazi`, speed 0.95) — NOT from
+the CS:GO pack**, so they carry no pack licensing constraints. Pipeline:
+WAV → lead/tail silence strip (−45 dB threshold) → Vorbis q3 44.1 kHz;
+reproducible via `scripts/make-announcer-sounds-t98.sh`. Wired in
+`src/game/engine.ts`: the round-end line is team-neutral (heard by all
+players, names the WINNING team); planted/defused lines layer over the
+existing `c4_plant`/`c4_disarmfinish` mechanical samples.
+
 ## Staging (for future batches) — `public/staging/sounds/`
 
 Currently empty. New/regenerated samples land here via

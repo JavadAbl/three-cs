@@ -915,7 +915,11 @@ export class Engine {
             title: winner === 'CT' ? 'Counter-Terrorists Win' : 'Terrorists Win',
             sub: reasons[reason] ?? reason, winner,
           }
-          if (winner === this.myTeam) audio.roundWin(); else audio.roundLose()
+          // Task 98 — CS-style team announcer, heard by EVERYONE (the voice
+          // names the winning team, not my team); stingers stay as fallback
+          // when the sample is missing
+          const ann = winner === 'CT' ? 'announce_ct_win' : 'announce_t_win'
+          if (!audio.announce(ann)) { if (winner === this.myTeam) audio.roundWin(); else audio.roundLose() }
         }
       }
     })
@@ -1058,6 +1062,8 @@ export class Engine {
         this.bombMesh.position.copy(this.bombPos).add(new THREE.Vector3(0, 0.1, 0))
         this.scene.add(this.bombMesh)
         audio.bombPlanted()
+        // Task 98 — announcer line lands just after the plant beep (CS pacing)
+        setTimeout(() => audio.announce('announce_planted'), 700)
         this.pushToast('The bomb has been planted!')
       } else if (d.exploded && d.pos) {
         this.defuseBar = null         // a defuse cut short by the explosion leaves no progress:0 event — clear it here
@@ -1074,6 +1080,8 @@ export class Engine {
         this.bombPlanted = false
         this.defuseBar = null
         audio.bombDefused()
+        // Task 98 — announcer line lands just after the disarm finish sound
+        setTimeout(() => audio.announce('announce_defused'), 500)
         this.pushToast('The bomb has been defused!')
       }
     })

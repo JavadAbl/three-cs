@@ -33,6 +33,7 @@ export class GameAudio {
   private packErrors: string[] = []
   private packStarted = false
   private playCount = 0
+  private announceLog: Array<{ name: string; played: boolean; t: number }> = []
   private lastAwkBolt = 0
   // camera forward (horizontal), updated by the engine each frame — drives stereo panning
   private fwd: Vec3 = [0, 0, -1]
@@ -94,6 +95,10 @@ export class GameAudio {
       errors: this.packErrors,
       plays: this.playCount,
       ctxState: this.ctx?.state ?? 'no-ctx',
+      // Task 98 — announcer debug: [{ name, played, t }] so live tests can
+      // verify the round/bomb VOICE lines fired (played=false = file missing,
+      // fallback tones would cover it silently otherwise)
+      announceLog: [...this.announceLog],
     }
   }
 
@@ -401,6 +406,16 @@ export class GameAudio {
   roundLose() {
     if (this.play('round_lose', { gain: 0.38 })) return
     ;[440, 330, 220].forEach((f, i) => setTimeout(() => this.tone(f, 0.3, 0.4, 'sine'), i * 200))
+  }
+  /** Task 98 — CS-style announcer VOICE (TTS-generated, license-clean):
+   * 'Terrorists win' / 'Counter-Terrorists win' / 'The bomb has been
+   * planted' / 'The bomb has been defused'. Returns false when the sample
+   * is missing so callers can fall back to the stingers/tone fallbacks. */
+  announce(name: string): boolean {
+    const played = this.play(name, { gain: 0.55, variance: 0 })
+    this.announceLog.push({ name, played, t: Math.round(performance.now()) })
+    if (this.announceLog.length > 8) this.announceLog.shift()
+    return played
   }
 
   // ---------------------------------------------------------------- movement
