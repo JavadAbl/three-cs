@@ -7,8 +7,8 @@ and it must NOT be restored from anywhere. The game runs the procedural
 soldier rig for all players until a NEW model is dropped into staging; the
 user will supply a better one later.
 
-**Weapon model status (2026-10-24): FIVE accepted weapon models — ak47,
-ak74, galil, m4, famas.**
+**Weapon model status (2026-10-24): SIX accepted weapon models — ak47,
+ak74, galil, m4, famas, aug.**
 The CC0 Quaternius "Ultimate Guns Pack" (33 GLBs staged 2026-10-19 for
 live evaluation) was **rejected by the user** ("wipe all weapon models.
 they are not good, il find new models") — every staged GLB and raw-pack
@@ -32,7 +32,11 @@ with the "Plasmas" CS:GO skin (`upload/famas_-_csgo__plasmas.glb`) was
 integrated 2026-10-24 (Task 105, same instruction pattern — "change famas
 model to this"; the burst was retired to full-auto in the same task) and
 accepted with the request itself — committed at
-`public/assets/models/weapons/famas.glb`. Every other weapon
+`public/assets/models/weapons/famas.glb`. The user's Steyr AUG A3 upload
+(`upload/steyr_aug_a3.glb`, a Sketchfab rip) was integrated 2026-10-24
+(Task 106, same instruction pattern — the bare weapon-id message "AUG")
+and accepted with the request itself — committed at
+`public/assets/models/weapons/aug.glb`. Every other weapon
 id runs **procedural** (parts-animated viewmodels + remote stubs); the
 drop-in pipeline below stays live and waiting for more models.
 
@@ -72,14 +76,14 @@ recognize it as a downloadable file:
 - The model is preloaded while the lobby menu is open, so starting a match
   never triggers a fresh download.
 
-## Weapon GLBs (pipeline LIVE — five accepted models: ak47, ak74, galil, m4, famas)
+## Weapon GLBs (pipeline LIVE — six accepted models: ak47, ak74, galil, m4, famas, aug)
 
 Drop a GLB at **`public/staging/models/weapons/<weaponId>.glb`** (gitignored,
 evaluative) or `public/assets/models/weapons/<weaponId>.glb` (accepted,
 committed) and the game uses it immediately for **remote guns + the
 first-person viewmodel + the knife** — zero code changes. With no file an
 id simply stays procedural (current state: all of them except ak47,
-ak74 and galil).
+ak74, galil, m4, famas and aug).
 
 **Wired ids** (33, see `ROUTES` in `src/game/weapongltf.ts`): knife,
 glock, usp, p250, cz75, fiveseven, tec9, hkp2000, deagle, elites (dual),
@@ -187,6 +191,7 @@ Served as plain static files (fetched lazily by `attachNightSky` on aimdepot onl
 | galil | `public/assets/models/weapons/galil.glb` (committed; baked from the user's `upload/galil_ar_counter_strike_2.glb` via `scripts/bake-galil.ts` + `compress-glb.sh`) | the user's own upload (Counter-Strike 2 game rip, internal name `GalilAr_CS2_weapon_rif_galilar`) | **not verified** (game-rip asset, no license; dev-only waiver applies) | uploaded directly to `upload/galil_ar_counter_strike_2.glb` |
 | m4 | `public/assets/models/weapons/m4.glb` (committed; baked from the user's `upload/m4.glb` via `scripts/bake-m4.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab export, generator "Sketchfab-12.65.0", FBX conversion) | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/m4.glb` (with `upload/m4.mp3`, the new fire sound) |
 | famas | `public/assets/models/weapons/famas.glb` (committed; baked from the user's `upload/famas_-_csgo__plasmas.glb` via `scripts/bake-famas.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab export, generator "Sketchfab-12.66.0", "FAMAS - CSGO | Plasmas" skin, PNG baseColor) | **not verified** (game-rip-derived skin, no license; dev-only waiver applies) | uploaded directly to `upload/famas_-_csgo__plasmas.glb` |
+| aug | `public/assets/models/weapons/aug.glb` (committed; baked from the user's `upload/steyr_aug_a3.glb` via `scripts/bake-aug.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab rip, generator "Sketchfab-12.66.0", Steyr AUG A3 with baseColorTexture + metallicRoughnessTexture) | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/steyr_aug_a3.glb` |
 
 **Acceptance verdict for ak47: ACCEPTED — DEV-ONLY (2026-10-20).** The
 user explicitly waived the license concern: "forgot about licence at
@@ -281,3 +286,33 @@ grip band z∈[3.3,7.1] y<−1.2 — the model HAS a real pistol grip, unlike
 the m4). Re-tuning / recovery path: `npx tsx scripts/bake-famas.ts &&
 bash scripts/compress-glb.sh scripts/.tmp/famas-fixed.glb <target>.glb`,
 then touch the weapon route to drop its buffer cache.
+
+**Acceptance verdict for aug: ACCEPTED — DEV-ONLY (2026-10-24).** The user
+supplied the model with the replacement instruction itself (the bare
+"AUG" message, `upload/steyr_aug_a3.glb`) — the acceptance was in the
+instruction, so the baked GLB went live and was committed after
+evaluation (Task 106). Sketchfab rip: 6 nodes (Sketchfab_model → fbx →
+RootNode → Object023 wrapper), 2 meshes (the gun body + a 26-vert top
+furniture part), 14,223 tris, 2 PBR materials with baseColorTexture +
+metallicRoughnessTexture, doubleSided, **no named part nodes** — parts
+animations silently skip, whole-vm motion still runs (galil class). No
+source URL was supplied — the row above records **not verified** under
+the same dev-only waiver as ak47/ak74/galil/m4/famas. The committed
+file: 607,640 bytes (6.26MB pre-compression, 9.7%), baked parameters in
+`scripts/bake-aug.ts` (bore along X — m4-class, unlike the famas's Z —
+with the MUZZLE AT +X: the +X 10% slice is a thin rod (y-ext 46mm)
+while the −X end is the tall butt plate (y-ext 157mm) → rotY(+90°)
+maps +X → −Z, the only proper-rotation solution for this axis pair;
+uniform scale 0.008806 to the 0.690 m Steyr AUG A3 overall length;
+anchor = bbox center of the pistol-grip band x∈[−18,−14] y<−8 — the
+deepest protrusion, ~31% from the butt; the mag is ENCLOSED in the
+bullpup stock shell (no deep protrusion behind the grip, unlike the
+famas), and the second deep cluster x∈[21.9,26.1] is the A3-style
+vertical FOREGRIP at ~80% from the butt, verified to land AHEAD of the
+anchor post-rotation; the first verify pass used the famas's −0.05
+y-threshold and matched nothing — this model's k is 2.4× smaller, the
+deep protrusions reach only ~16mm below the anchor, so the threshold
+is −5mm BELOW THE ANCHOR, not a fixed body datum). Re-tuning /
+recovery path: `npx tsx scripts/bake-aug.ts && bash
+scripts/compress-glb.sh scripts/.tmp/aug-fixed.glb <target>.glb`, then
+touch the weapon route to drop its buffer cache.
