@@ -261,9 +261,6 @@ check('shotgun falloff is brutal: mag7/sawedoff 0.45, nova/xm 0.70 (close-range 
 check('shotgun category fits one buy page (4 rows, no paging needed)',
   client.buyEntriesFor('shotgun').length === 4)
 
-console.log(`\n${pass} passed, ${fail} failed`)
-process.exit(fail ? 1 : 0)
-
 // --- 11. Phase 8 grenades + equipment (schema-level) ---
 const GRENADES = ['flash', 'he', 'smoke', 'molotov', 'inc', 'decoy'] as const
 check('all six grenades live in slot 5 with maxCarry set',
@@ -296,3 +293,54 @@ check('grenade kill rewards ride the grenade class at $300',
     shared.KILL_REWARD_BY_CLASS.grenade === 300))
 check('equipment category has 9 entries → buy menu pages (8/page)',
   client.buyEntriesFor('equipment').length === 9)
+
+// --- 13. Task 108: each side only sees its own weapons in the buy list ---
+// (user: "each side should only see their own weapons from the buy list")
+// buyEntriesFor(key, team) filters the OTHER team's locked gear; entries
+// with no team lock (awp/deagle/kevlar/flash...) stay on both sides.
+// Unfiltered buyEntriesFor(key) keeps the full catalog for the
+// server-driven e2e suites (phase5/phase9 buy loops).
+const T_RIFLES = client.buyEntriesFor('rifle', 'T').map(e => e.id)
+const CT_RIFLES = client.buyEntriesFor('rifle', 'CT').map(e => e.id)
+check('T rifle list: AK-family + galil/sg553/g3sg1, zero CT guns',
+  ['ak47', 'ak74', 'galil', 'sg553', 'g3sg1'].every(id => T_RIFLES.includes(id)) &&
+  !T_RIFLES.some(id => ['m4', 'm4a1s', 'famas', 'aug', 'scar20'].includes(id)))
+check('CT rifle list: M4-family + famas/aug/scar20, zero T guns',
+  ['m4', 'm4a1s', 'famas', 'aug', 'scar20'].every(id => CT_RIFLES.includes(id)) &&
+  !CT_RIFLES.some(id => ['ak47', 'ak74', 'galil', 'sg553', 'g3sg1'].includes(id)))
+check('neutral rifles (awp/ssg08) stay on BOTH sides after the filter',
+  T_RIFLES.includes('awp') && CT_RIFLES.includes('awp') &&
+  T_RIFLES.includes('ssg08') && CT_RIFLES.includes('ssg08'))
+check('pistols: T keeps tec9, CT keeps fiveseven/hkp2000, deagle on both',
+  client.buyEntriesFor('pistol', 'T').some(e => e.id === 'tec9') &&
+  !client.buyEntriesFor('pistol', 'T').some(e => e.id === 'fiveseven') &&
+  client.buyEntriesFor('pistol', 'CT').some(e => e.id === 'fiveseven') &&
+  client.buyEntriesFor('pistol', 'T').some(e => e.id === 'deagle') &&
+  client.buyEntriesFor('pistol', 'CT').some(e => e.id === 'deagle'))
+check('equipment: defuse kit CT-only, molotov T-only, incendiary CT-only',
+  client.buyEntriesFor('equipment', 'CT').some(e => e.id === 'defusekit') &&
+  !client.buyEntriesFor('equipment', 'T').some(e => e.id === 'defusekit') &&
+  client.buyEntriesFor('equipment', 'T').some(e => e.id === 'molotov') &&
+  !client.buyEntriesFor('equipment', 'CT').some(e => e.id === 'molotov') &&
+  client.buyEntriesFor('equipment', 'CT').some(e => e.id === 'inc') &&
+  !client.buyEntriesFor('equipment', 'T').some(e => e.id === 'inc'))
+check('kevlar + shared gear stay on both sides',
+  client.buyEntriesFor('equipment', 'CT').some(e => e.id === 'kevlarhelm') &&
+  client.buyEntriesFor('equipment', 'T').some(e => e.id === 'kevlarhelm') &&
+  client.buyEntriesFor('equipment', 'CT').some(e => e.id === 'flash') &&
+  client.buyEntriesFor('equipment', 'T').some(e => e.id === 'flash'))
+check('all six categories stay non-empty for BOTH teams (no dead menu keys)',
+  client.BUY_MENU.every(c =>
+    client.buyEntriesFor(c.key, 'CT').length > 0 &&
+    client.buyEntriesFor(c.key, 'T').length > 0))
+check('unfiltered catalog unchanged for server-driven e2e (rifle still 12)',
+  client.buyEntriesFor('rifle').length === 12 &&
+  client.buyEntriesFor('rifle', 'CT').length === 7 &&
+  client.buyEntriesFor('rifle', 'T').length === 7)
+check('hud.tsx renders/lists through the team filter (s.team at every call)',
+  readFileSync('src/game/hud.tsx', 'utf8').includes('buyEntriesFor(cat, s.team)') &&
+  readFileSync('src/game/hud.tsx', 'utf8').includes('buyEntriesFor(c.key, s.team)') &&
+  readFileSync('src/game/hud.tsx', 'utf8').includes('buyEntriesFor(key, s.team)'))
+
+console.log(`\n${pass} passed, ${fail} failed`)
+process.exit(fail ? 1 : 0)

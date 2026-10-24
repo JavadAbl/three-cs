@@ -480,8 +480,16 @@ export const BUY_ENTRIES: BuyEntry[] = [
     })),
 ]
 
-export function buyEntriesFor(key: BuyMenuKey): BuyEntry[] {
-  return BUY_ENTRIES.filter(e => e.menuKey === key)
+/**
+ * Entries for one buy-menu category. With `team`, returns ONLY what that
+ * side may buy (Task 108, user: "each side should only see their own
+ * weapons from the buy list"): entries with no team lock stay, the other
+ * team's gear is filtered out. Without `team`, returns the full list (the
+ * buymenu test suite + phase9 e2e drive the full catalog server-side).
+ */
+export function buyEntriesFor(key: BuyMenuKey, team?: TeamId): BuyEntry[] {
+  return BUY_ENTRIES.filter(e =>
+    e.menuKey === key && (team === undefined || e.team === undefined || e.team === team))
 }
 
 export const PART_MULT: Record<HitPart, number> = { head: 4, body: 1, legs: 0.75 }

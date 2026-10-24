@@ -2036,3 +2036,18 @@ Work Log:
 
 Stage Summary:
 - AUG first-person vm now renders at 0.90×0.85 = 0.765 of real size (~15% smaller); all other GLB vms unchanged; remote guns real-size. Per-id trims are data-driven — future "make X smaller" requests are one-line table entries. Effective scale still live-tunable via __eng.vmScale(f).
+
+---
+Task ID: 108
+Agent: main
+Task: Team-filtered buy menu — user: "each side should only see their own weapons from the buy list"
+
+Work Log:
+- shared/weapons.ts: buyEntriesFor(key, team?) gains an OPTIONAL team filter (own-team + neutral entries; other side's gear dropped). Unfiltered signature unchanged — phase5/phase9 e2e suites drive the full catalog server-side.
+- hud.tsx BuyMenu: all four list/count call sites now pass s.team — level-1 category counts, level-2 rows, keyboard digit mapping (digits index OWN-team rows; as T, digit 8 on rifles can never again point at the CT-only AUG — task 107's silent no-op class of confusion is structurally gone), paging NEXT/BACK math. The wrong-team dimming path stays as defense-in-depth (unreachable in the menu now); server remains the buy authority (team/money/window validation untouched).
+- Verified live BOTH sides (aim depot): CT rifles = M4A4/M4A1-S/FAMAS/AUG/SSG 08/SCAR-20/AWP (7 rows, zero AK-family); T rifles = AK-47/AK-74M/Galil AR/SG 553/SSG 08/G3SG1/AWP (7 rows, zero CT guns); T equipment = no Defuse Kit, no Incendiary, molotov present; CT counts: shotguns 3 (mag7 only), SMGs 6, equipment 8 (molotov out). All six categories non-empty for both sides.
+- TEST HYGIENE (latent bug found): scripts/test-buymenu.ts had process.exit at line 265 with 33 lines of phase-8/9 checks AFTER it — those 10 checks never ran (verified: names never printed; 217 was really 217+10-dead). Moved the exit block to EOF — all 10 revived checks pass unmodified. Added 9 Task-108 checks (per-side rifle lists, neutral rifles on both sides, pistol/equipment splits, all-categories-non-empty, unfiltered catalog unchanged at rifle=12, hud.tsx passes s.team at every call site).
+- REGRESSIONS: buymenu 235/235 (217 + 10 revived + 8 counted new... reconciled vs stashed baseline 217), bots 26/26, audio 336/336, phase5 e2e ALL PASS exit-0, phase9 e2e 122/122 exit-0, tsc src 0.
+
+Stage Summary:
+- Buy list is now per-team: each side sees only its own weapons + neutral gear (deagle, AWP, SSG 08, shotguns nova/xm, kevlar, flash/he/smoke/decoy, heavies). Digit shortcuts map to own-team rows. Server-side buy rules unchanged and authoritative. Next "hide X from side Y" asks are just WEAPONS.team tags.

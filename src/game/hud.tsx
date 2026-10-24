@@ -58,11 +58,15 @@ function BuyIcon({ id }: { id: string }) {
 // B opens (page.tsx toggles), digits 1-6 pick a category, digits
 // 1-9 buy inside a category, 0/Backspace goes one level up (0 at
 // root = exit, exactly like 1.6), B/ESC closes. Mouse works too.
-// Money/team/window validation lives in engine.buy() + the server;
-// rows stay clickable so rejected buys surface as toast feedback.
-// NOTE: categories over 9 entries page CS 1.6-style — 8 rows per page,
-// 0 = NEXT (cycles), last page's 0 = BACK. Phase 5 (rifles: 11 entries)
-// is the first category to need it.
+// TASK 108 (user: "each side should only see their own weapons from the
+// buy list"): every list/count below is TEAM-FILTERED via
+// buyEntriesFor(key, s.team) — the opposing side's gear never renders,
+// and digit indexes map to OWN-team rows (as T, digit 8 on rifles can
+// never again point at the CT-only AUG). The server stays the buy
+// authority (team/money/window validation in engine.buy() + the server).
+// Categories over 9 entries page CS 1.6-style — 8 rows per page,
+// 0 = NEXT (cycles), last page's 0 = BACK. With the team filter no
+// category drops below 1 row for either side, so all six stay visible.
 const PAGE = 8
 
 function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
@@ -74,7 +78,9 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { cat, page, cb } = live.current
+      const { cat, page, cb, s } = live.current
+      // Task 108: digits index OWN-team rows only
+      const myEntries = (key: BuyMenuKey) => buyEntriesFor(key, s.team)
       if (e.code === 'Escape') { e.preventDefault(); cb.onOpenBuy(false); return }
       if (e.code === 'Backspace') { e.preventDefault(); setCat(null); setPage(0); return }
       // KeyB is handled by page.tsx (toggle) — never double-handle here
@@ -84,25 +90,27 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
       const n = +m[1]
       if (n === 0) {
         if (cat === null) { cb.onOpenBuy(false); return }   // 0. EXIT at root, 1.6-style
-        const pages = Math.ceil(buyEntriesFor(cat).length / PAGE)
+        const pages = Math.ceil(myEntries(cat).length / PAGE)
         if (pages > 1 && page < pages - 1) setPage(page + 1) // 0. NEXT page
         else { setCat(null); setPage(0) }                    // last page: 0. BACK up
         return
       }
       if (cat === null) {
         const c = BUY_MENU[n - 1]
-        if (c && buyEntriesFor(c.key).length > 0) { setCat(c.key); setPage(0) }
+        if (c && myEntries(c.key).length > 0) { setCat(c.key); setPage(0) }
         return
       }
-      const entry = buyEntriesFor(cat)[page * PAGE + n - 1]
+      const entry = myEntries(cat)[page * PAGE + n - 1]
       if (entry) cb.onBuy(entry.id)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // Task 108: team-filtered lists everywhere the menu renders — the
+  // opposing team's weapons/gear never appear
   const catDef = cat ? BUY_MENU.find(c => c.key === cat)! : null
-  const entries = cat ? buyEntriesFor(cat) : []
+  const entries = cat ? buyEntriesFor(cat, s.team) : []
   const pages = Math.ceil(entries.length / PAGE)
   const shown = entries.slice(page * PAGE, page * PAGE + PAGE)
 
@@ -145,7 +153,7 @@ function BuyMenu({ s, cb }: { s: HudState; cb: HudCallbacks }) {
         {!cat && (
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
             {BUY_MENU.map((c, i) => {
-              const n = buyEntriesFor(c.key).length
+              const n = buyEntriesFor(c.key, s.team).length
               const empty = n === 0
               return (
                 <button key={c.key} onClick={() => { if (!empty) setCat(c.key) }}
