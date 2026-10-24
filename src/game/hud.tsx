@@ -238,9 +238,9 @@ export interface HudCallbacks {
   onQuit: () => void
 }
 
-// Task 103b: 1px near-black outline around every crosshair tick + dot —
-// keeps the green readable on bright/sunlit backdrops (classic CS outline).
-const XHAIR_OUTLINE = '0 0 0 1px rgba(0, 0, 0, 0.7)'
+// Task 103c: user asked for a 1px-thinner outline — spread 1px -> 0.5px
+// (subpixel shadows render crisply on HiDPI, hairline on 1x DPI).
+const XHAIR_OUTLINE = '0 0 0 0.5px rgba(0, 0, 0, 0.7)'
 
 export function Hud({ s, cb, settings, open }: {
   s: HudState

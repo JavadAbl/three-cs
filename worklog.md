@@ -1955,3 +1955,15 @@ Work Log:
 
 Stage Summary:
 - Crosshair now outlined 1px near-black on every element — readable on sunlit desert maps and the night arena alike; no geometry change (task 103's symmetric layout untouched)
+---
+Task ID: 103c
+Agent: main
+Task: user: "1px thinner" — slim the crosshair outline
+
+Work Log:
+- hud.tsx XHAIR_OUTLINE spread 1px -> 0.5px (subpixel shadows: crisp on HiDPI, hairline on 1x DPI); alpha kept 0.7
+- Live verify: computed boxShadow = rgba(0,0,0,0.7) 0 0 0 0.5px on ticks; VLM: "thin/hairline outline, symmetric and readable"
+- tsc 0 src errors
+
+Stage Summary:
+- Crosshair outline halved to a 0.5px hairline — same readability, slimmer look
