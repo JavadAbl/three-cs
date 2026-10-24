@@ -684,7 +684,7 @@ function buildAimDepot(): MapDef {
   box(14, -26, 18, 8, 5, 'brick', 6, true)
 
   // CT north (z -18/-20.5), T south — default team yaw (T faces north, CT south)
-  return finishMap('aimdepot', 'Aim Depot', 2, { boxes, box, wall } as Builder, {
+  return finishMap('aimdepot', 'Aim Depot', 3, { boxes, box, wall } as Builder, {
     CT: [
       { x: 0, y: 0, z: -17.5 }, { x: -3, y: 0, z: -17.5 }, { x: 3, y: 0, z: -17.5 },
       { x: -6, y: 0, z: -17.5 }, { x: 6, y: 0, z: -17.5 }, { x: -9, y: 0, z: -17.5 },
@@ -773,5 +773,5 @@ export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
   { id: 'dust', name: 'Dust', desc: 'The original three-lane classic layout' },
   { id: 'dust2', name: 'Dust II', desc: 'Long, mid, tunnels · catwalk · pit · window room' },
   { id: 'aimhead', name: 'Aim Headshot', desc: 'CS 1.6 BSP import · slit-wall aim arena' },
-  { id: 'aimdepot', name: 'Aim Depot', desc: 'Crate-yard aim arena · low lane walls · three lanes' },
+  { id: 'aimdepot', name: 'Aim Depot', desc: 'Crate-yard aim arena · low lane walls · moonlit night' },
 ]

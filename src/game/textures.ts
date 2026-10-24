@@ -541,8 +541,16 @@ export function skyMesh(mapId?: string): THREE.Mesh {
   const rnd = mulberry32(2025)
   const aztec = mapId === 'aimhead'   // Task 77: de_aztec mood — blue down to
   // the horizon (no desert tan band), slightly deeper zenith
+  const night = mapId === 'aimdepot'  // Task 100: moonlit depot — deep
+  // indigo sky, star field, glowing moon disc (clear night, no clouds)
   const g = ctx.createLinearGradient(0, 0, 0, H)
-  if (aztec) {
+  if (night) {
+    g.addColorStop(0, '#060a1c')      // zenith — deep indigo
+    g.addColorStop(0.45, '#0b1330')
+    g.addColorStop(0.7, '#131f42')
+    g.addColorStop(0.85, '#1a2a52')  // faint horizon lift
+    g.addColorStop(1, '#22335e')     // horizon glow band
+  } else if (aztec) {
     g.addColorStop(0, '#5d8fc2')
     g.addColorStop(0.35, '#9dc0dc')
     g.addColorStop(0.6, '#cfdfe9')
@@ -558,33 +566,88 @@ export function skyMesh(mapId?: string): THREE.Mesh {
   }
   ctx.fillStyle = g
   ctx.fillRect(0, 0, W, H)
-  // clouds (soft layered blobs) — aztec: whiter, denser jungle cover
-  const nClouds = aztec ? 44 : 34
-  for (let i = 0; i < nClouds; i++) {
-    const x = rnd() * W
-    const y = H * (0.08 + rnd() * 0.4)
-    const rw = 45 + rnd() * 140, rh = rw * (0.22 + rnd() * 0.16)
-    const a = 0.16 + rnd() * 0.2
-    const cg = ctx.createRadialGradient(x, y, 1, x, y, rw)
-    cg.addColorStop(0, `rgba(255,252,245,${a})`)
-    cg.addColorStop(0.6, `rgba(250,246,238,${a * 0.55})`)
-    cg.addColorStop(1, 'rgba(255,255,255,0)')
-    ctx.fillStyle = cg
-    ctx.save()
-    ctx.translate(x, y); ctx.scale(1, rh / rw); ctx.translate(-x, -y)
-    ctx.beginPath(); ctx.arc(x, y, rw, 0, 7); ctx.fill()
-    ctx.restore()
+  if (night) {
+    // star field — deterministic rnd, upper 62% of the sky (above horizon),
+    // sizes/brightness varied; a few brighter ones get a tiny cross sparkle
+    const nStars = 260
+    for (let i = 0; i < nStars; i++) {
+      const x = rnd() * W
+      const y = rnd() * H * 0.62
+      const r = 0.5 + rnd() * 1.1
+      const a = 0.3 + rnd() * 0.7
+      const tint = rnd() < 0.75 ? '255,255,255' : (rnd() < 0.5 ? '200,214,255' : '255,238,214')
+      ctx.fillStyle = `rgba(${tint},${a})`
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill()
+      if (r > 1.25 && rnd() < 0.5) {  // sparkle on the biggest stars
+        ctx.strokeStyle = `rgba(${tint},${a * 0.45})`
+        ctx.lineWidth = 0.7
+        ctx.beginPath()
+        ctx.moveTo(x - r * 3.2, y); ctx.lineTo(x + r * 3.2, y)
+        ctx.moveTo(x, y - r * 3.2); ctx.lineTo(x, y + r * 3.2)
+        ctx.stroke()
+      }
+    }
+    // moon — E high (matches the directional moonlight quadrant): soft halo,
+    // bright disc, subtle crater shading. H*0.37 (~24 deg elevation) — high
+    // enough to clear the 6 m perimeter walls from anywhere in the yard, low
+    // enough to sit INSIDE a 75-deg FOV frame at pitch 0 (the original sun
+    // disc at H*0.2 = 54 deg was above the frame top — invisible at eye level)
+    const mx = W * 0.78, my = H * 0.37
+    // halo — sized for a ~4.6-deg moon (13 px canvas radius ≈ 78 px on a
+    // 720p 75-deg-FOV frame; the first 29-px attempt rendered ~340 px wide —
+    // equirect px are DEGREES, and 10-deg moons are comedy-sized)
+    const halo = ctx.createRadialGradient(mx, my, 3, mx, my, 80)
+    halo.addColorStop(0, 'rgba(214,226,255,0.62)')
+    halo.addColorStop(0.3, 'rgba(190,205,245,0.18)')
+    halo.addColorStop(1, 'rgba(180,195,240,0)')
+    ctx.fillStyle = halo
+    ctx.beginPath(); ctx.arc(mx, my, 100, 0, 7); ctx.fill()
+    ctx.fillStyle = '#f0f4fc'
+    ctx.beginPath(); ctx.arc(mx, my, 13, 0, 7); ctx.fill()
+    // craters — faint grey-blue arcs, deterministic placement (scaled to the
+    // 13 px disc; they read as subtle mottling at screen size)
+    const craters: Array<[number, number, number, number]> = [
+      [-4, -2, 3, 0.10], [4, 2, 2.5, 0.12], [2, -5, 1.6, 0.09], [-2, 5, 1.8, 0.08],
+    ]
+    for (const [dx, dy, r, a] of craters) {
+      ctx.fillStyle = `rgba(148,160,190,${a})`
+      ctx.beginPath(); ctx.arc(mx + dx, my + dy, r, 0, 7); ctx.fill()
+    }
+    // terminator shading — one side slightly dimmer for a 3D moon read
+    const term = ctx.createRadialGradient(mx - 5, my - 5, 1, mx, my, 13)
+    term.addColorStop(0, 'rgba(255,255,255,0)')
+    term.addColorStop(1, 'rgba(120,132,168,0.22)')
+    ctx.fillStyle = term
+    ctx.beginPath(); ctx.arc(mx, my, 13.5, 0, 7); ctx.fill()
+  } else {
+    // clouds (soft layered blobs) — aztec: whiter, denser jungle cover
+    const nClouds = aztec ? 44 : 34
+    for (let i = 0; i < nClouds; i++) {
+      const x = rnd() * W
+      const y = H * (0.08 + rnd() * 0.4)
+      const rw = 45 + rnd() * 140, rh = rw * (0.22 + rnd() * 0.16)
+      const a = 0.16 + rnd() * 0.2
+      const cg = ctx.createRadialGradient(x, y, 1, x, y, rw)
+      cg.addColorStop(0, `rgba(255,252,245,${a})`)
+      cg.addColorStop(0.6, `rgba(250,246,238,${a * 0.55})`)
+      cg.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = cg
+      ctx.save()
+      ctx.translate(x, y); ctx.scale(1, rh / rw); ctx.translate(-x, -y)
+      ctx.beginPath(); ctx.arc(x, y, rw, 0, 7); ctx.fill()
+      ctx.restore()
+    }
+    // sun disc + glow (place away from mid lane sightlines — NE high sky)
+    const sx = W * 0.78, sy = H * 0.2
+    const glow = ctx.createRadialGradient(sx, sy, 2, sx, sy, 190)
+    glow.addColorStop(0, 'rgba(255,246,214,0.9)')
+    glow.addColorStop(0.25, 'rgba(255,238,190,0.35)')
+    glow.addColorStop(1, 'rgba(255,235,170,0)')
+    ctx.fillStyle = glow
+    ctx.beginPath(); ctx.arc(sx, sy, 190, 0, 7); ctx.fill()
+    ctx.fillStyle = 'rgba(255,251,238,0.98)'
+    ctx.beginPath(); ctx.arc(sx, sy, 17, 0, 7); ctx.fill()
   }
-  // sun disc + glow (place away from mid lane sightlines — NE high sky)
-  const sx = W * 0.78, sy = H * 0.2
-  const glow = ctx.createRadialGradient(sx, sy, 2, sx, sy, 190)
-  glow.addColorStop(0, 'rgba(255,246,214,0.9)')
-  glow.addColorStop(0.25, 'rgba(255,238,190,0.35)')
-  glow.addColorStop(1, 'rgba(255,235,170,0)')
-  ctx.fillStyle = glow
-  ctx.beginPath(); ctx.arc(sx, sy, 190, 0, 7); ctx.fill()
-  ctx.fillStyle = 'rgba(255,251,238,0.98)'
-  ctx.beginPath(); ctx.arc(sx, sy, 17, 0, 7); ctx.fill()
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
   const geo = new THREE.SphereGeometry(350, 32, 20)

@@ -1876,3 +1876,20 @@ Work Log:
 Stage Summary:
 - AIM DEPOT is floating-rectangle-free: BOTH floating-read geometry families removed (4 parapet caps + 2 window upper bands, 6 boxes total, both mapdata copies), live-verified by VLM at 3 vantages
 - Map plays more like a classic aim arena now: 1.2m duck-cover lane walls with clean open standing sightlines; version bumped to 2 to mark the rework
+
+---
+Task ID: 100
+Agent: Super Z (main agent)
+Task: User: "make aim depot night. with moon and stars"
+
+Work Log:
+- SKY (textures.ts skyMesh): new night branch for aimdepot — deep indigo gradient (#060a1c zenith -> #22335e horizon lift), 260-star field (deterministic mulberry32, 3 tints, sparkle crosses on the biggest), moon with halo + disc + crater mottling + terminator shading; day branch untouched (dust/dust2/aimhead stay day)
+- LIGHT RIG (engine.ts): refactored constructor + applyAtmosphere into ONE palette source (constructor now creates neutral lights then calls applyAtmosphere — map switches via rebuildMap get the identical path). aimdepot = MOONLIT NIGHT: fog #0c1322 near 42 far 190; hemi indigo #24304e/#131722 at 0.5; ambient #39456a at 0.3; directional (the moon) cool #b9c9ea at 1.05 vs day 1.9; environmentIntensity 0.3 vs 0.55 — metal reads dark. Intensities now palette-driven (Task 77 only did colors)
+- TWO SIZE/ELEVATION LESSONS found live: (1) the moon inherited the sun-disc elevation H*0.2 = 54 deg — ABOVE a 75-deg-FOV frame at pitch 0, invisible in every screenshot (the earlier 'moon upper right' VLM read was a sparkle star); moved to H*0.37 = 24 deg: clears the 6 m walls, sits in-frame at eye level, visible from SPAWN dead ahead. (2) equirect px ARE DEGREES: the enlarged 29-px disc rendered ~340 px wide (10-deg moon — comedy-sized); scaled to 13 px = 4.6-deg ~78-px moon with 100-px halo. Pixel-cluster forensics (HUD zone excluded — the 'bright blob' red herring was the crosshair at screen center) drove both fixes
+- LIVE VERIFY (aimdepot-t100d set): VLM sees the moon in BOTH spawn and mid vantages — distinct bright disc + soft halo bloom, stars praised ('four-pointed star sprites'); arena 'dark but highly readable, excellent contrast for gameplay'; craters read as subtle mottling at screen size (stylized look, accepted). Earlier t100 run verdicts banked in scripts/vlm-aimdepot-night-t100.json
+- MAPDATA: aimdepot version 2->3, MAP_LIST desc now 'low lane walls · moonlit night' (both copies). Game-server restarted for the version bump
+- REGRESSIONS: aimdepot 8/8, dust 6/6, dust2 6/6, aimhead 8/8, bugfixes ALL PASS, bots 26/26, game-server exit-0, audio 336/336; tsc 0 src errors (28 baseline)
+
+Stage Summary:
+- AIM DEPOT is now the game's first NIGHT map: indigo star field + haloed moon visible from spawn, cool-blue directional moonlight with shadows, dim env reflections — while staying fully readable for duels
+- The atmosphere system grew a third palette (night) with intensities included; any future map can opt into night with one applyAtmosphere branch + skyMesh branch

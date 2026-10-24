@@ -306,13 +306,11 @@ export class Engine {
     // atmosphere per map (Task 77): dust/dust2 keep the warm desert balance;
     // aimhead gets its ORIGINAL identity — de_aztec's pale jungle-blue haze and
     // cool green ground-bounce (a tan desert atmosphere renders the muted
-    // aztec greens brown). Re-themed on rebuildMap.
-    const aztec = this.opts.map === 'aimhead'
-    if (aztec) {
-      this.scene.fog.color.set(0xcfe0e8)
-      this.scene.fog.near = 60
-      this.scene.fog.far = 260
-    }
+    // aztec greens brown). Task 100: aimdepot is a MOONLIT NIGHT — dark fog,
+    // dim cool sky bounce, moonlight replacing the sun (same NE-high
+    // direction as the sky disc). Re-themed on rebuildMap via the SAME
+    // applyAtmosphere() call — colors, intensities and env exposure all live
+    // there (single source of truth).
 
     // image-based lighting: PBR metal weapon materials need environment
     // reflections, otherwise high-metalness surfaces render near-black
@@ -326,15 +324,16 @@ export class Engine {
     this.camera = new THREE.PerspectiveCamera(this.opts.fov, window.innerWidth / window.innerHeight, 0.05, 700)
     this.scene.add(this.camera)
 
-    // lights — warm desert balance: strong sun, warm ambient bounce,
-    // shadowed areas must read warm-grey (not blue). aimhead: cooler jungle
-    // balance matching de_aztec (blue sky haze, green bounce, whiter sun)
-    const hemi = new THREE.HemisphereLight(aztec ? 0xdce8f0 : 0xe6e2d2, aztec ? 0x5e7a68 : 0x8a7a5e, 0.72)
+    // lights — created NEUTRAL (desert defaults); applyAtmosphere() below
+    // re-paints colors AND intensities per map (constructor + rebuildMap share
+    // the same code path, so a map switch lands the full palette)
+    const hemi = new THREE.HemisphereLight(0xe6e2d2, 0x8a7a5e, 0.72)
     this.scene.add(hemi)
-    const ambient = new THREE.AmbientLight(aztec ? 0xb6c4bd : 0xc9b896, 0.38)
+    const ambient = new THREE.AmbientLight(0xc9b896, 0.38)
     this.scene.add(ambient)
-    // sun with shadows (matches the sky's sun disc — NE high)
-    const sun = new THREE.DirectionalLight(aztec ? 0xfff6e0 : 0xfff0d0, 1.9)
+    // directional light = sun by day, MOONLIGHT on night maps (same NE-high
+    // position as the sky disc; shadows work identically)
+    const sun = new THREE.DirectionalLight(0xfff0d0, 1.9)
     this.atmo = { hemi, ambient, sun, fog: this.scene.fog }
     sun.position.set(55, 70, 18)
     sun.castShadow = true
@@ -348,6 +347,7 @@ export class Engine {
     sun.shadow.bias = -0.00035
     sun.shadow.normalBias = 0.03
     this.scene.add(sun)
+    this.applyAtmosphere(this.opts.map as MapId)
     this.scene.add(sun.target)
 
     this.mapDef = MAPS[this.opts.map ?? 'dust2'] ?? MAPS.dust2
@@ -2280,17 +2280,26 @@ export class Engine {
 
   /** Task 77 — per-map atmosphere: dust/dust2 = warm desert haze + tan bounce;
    * aimhead = de_aztec mood (pale jungle-blue fog, cool sky hemi, green ground
-   * bounce, whiter sun). Colors only — position/intensity/shadows untouched. */
+   * bounce, whiter sun). Task 100 — aimdepot = MOONLIT NIGHT: near-black blue
+   * fog, dim indigo sky bounce, cool moonlight (the NE directional light IS
+   * the moon — same direction as the sky disc), lower env reflections so
+   * metal reads dark. Colors AND intensities — the single palette source for
+   * both the constructor and rebuildMap. */
   private applyAtmosphere(mapId: MapId) {
     const aztec = mapId === 'aimhead'
+    const night = mapId === 'aimdepot'
     const a = this.atmo
     if (!a) return
-    a.fog.color.set(aztec ? 0xcfe0e8 : 0xd9cfb4)
-    a.fog.near = aztec ? 60 : 55
-    a.fog.far = aztec ? 260 : 240
-    a.hemi.color.set(aztec ? 0xdce8f0 : 0xe6e2d2)
-    a.hemi.groundColor.set(aztec ? 0x5e7a68 : 0x8a7a5e)
-    a.ambient.color.set(aztec ? 0xb6c4bd : 0xc9b896)
-    a.sun.color.set(aztec ? 0xfff6e0 : 0xfff0d0)
+    a.fog.color.set(night ? 0x0c1322 : aztec ? 0xcfe0e8 : 0xd9cfb4)
+    a.fog.near = night ? 42 : aztec ? 60 : 55
+    a.fog.far = night ? 190 : aztec ? 260 : 240
+    a.hemi.color.set(night ? 0x24304e : aztec ? 0xdce8f0 : 0xe6e2d2)
+    a.hemi.groundColor.set(night ? 0x131722 : aztec ? 0x5e7a68 : 0x8a7a5e)
+    a.hemi.intensity = night ? 0.5 : 0.72
+    a.ambient.color.set(night ? 0x39456a : aztec ? 0xb6c4bd : 0xc9b896)
+    a.ambient.intensity = night ? 0.3 : 0.38
+    a.sun.color.set(night ? 0xb9c9ea : aztec ? 0xfff6e0 : 0xfff0d0)
+    a.sun.intensity = night ? 1.05 : 1.9
+    this.scene.environmentIntensity = night ? 0.3 : 0.55
   }
 }
