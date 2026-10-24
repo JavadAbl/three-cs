@@ -1829,3 +1829,17 @@ Work Log:
 Stage Summary:
 - ALL FOUR MAPS now carry real normal-map relief: dust + dust2 (shared desert set, scoped normals), aimhead (aztec), aimdepot (ambientCG) — the bare-key path is now only a fallback, every shipped map has a PBR_BY_MAP entry with a files-served guard test (10+10+15+12)
 - dust/ identity dir is pure normals (2.4MB, no albedo/bump duplication); test-dust.ts mirrors test-dust2.ts including the defuse bomb-carrier check
+
+---
+Task ID: 97
+Agent: Super Z (main agent)
+Task: User re-sent the PAT with instructions to keep it locally for future pushes (not committed) — publish the pending Task-96 commit (2307635)
+
+Work Log:
+- Token stored at /home/z/.gh-pat (chmod 600, OUTSIDE the repo — never enters git history or .git/config; pushes read it at invocation time via shell substitution)
+- Push: dfa4c66..2307635 main -> main verified; git fetch re-synced tracking ref; remote = local, zero pending commits
+- User explicitly opted to keep this PAT alive for future pushes — do NOT treat it as burned; future sessions should read /home/z/.gh-pat instead of asking for a new token (verify with authenticated ls-remote first)
+
+Stage Summary:
+- github.com/JavadAbl/three-cs current through Task 96: ALL FOUR MAPS (dust, dust2, aim_headshot, AIM DEPOT) now ship real normal-map PBR, public on GitHub
+- Push credential flow is now tokenless-from-user: /home/z/.gh-pat persists for future pushes per user instruction
