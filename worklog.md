@@ -1943,3 +1943,15 @@ Work Log:
 Stage Summary:
 - Crosshair right-tick fixed: the aiming pointer is now a proper symmetric dynamic crosshair; all four ticks spread with recoil/movement again
 - Live lesson: NEVER mix a computed style key with a literal same-name key in one React style object — later literal silently overwrites; build per-variant style objects explicitly
+---
+Task ID: 103b
+Agent: main
+Task: user approved the follow-up — add an outline around the green crosshair ticks for bright-backdrop visibility
+
+Work Log:
+- hud.tsx: module const XHAIR_OUTLINE = '0 0 0 1px rgba(0,0,0,0.7)' applied via boxShadow to all 4 ticks + center dot (spread-ring shadow adds no layout size; classic CS outline)
+- Live verify (ab-crosshair-verify.sh + dust join): ticks still symmetric on aimdepot (left 623..630 / right 650..657 around dot 639); VLM on night map: outline present, crisp, symmetric; VLM on bright desert map (dust2): "green ticks have thin dark outline, clearly visible against bright background"
+- REGRESSIONS: bugfixes ALL PASS, aimdepot ALL PASS, game-server exit-0; tsc 0 src errors
+
+Stage Summary:
+- Crosshair now outlined 1px near-black on every element — readable on sunlit desert maps and the night arena alike; no geometry change (task 103's symmetric layout untouched)

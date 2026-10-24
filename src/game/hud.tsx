@@ -238,6 +238,10 @@ export interface HudCallbacks {
   onQuit: () => void
 }
 
+// Task 103b: 1px near-black outline around every crosshair tick + dot —
+// keeps the green readable on bright/sunlit backdrops (classic CS outline).
+const XHAIR_OUTLINE = '0 0 0 1px rgba(0, 0, 0, 0.7)'
+
 export function Hud({ s, cb, settings, open }: {
   s: HudState
   cb: HudCallbacks
@@ -275,15 +279,18 @@ export function Hud({ s, cb, settings, open }: {
                 RIGHT tick the later `left: 'auto'` silently overwrote the
                 computed `left: gap`, so that tick collapsed to the static
                 position (glued to the center dot, never spreading). */}
+            {/* Task 103b: 1px near-black outline on every tick + dot so the
+                green stays readable against bright/sunlit backdrops (classic
+                CS outline) — box-shadow spread, adds no layout size. */}
             {(['top', 'bottom', 'left', 'right'] as const).map(pos => {
               const gap = `${4 + spreadPx}px`
               const horiz = pos === 'left' || pos === 'right'
               const style: React.CSSProperties = horiz
-                ? { width: 7, height: 2, transform: 'translateY(-50%)', top: 0, ...(pos === 'right' ? { left: gap } : { right: gap }) }
-                : { width: 2, height: 7, transform: 'translateX(-50%)', left: 0, ...(pos === 'bottom' ? { top: gap } : { bottom: gap }) }
+                ? { width: 7, height: 2, transform: 'translateY(-50%)', top: 0, boxShadow: XHAIR_OUTLINE, ...(pos === 'right' ? { left: gap } : { right: gap }) }
+                : { width: 2, height: 7, transform: 'translateX(-50%)', left: 0, boxShadow: XHAIR_OUTLINE, ...(pos === 'bottom' ? { top: gap } : { bottom: gap }) }
               return <div key={pos} className="absolute bg-[#3cff5e]" style={style} />
             })}
-            <div className="absolute h-[2px] w-[2px] bg-[#3cff5e] -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute h-[2px] w-[2px] bg-[#3cff5e] -translate-x-1/2 -translate-y-1/2" style={{ boxShadow: XHAIR_OUTLINE }} />
           </div>
         </div>
       )}
