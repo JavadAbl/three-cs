@@ -59,6 +59,7 @@ export interface HudState {
   hitmarkerAge: number
   headshotAge: number
   damageAge: number
+  dmgFrom: number | null
   deathBy: string | null
   banner: { title: string; sub: string; winner: string | null } | null
   toasts: Array<{ msg: string; t: number }>
@@ -133,6 +134,26 @@ const KICK: Partial<Record<WeaponId, number>> = {
   m249: 0.5, negev: 0.55,
 }
 
+/**
+ * Task 109 (#2): CS-style spray punch pattern. i = consecutive-shot index
+ * (this.sustained, 1-based). `kick` is the per-shot kick in RADIANS (KICK deg
+ * scaled by the negev spool ramp). Returns the camera-space delta for THIS
+ * shot: strong vertical climb over the first 4 shots then a plateau, and a
+ * deterministic per-weapon horizontal sway that stays dead-straight for the
+ * first 3 shots — the classic "up, then side" CS shape. Seeded from the id
+ * so every gun sways its own way but the SAME way every spray (learnable);
+ * a small random jitter keeps it organic. 1.5x on the old permanent-kick
+ * magnitude because the punch now fully recovers (see punchP field).
+ */
+export function sprayPunch(id: string, i: number, kick: number): { p: number; y: number } {
+  let seed = 0
+  for (let j = 0; j < id.length; j++) seed = (seed * 31 + id.charCodeAt(j)) >>> 0
+  const v = i <= 4 ? 1.0 - 0.08 * (i - 1) : 0.42 + 0.58 * Math.exp(-(i - 4) / 3.5)
+  const h = i <= 3 ? 0 : Math.sin((i - 3) * 0.9 + (seed % 628) / 100) * 0.45
+  const jitter = 0.85 + Math.random() * 0.3
+  return { p: kick * 1.5 * v * jitter, y: kick * 1.5 * h * (0.9 + Math.random() * 0.2) }
+}
+
 export class Engine {
   private canvas: HTMLCanvasElement
   private renderer!: THREE.WebGLRenderer
@@ -180,6 +201,14 @@ export class Engine {
   private reloadEndsAt = 0
   private reloadSfxTimers: ReturnType<typeof setTimeout>[] = []
   private recoil = 0
+  // Task 109 (#2): spray-pattern punch — camera-space offsets (radians)
+  // applied ON TOP of mouse aim (pitch/yaw stay clean). Climbs while the
+  // spray continues (no mid-spray recovery), holds ~120ms after the last
+  // shot, then decays fast (τ=90ms) — spray control = pull down against
+  // the pattern while firing; a pause returns the view to your true aim.
+  private punchP = 0
+  private punchY = 0
+  private punchAt = -1e9
   // Phase 7 accuracy-ramp spool (negev): consecutive-shot counter. Grows
   // with every sustained shot, hard-resets on a >400ms firing pause, weapon
   // switch, reload, round start or death. spreadDeg() lerps the negev's
@@ -207,7 +236,10 @@ export class Engine {
   // machinery stays wired for future burst guns)
   private burstRemaining = 0
   private bobPhase = 0
-  private lastW = 0
+  // Task 109 (#5): last weapon for Q quick-switch, tracked by ID not
+  // index — invSync/buyOk reorder the inventory across round resets and buys,
+  // so a stale INDEX made Q silently no-op or land on the wrong slot.
+  private lastWId: import('./weapons').WeaponId | null = null
   // v5 feel: viewmodel sway + camera shake + landing dip
   private swayX = 0
   private swayY = 0
@@ -258,6 +290,11 @@ export class Engine {
   private hitmarkerAt = 0
   private headshotAt = 0
   private damageAt = 0
+  // Task 109 (#6): bearing of the most recent incoming damage, relative to
+  // the view at hit time (radians; 0 = straight ahead, + = from the right).
+  // null when the source has no position (falls, bomb). Ages out via
+  // damageAt — the HUD fades the arc over 1s.
+  private dmgFrom: number | null = null
   private deathBy: string | null = null
   private banner: HudState['banner'] = null
   private gameover: HudState['gameover'] = null
@@ -386,7 +423,7 @@ export class Engine {
           this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.eyeY = y
           if (typeof yaw === 'number') { this.yaw = yaw; this.pitch = 0 }
         },
-        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, map: this.mapDef.id, mapv: this.mapDef.version, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen, weapon: this.inventory[this.wIdx], scopeLevel: this.scopeLevel, fov: Math.round(this.camera.fov * 100) / 100, scoped: this.scoped, spread: Math.round(this.spreadDeg() * 100) / 100, sustained: this.sustained }),
+        state: () => ({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: [this.vel.x, this.vel.y, this.vel.z], onGround: this.onGround, phase: this.phase, alive: this.alive, hp: this.hp, map: this.mapDef.id, mapv: this.mapDef.version, tick: this.loopTick, keys: [...this.keys], menu: this.menuOpen || this.buyOpen || this.chatOpen, weapon: this.inventory[this.wIdx], scopeLevel: this.scopeLevel, fov: Math.round(this.camera.fov * 100) / 100, scoped: this.scoped, spread: Math.round(this.spreadDeg() * 100) / 100, sustained: this.sustained, punch: [Math.round(this.punchP * 1000) / 1000, Math.round(this.punchY * 1000) / 1000] }),
         ammo: () => ({ weapon: this.inventory[this.wIdx], ammo: this.ammo[this.inventory[this.wIdx]], all: { ...this.ammo }, reloadEndsIn: Math.max(0, this.reloadEndsAt - performance.now()) }),
         reload: () => this.tryReload(),
         fire: () => this.tryFire(),
@@ -918,6 +955,8 @@ export class Engine {
         audio.roundStart()
         // round reset
         this.recoil = 0
+        this.punchP = 0
+        this.punchY = 0
         this.sustained = 0
         this.scopeLevel = 0
         this.scoped = false
@@ -982,6 +1021,15 @@ export class Engine {
         this.hp = d.hp
         this.camShake = Math.max(this.camShake, 0.35)
         audio.damageTaken()
+        // Task 109 (#6): bearing of the incoming shot for the HUD damage arc
+        // — attacker root vs my yaw at hit time (0 = ahead, + = right).
+        const ap = d.attackerId ? this.pm.getById(d.attackerId) : null
+        if (ap) {
+          const dx = ap.root.position.x - this.pos.x
+          const dz = ap.root.position.z - this.pos.z
+          const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw)
+          this.dmgFrom = Math.atan2(fx * dz - fz * dx, fx * dx + fz * dz)
+        } else this.dmgFrom = null
       }
     })
 
@@ -1331,11 +1379,13 @@ export class Engine {
       idx = entries[(cur + 1) % entries.length]
     }
     if (idx >= 0 && idx !== this.wIdx) {
-      this.lastW = this.wIdx
+      this.lastWId = this.inventory[this.wIdx]
       this.wIdx = idx
       this.reloadEndsAt = 0
       this.cancelReloadSfx()
       this.recoil = 0
+      this.punchP = 0
+      this.punchY = 0
       this.burstRemaining = 0
       this.sustained = 0
       this.setScopeLevel(0)
@@ -1346,13 +1396,19 @@ export class Engine {
   }
 
   private switchLast() {
-    if (this.lastW >= 0 && this.lastW < this.inventory.length && this.lastW !== this.wIdx) {
-      const t = this.wIdx
-      this.wIdx = this.lastW
-      this.lastW = t
+    const idx = this.lastWId ? this.inventory.indexOf(this.lastWId) : -1
+    if (idx >= 0 && idx !== this.wIdx) {
+      this.lastWId = this.inventory[this.wIdx]
+      this.wIdx = idx
       this.reloadEndsAt = 0
       this.cancelReloadSfx()
       this.burstRemaining = 0
+      // Task 109 (#2): a fresh gun starts a fresh spray — punch + spool reset
+      // (parity with switchSlot)
+      this.recoil = 0
+      this.punchP = 0
+      this.punchY = 0
+      this.sustained = 0
       this.setScopeLevel(0)
       this.rebuildViewmodel()
       this.socket?.emit('switch', { wIdx: this.wIdx })
@@ -1586,13 +1642,18 @@ export class Engine {
     }
 
     // recoil — ramped guns (negev) fade the kick with the spool: "recoil
-    // is eliminated after sustained fire" (CS:GO wiki) — the laser settles
+    // is eliminated after sustained fire" (CS:GO wiki) — the laser settles.
+    // Task 109 (#2): the kick now lands in the recovering spray-punch
+    // offsets instead of a permanent pitch/yaw nudge — deterministic
+    // pattern, learnable, returns to true aim after the spray.
     this.recoil = Math.min(this.recoil + 1, 18)
     const ramp = accuracyRampOf(w)
     const spoolT = ramp ? Math.min(this.sustained / ramp.shots, 1) : 0
     const kick = (KICK[w.id] ?? 0.5) * (Math.PI / 180) * (ramp ? 1 - 0.75 * spoolT : 1)
-    this.pitch += kick
-    this.yaw += (Math.random() - 0.5) * kick * 0.6 + Math.sin(this.recoil * 2.1) * 0.00035
+    const sp = sprayPunch(w.id, this.sustained, kick)
+    this.punchP += sp.p
+    this.punchY += sp.y
+    this.punchAt = now
     this.vmKick = 1
     // part animations: pistol slide blowback / AWP bolt cycle / dual berettas
     // alternate the cycling gun with every shot (fire left/right)
@@ -1678,11 +1739,14 @@ export class Engine {
       this.fx.shell(muzzle, right)
     }
 
-    // recoil — one mule kick for the shell
+    // recoil — one mule kick for the shell. Task 109 (#2): routed through
+    // the recovering spray-punch instead of a permanent pitch nudge (same
+    // 1.5x compensation as the rifle path — the punch returns to true aim)
     this.recoil = Math.min(this.recoil + 1, 18)
     const kick = (KICK[w.id] ?? 2.4) * (Math.PI / 180)
-    this.pitch += kick
-    this.yaw += (Math.random() - 0.5) * kick * 0.6 + Math.sin(this.recoil * 2.1) * 0.00035
+    this.punchP += kick * 1.5
+    this.punchY += (Math.random() - 0.5) * kick * 0.6
+    this.punchAt = now
     this.vmKick = 1
     // pump guns cycle the fore-end after the shot (audio pump comes from the
     // audio map's bolt slot — 300ms after the report)
@@ -1965,6 +2029,16 @@ export class Engine {
 
     // recoil decay
     this.recoil = Math.max(0, this.recoil - dt * 6)
+    // Task 109 (#2): punch HOLDS while the spray runs (no mid-spray recovery
+    // — the view climbs like CS), then after a 120ms grace decays with
+    // τ=90ms so the view snaps back to your true aim
+    if (performance.now() - this.punchAt > 120) {
+      const d = Math.exp(-dt / 0.09)
+      this.punchP *= d
+      this.punchY *= d
+      if (Math.abs(this.punchP) < 1e-4) this.punchP = 0
+      if (Math.abs(this.punchY) < 1e-4) this.punchY = 0
+    }
     this.vmKick = Math.max(0, this.vmKick - dt * 9)
     this.camShake = Math.max(0, this.camShake - dt * 2.2)
     this.landDip = Math.max(0, this.landDip - dt * 1.6)
@@ -2002,7 +2076,7 @@ export class Engine {
       else this.eyeY += (this.pos.y - this.eyeY) * Math.min(1, 26 * dt)
       const dip = Math.sin(Math.min(1, this.landDip / 0.22) * Math.PI) * this.landDip * 0.55
       this.camera.position.set(this.pos.x, this.eyeY + eye - dip, this.pos.z)
-      this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ')
+      this.camera.rotation.set(this.pitch + this.punchP, this.yaw + this.punchY, 0, 'YXZ')
       // camera shake (explosions / damage)
       if (this.camShake > 0) {
         const s = this.camShake * this.camShake
@@ -2247,6 +2321,7 @@ export class Engine {
       hitmarkerAge: now - this.hitmarkerAt,
       headshotAge: now - this.headshotAt,
       damageAge: now - this.damageAt,
+      dmgFrom: this.dmgFrom,
       deathBy: this.deathBy,
       banner: this.phase === 'post' ? this.banner : (this.phase === 'freeze' ? this.banner : null),
       toasts: [...this.toasts],

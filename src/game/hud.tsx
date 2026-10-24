@@ -315,6 +315,27 @@ export function Hud({ s, cb, settings, open }: {
         </div>
       )}
 
+      {/* ---------------- Task 109 (#6): directional damage arc ----------------
+          Red arc around the crosshair pointing where the last hit came FROM
+          (bearing taken at hit time relative to the view; 0 = ahead, + =
+          from the right). Fades over 1s; stays world-fixed relative to your
+          rotation at the moment of the hit, like CS damage indicators. */}
+      {s.alive && s.dmgFrom !== null && s.damageAge < 1000 && (() => {
+        const fade = 1 - s.damageAge / 1000
+        const deg = (s.dmgFrom * 180 / Math.PI).toFixed(1)
+        return (
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-20" style={{ transform: `rotate(${deg}deg)`, opacity: fade }}>
+            <svg width="120" height="120" viewBox="0 0 120 120" style={{ transform: 'translate(-60px,-60px)' }}>
+              {/* soft under-glow to keep it readable on bright maps */}
+              <path d="M 28.9 28.9 A 44 44 0 0 1 91.1 28.9" fill="none"
+                stroke="rgba(0,0,0,0.35)" strokeWidth="9" strokeLinecap="round" opacity="0.5" />
+              <path d="M 28.9 28.9 A 44 44 0 0 1 91.1 28.9" fill="none"
+                stroke="rgba(239,68,68,0.95)" strokeWidth="6" strokeLinecap="round" />
+            </svg>
+          </div>
+        )
+      })()}
+
       {/* ---------------- Phase 8: flashbang whiteout ---------------- */}
       {s.flash > 0.01 && (
         <div className="pointer-events-none absolute inset-0 z-[70] bg-white" style={{ opacity: s.flash }} />

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "(1) No, a red arc is not visible around or near the crosshair.\n(2) N/A\n(3) Yes, there is a red rectangular button labeled \"QUIT TO LOBBY\" in the center of the screen.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792846984,
+  "id": "2026102421030320d6a59c226546eb",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102421030320d6a59c226546eb",
+  "usage": {
+    "completion_tokens": 51,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1142,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1193
+  }
+}
