@@ -1783,3 +1783,18 @@ Work Log:
 
 Stage Summary:
 - github.com/JavadAbl/three-cs is current through Task 92: the AIM DEPOT re-skin (grey city-pavement pavers ground + tracer-free arena) and the whole Task-90/91 record chain are public; local and remote identical, zero pending commits
+
+---
+Task ID: 94
+Agent: Super Z (main agent)
+Task: User: "do 4. what is 1?" — housekeeping (option 4); option 1 (roll real-normal PBR to plain 'dust') explained, not executed
+
+Work Log:
+- FORENSICS: the Task-92 .tmp artifacts (1.7GB mirror tars + ground-candidates) were already gone (container reboot clears scripts/.tmp); disk fine at 18%
+- REAL ISSUE FOUND: working tree dirty with 167 modified files — all pure exec-bit drift (100644->100755, 0 insertions/deletions, the same bulk-chmod side effect as Task 90's parallel session); git restore . -> tree clean, zero content loss (HEAD still 5fb5959)
+- CACHE CLEANUP: removed /home/z/.cache/puppeteer (601M, no puppeteer reference in package.json/scripts/ab-*.sh — playwright is the browser dep, its 613M cache KEPT for the ab harness) and /tmp/tectonic (55M); /tmp/my-project (399M, root-owned stale project snapshot) is undeletable from this user and ephemeral — left alone; ~656M freed
+- No project files touched: no commits, no content changes; only this worklog record is new
+
+Stage Summary:
+- Housekeeping done: exec-bit drift reverted (167 files), 656MB of dead caches freed; repo at 5fb5959 = origin/main, tree clean
+- Next candidate work items remain: plain-'dust' PBR rollout (option 1), live experience pass, new gameplay content
