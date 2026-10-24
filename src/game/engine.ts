@@ -1765,7 +1765,9 @@ export class Engine {
     const key = `${w.id}:${this.myTeam}`
     let vm = this.vmCache.get(key)
     if (!vm) {
-      vm = (w.id === 'knife' ? buildGLBKnifeVM(this.myTeam) : buildGLBGunVM(w.id, this.myTeam))
+      // same scaleMul as rebuildViewmodel (Task 107 per-id trims live inside
+      // buildGLBGunVM now) so a cold-cache build here matches the rendered vm
+      vm = (w.id === 'knife' ? buildGLBKnifeVM(this.myTeam) : buildGLBGunVM(w.id, this.myTeam, this.vmGlbScaleMul))
         ?? buildViewModel(w.id, this.myTeam)
       this.vmCache.set(key, vm)
     }

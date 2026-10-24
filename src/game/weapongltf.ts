@@ -196,6 +196,18 @@ export function buildGLBKnifeVM(team: TeamId): ViewModel | null {
 // __eng.vmScale(f) (multiplier on this constant).
 export const GLB_VM_SCALE = 0.90
 
+// Per-id first-person size TRIMS on top of GLB_VM_SCALE (remote guns stay
+// real-size). Task 107: user "can make aug model a bit smaller in first
+// person view?" — the AUG A3's real 0.690m bullpup reads larger on screen
+// than the shorter famas/galil despite the same global 0.90. 0.85 = −15%
+// on top → effective 0.765 of real size. Stacks with the live
+// __eng.vmScale(f) global mul (engine passes it as scaleMul). The builder
+// is scale-safe end-to-end: measureGun() re-derives tip/eject and the
+// support-hand z from the SCALED geometry, so nothing else moves.
+export const GLB_VM_ID_SCALE: Partial<Record<string, number>> = {
+  aug: 0.85,
+}
+
 /**
  * Measure a freshly assembled vm group (identity transform): overall bbox
  * plus the average height of the muzzle slice (z < min.z + 4cm) so the muzzle
@@ -276,7 +288,7 @@ export function buildGLBGunVM(weaponId: string, team: TeamId, scaleMul = 1): Vie
   if (!route) return null
   const g = new THREE.Group()
   g.userData.glbVm = weaponId // debug/test marker: this vm came from the GLB branch
-  const gs = GLB_VM_SCALE * scaleMul
+  const gs = GLB_VM_SCALE * (GLB_VM_ID_SCALE[weaponId] ?? 1) * scaleMul
 
   if (route.dual) {
     // dual berettas: two pistols in two gloved hands, canted slightly inward

@@ -2021,3 +2021,18 @@ Stage Summary:
 - AUG now runs the user's own Steyr AUG A3 model (607KB Draco+WebP) — six user models live: ak47, ak74, galil, m4, famas, aug; fire mode/stats untouched (auto 100ms, 28dmg, scope intact)
 - Bake lesson (recorded in bake-aug.ts): verify thresholds must scale with k and be anchored to the ANCHOR datum, not copied from previous models — the famas −0.05 body threshold matched nothing at k=0.0088
 - Buy-menu harness lesson: digit keys must carry code:'DigitN' (the menu matches e.code, not e.key); freeze windows are ~4s so phase-poll at ≤0.5s and buy instantly
+
+---
+Task ID: 107
+Agent: main
+Task: AUG first-person viewmodel size trim — user: "can make aug model a bit smaller in first person view?"
+
+Work Log:
+- Added GLB_VM_ID_SCALE per-id vm trim table in weapongltf.ts (aug: 0.85), folding into buildGLBGunVM's gs = GLB_VM_SCALE * idMul * scaleMul. AUG A3's real 0.690m bullpup read large on screen vs the shorter famas/galil at the same global 0.90.
+- Builder is scale-safe end-to-end: measureGun() re-derives tip/eject/support-hand z from the SCALED clone, so the −15% shrinks the gun about its grip anchor with no other motion touched. Remote guns (buildGLBRemoteGun) stay real-size.
+- engine.ts muzzleWorld cold-cache path now passes this.vmGlbScaleMul (was default 1) so a flash-position build can never mismatch the rendered vm scale.
+- LIVE (aim depot CT): bought AUG during freeze (B→4→8; AUG is CT-only — a T-side attempt silently failed, key learning). Quantitative vmProbe: tipView z −0.692 (task 106 baseline) → −0.626 = 6.5cm pull, exactly the expected −15% on the 0.476m anchor→muzzle span (0.476×0.90×0.15≈0.064). glb:"aug" confirmed GLB-backed. VLM on held-AUG frame: rifle lower-right, moderate footprint, reads SMALLER than a typical CS rifle vm, no clipping/glitches.
+- REGRESSIONS: phase5 e2e ALL PASS exit-0, buymenu 217/217, bots 26/26, audio 336/336, tsc src 0.
+
+Stage Summary:
+- AUG first-person vm now renders at 0.90×0.85 = 0.765 of real size (~15% smaller); all other GLB vms unchanged; remote guns real-size. Per-id trims are data-driven — future "make X smaller" requests are one-line table entries. Effective scale still live-tunable via __eng.vmScale(f).
