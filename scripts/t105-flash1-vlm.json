@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "No, there is no bright muzzle flash or fire effect at the gun's barrel tip.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792835471,
+  "id": "2026102417511062accc91bd9c4aef",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102417511062accc91bd9c4aef",
+  "usage": {
+    "completion_tokens": 19,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1095,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1114
+  }
+}
