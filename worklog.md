@@ -1798,3 +1798,16 @@ Work Log:
 Stage Summary:
 - Housekeeping done: exec-bit drift reverted (167 files), 656MB of dead caches freed; repo at 5fb5959 = origin/main, tree clean
 - Next candidate work items remain: plain-'dust' PBR rollout (option 1), live experience pass, new gameplay content
+
+---
+Task ID: 95
+Agent: Super Z (main agent)
+Task: User provided a fresh PAT — publish the pending Task-94 worklog commit (6fe56a7)
+
+Work Log:
+- Token verified: authenticated ls-remote resolved refs/heads/main = 5fb5959 (read path OK); push proved Contents:Write — 5fb5959..6fe56a7 main -> main via one-time tokened URL, nothing persisted to .git/config or disk
+- Post-push: git fetch re-synced tracking ref; remote main = 6fe56a7 = local HEAD, zero pending commits
+- Token hygiene: 5th chat-pasted PAT — user advised (again) to revoke/rotate after use
+
+Stage Summary:
+- github.com/JavadAbl/three-cs current through Task 94 (housekeeping record); local and remote identical
