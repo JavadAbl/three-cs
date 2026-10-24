@@ -11,6 +11,10 @@ PREFIX="$1"
 
 agent-browser set viewport 1280 720 >/dev/null 2>&1 || true
 agent-browser open http://localhost:81/ >/dev/null 2>&1
+# HARD reload: the sky .bins are HTTP-cached 24 h (Next public/) and the page
+# may be a stale session with old JS — force fresh JS + cache:'reload' fetches
+agent-browser eval "location.reload(); 1" >/dev/null 2>&1
+sleep 2
 for _ in $(seq 1 45); do agent-browser snapshot -i 2>/dev/null | rg -q "QUICK PLAY" && break; sleep 1; done
 sleep 1
 

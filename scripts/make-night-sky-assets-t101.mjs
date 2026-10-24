@@ -104,6 +104,11 @@ function mulberry32(seed) {
 {
   const { json: j, bin } = parseGLB('/home/z/my-project/upload/star_cluster_-_15k_stars_model.glb')
   const rnd = mulberry32(101)
+  // Task 101 iter 2 (user: "fewer stars, fewer lighting"): keep ~1/3 of the
+  // above-horizon quads (deterministic, size-blind) and dim colors — the
+  // first pass (all 22.5k) read too busy against the dim arena
+  const KEEP_RATE = 0.34
+  const BRIGHTNESS = 0.8
   // per-mesh emissive tints, desaturated 55% toward white (raw glTF
   // emissives are near-pure RGB; straight use = christmas-tree sky)
   const TINTS = [[1, 0.346, 0.346], [1, 1, 0.340], [0, 0.341, 1]].map(t => t.map(c => c + (1 - c) * 0.55))
@@ -122,13 +127,14 @@ function mulberry32(seed) {
       const len = Math.hypot(cx, cy, cz) || 1
       const dy = cy / len
       if (dy <= 0.02) { dropped++; continue }   // below horizon — never visible past the walls
+      if (rnd() > KEEP_RATE) { dropped++; continue }  // Task 101 iter 2: thinned field
       const e1 = Math.hypot(pos[q + 1][0] - pos[q][0], pos[q + 1][1] - pos[q][1], pos[q + 1][2] - pos[q][2])
       const e2 = Math.hypot(pos[q + 3][0] - pos[q][0], pos[q + 3][1] - pos[q][1], pos[q + 3][2] - pos[q][2])
       const qSize = (e1 + e2) / 2
       const w = 0.9 + qSize * 5.5
       const r = 285 + rnd() * 45               // depth band inside the 350-r sky sphere
       const px = (cx / len) * r, py = (cy / len) * r, pz = (cz / len) * r
-      const bright = Math.min(1, 0.35 + 0.65 * Math.min(1, qSize / 0.22))
+      const bright = BRIGHTNESS * Math.min(1, 0.35 + 0.65 * Math.min(1, qSize / 0.22))
       const col = [tint[0] * bright, tint[1] * bright, tint[2] * bright]
       let bi = EDGES.findIndex(e => w < e)
       if (bi === -1) bi = EDGES.length

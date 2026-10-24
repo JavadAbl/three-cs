@@ -36,7 +36,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * The string is part of the record key, so a bump also lets the install-time
  * sweep garbage-collect every previous version in one pass.
  */
-export const ASSET_CACHE_VERSION = 'v1'
+export const ASSET_CACHE_VERSION = 'v2'   // Task 101 iter 2: thinned stars-night.bin re-shipped
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'

@@ -1911,3 +1911,20 @@ Work Log:
 Stage Summary:
 - AIM DEPOT's night sky is now made of the user's real 3D models: a textured lunar sphere + 22.5k-star field (converted to camera-facing points — the raw cluster would render half edge-on from inside), 1.1MB total lazy-loaded on aimdepot only
 - The glTF legacy-extension pitfall (pbrSpecularGlossiness vs three r166+) is documented in the README + sources.json with the exact recovery script; night atmosphere system otherwise untouched (Task-100 light rig intact)
+
+---
+Task ID: 101 (iter 2)
+Agent: Super Z (main agent)
+Task: User: "fewer stars, fewer lighting. moon be in middle of map sky"
+
+Work Log:
+- FEWER STARS: make-night-sky-assets-t101.mjs gained KEEP_RATE 0.34 + BRIGHTNESS 0.8 (deterministic thinning, size-blind) -> stars-night.bin 22,518 -> 7,618 stars (183KB). Objective pixel evidence: sky-view bright pixels 99.5k -> 53.0k (-47%); VLM now reads "moderate to dense" (was "dense")
+- MOON CENTERED: MOON_DIR -> (0, sin30, -cos30) — azimuth 0 = dead over the yard-center axis on the T-spawn sightline (spawns z +-17.5 face the map middle), elevation 24 -> 30 deg (upper-middle of the 75-deg FOV at pitch 0, still under the 37.5-deg frame-top lesson). VLM: dead-center upper frame from mid + pitched-up vantages; from OFF-CENTER spawn slots the moon offsets in-view (physically correct for a fixed 3D object — each slot faces center with a different yaw; impossible to center for all ten)
+- FEWER LIGHTING: applyAtmosphere night rig dimmed — hemi 0.5->0.38 (color 0x24304e->0x1d2742), ambient 0.3->0.22, moonlight 1.05->0.85, envIntensity 0.3->0.24, fog 0x0c1322->0x080d1a; moon glow sprite 170u/0.55-alpha -> 130u/0.30-alpha (halved gradient stops). VLM 3/3 PASS: arena still "dark but readable"
+- STALE-ASSET LESSON (the hard one): three cache layers stack on the sky bins — (1) browser HTTP cache (Next serves public/ with max-age=86400), (2) Next dev's in-memory static handler served a stale BODY with the NEW ETag until revalidation, (3) THE REAL TRAP: preloader.ts monkey-patches window.fetch with a Cache Storage layer (three-cs-assets-vX) whose ASSET_CACHE_VERSION bump is the ONLY designed invalidation — cache:'reload' does NOT pierce it. Iter-2's re-shipped stars-night.bin therefore REQUIRED the documented BUMP RULE: ASSET_CACHE_VERSION v1 -> v2 (install-time sweep GCs the whole v1 cache). nightsky.ts fetches now use cache:'reload' as the second line for cache-miss paths, __nightsky test hook gained a v:2 marker, ab-nightsky-t101.sh force-reloads the page before capturing. A re-shipped asset WITHOUT a bump = every existing player keeps the old blob until site-data clear — never ship an asset change without checking preloader.ts
+- LIVE VERIFY: __nightsky {v:2, stars:7618}; VLM 3/3 PASS (spawn/mid/sky) — textured moon + softer halo centered from the map axis, thinned field, no artifacts, readable arena
+- REGRESSIONS: aimdepot/dust/dust2/aimhead ALL PASS, bugfixes ALL PASS, game-server exit-0 (client-only), tsc 0 game-src errors
+
+Stage Summary:
+- Night sky v2: ~1/3 the stars (7.6k, dimmer), moon dead-center over the yard axis at 30-deg elevation with a softer glow, whole night rig dimmed ~25% — VLM-verified readable, pixel-verified thinner
+- The asset-refresh protocol is now proven end-to-end: change asset -> bump ASSET_CACHE_VERSION -> fresh for everyone; documented in preloader + nightsky comments

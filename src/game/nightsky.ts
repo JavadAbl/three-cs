@@ -30,16 +30,17 @@ import * as THREE from 'three'
 
 const DIR = '/assets/models/sky/'
 
-// Moon placement — the Task-100 painted-moon direction (equirect u=0.78,
-// v=0.37 on the sky texture = this local-frame vector). Two live lessons
-// are baked into these numbers: elevation ~24 deg clears the 6 m perimeter
-// walls yet stays inside a 75-deg-FOV frame at pitch 0 (54 deg was invisible
-// at eye level), and a 24-u disc at 300 u reads ~4.6 deg wide (~78 px at
-// 720p) — the tuned "real moon" size, not a comedy 10-deg disc.
-const MOON_DIR = new THREE.Vector3(-0.172, 0.397, -0.902).normalize()
+// Moon placement — iter 2 (user: "moon be in middle of map sky"): azimuth
+// 0 = dead over the yard center on the T-spawn sightline (spawns sit at
+// z +-17.5 facing the map middle), elevation 30 deg = upper-middle of the
+// 75-deg-FOV frame at pitch 0 (still clears the 6 m walls, stays visible
+// while aiming — the Task-100 lesson keeps elevation < 37.5 deg frame top).
+// The 24-u disc at 300 u reads ~4.6 deg wide (~78 px at 720p) — the tuned
+// "real moon" size, not a comedy 10-deg disc.
+const MOON_DIR = new THREE.Vector3(0, Math.sin(Math.PI / 6), -Math.cos(Math.PI / 6))
 const MOON_DIST = 300        // inside the 350-r sky sphere, which follows the camera
 const MOON_RADIUS = 12       // unit-sphere model scale
-const MOON_GLOW = 170        // soft additive bloom diameter (Task-100 halo equivalent)
+const MOON_GLOW = 130        // soft additive bloom diameter (iter 2: 170 was too loud)
 
 // moon.bin layout (see the conversion script): f32 pos[3223] + f32
 // norm[3223] + f32 uv[3223] + u32 idx[17664], all tightly packed
@@ -58,9 +59,11 @@ function glowTexture(): THREE.CanvasTexture {
   c.width = c.height = S
   const ctx = c.getContext('2d')!
   const g = ctx.createRadialGradient(S / 2, S / 2, 2, S / 2, S / 2, S / 2)
-  g.addColorStop(0, 'rgba(224,232,255,0.55)')
-  g.addColorStop(0.25, 'rgba(196,210,246,0.22)')
-  g.addColorStop(0.55, 'rgba(180,195,240,0.07)')
+  // iter 2 (user: "fewer lighting"): halved glow alphas — the bloom reads
+  // as moonlight haze, not a spotlight
+  g.addColorStop(0, 'rgba(224,232,255,0.30)')
+  g.addColorStop(0.25, 'rgba(196,210,246,0.12)')
+  g.addColorStop(0.55, 'rgba(180,195,240,0.04)')
   g.addColorStop(1, 'rgba(180,195,240,0)')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, S, S)
@@ -70,8 +73,15 @@ function glowTexture(): THREE.CanvasTexture {
 }
 
 async function buildNightSky(): Promise<THREE.Group | null> {
+  // Second-line freshness: the preloader's asset cache (three-cs-assets-vX)
+  // sits ABOVE the browser HTTP cache — re-shipping a sky bin REQUIRES the
+  // ASSET_CACHE_VERSION bump (the BUMP RULE in preloader.ts). {cache:'reload'}
+  // below additionally revalidates on cache-miss paths, where the plain
+  // 24-h Next public/ cache would otherwise serve a stale bin forever.
+  const fetchFresh = (url: string) =>
+    fetch(url, { cache: 'reload' }).then(r => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer() })
   const [moonBin, moonTex, spriteTex] = await Promise.all([
-    fetch(DIR + 'moon.bin').then(r => { if (!r.ok) throw new Error('moon.bin ' + r.status); return r.arrayBuffer() }),
+    fetchFresh(DIR + 'moon.bin'),
     new THREE.TextureLoader().loadAsync(DIR + 'moon_diffuse.jpg'),
     new THREE.TextureLoader().loadAsync(DIR + 'star-sprite.png'),
   ])
@@ -121,7 +131,7 @@ async function buildNightSky(): Promise<THREE.Group | null> {
   // ---- stars: one THREE.Points per size bucket (built-in PointsMaterial
   // has a single size per cloud — the conversion script buckets accordingly,
   // and the renderer auto-scales points for DPR/resolution)
-  const starBuf = await fetch(DIR + 'stars-night.bin').then(r => { if (!r.ok) throw new Error('stars-night.bin ' + r.status); return r.arrayBuffer() })
+  const starBuf = await fetchFresh(DIR + 'stars-night.bin')
   const dv = new DataView(starBuf)
   const nBuckets = dv.getUint32(0, true)
   let off = 4
@@ -177,6 +187,7 @@ export function attachNightSky(sky: THREE.Mesh): void {
     // test hook: live VLM scripts await this before judging the sky
     ;(window as unknown as Record<string, unknown>).__nightsky = {
       ready: true,
+      v: 2,   // iter 2 — thinned field (7.6k), centered moon, dim rig
       stars: (g.userData as Record<string, { stars: number }>).nightSky.stars,
     }
   })

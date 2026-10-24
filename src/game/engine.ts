@@ -308,7 +308,9 @@ export class Engine {
     // cool green ground-bounce (a tan desert atmosphere renders the muted
     // aztec greens brown). Task 100: aimdepot is a MOONLIT NIGHT — dark fog,
     // dim cool sky bounce, moonlight replacing the sun (same NE-high
-    // direction as the sky disc). Re-themed on rebuildMap via the SAME
+    // direction as the sky disc). Task 101 iter 2 (user: "fewer lighting"):
+    // the night rig was dimmed further — hemi 0.38, ambient 0.22, moonlight
+    // 0.85, env 0.24. Re-themed on rebuildMap via the SAME
     // applyAtmosphere() call — colors, intensities and env exposure all live
     // there (single source of truth).
 
@@ -2285,23 +2287,25 @@ export class Engine {
    * bounce, whiter sun). Task 100 — aimdepot = MOONLIT NIGHT: near-black blue
    * fog, dim indigo sky bounce, cool moonlight (the NE directional light IS
    * the moon — same direction as the sky disc), lower env reflections so
-   * metal reads dark. Colors AND intensities — the single palette source for
-   * both the constructor and rebuildMap. */
+   * metal reads dark. Task 101 iter 2 — "fewer lighting": hemi 0.38,
+   * ambient 0.22, moonlight 0.85, env 0.24, fog #080d1a. Colors AND
+   * intensities — the single palette source for both the constructor and
+   * rebuildMap. */
   private applyAtmosphere(mapId: MapId) {
     const aztec = mapId === 'aimhead'
     const night = mapId === 'aimdepot'
     const a = this.atmo
     if (!a) return
-    a.fog.color.set(night ? 0x0c1322 : aztec ? 0xcfe0e8 : 0xd9cfb4)
+    a.fog.color.set(night ? 0x080d1a : aztec ? 0xcfe0e8 : 0xd9cfb4)
     a.fog.near = night ? 42 : aztec ? 60 : 55
     a.fog.far = night ? 190 : aztec ? 260 : 240
-    a.hemi.color.set(night ? 0x24304e : aztec ? 0xdce8f0 : 0xe6e2d2)
-    a.hemi.groundColor.set(night ? 0x131722 : aztec ? 0x5e7a68 : 0x8a7a5e)
-    a.hemi.intensity = night ? 0.5 : 0.72
-    a.ambient.color.set(night ? 0x39456a : aztec ? 0xb6c4bd : 0xc9b896)
-    a.ambient.intensity = night ? 0.3 : 0.38
+    a.hemi.color.set(night ? 0x1d2742 : aztec ? 0xdce8f0 : 0xe6e2d2)
+    a.hemi.groundColor.set(night ? 0x0e121c : aztec ? 0x5e7a68 : 0x8a7a5e)
+    a.hemi.intensity = night ? 0.38 : 0.72
+    a.ambient.color.set(night ? 0x2c3654 : aztec ? 0xb6c4bd : 0xc9b896)
+    a.ambient.intensity = night ? 0.22 : 0.38
     a.sun.color.set(night ? 0xb9c9ea : aztec ? 0xfff6e0 : 0xfff0d0)
-    a.sun.intensity = night ? 1.05 : 1.9
-    this.scene.environmentIntensity = night ? 0.3 : 0.55
+    a.sun.intensity = night ? 0.85 : 1.9
+    this.scene.environmentIntensity = night ? 0.24 : 0.55
   }
 }
