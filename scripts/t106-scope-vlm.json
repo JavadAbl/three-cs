@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the image provided, here are the answers to your questions:\n\n*   **Is there a scope overlay?** **Yes.** The image features a distinct circular scope view with black borders (vignetting) surrounding it. You can also see the thin crosshair lines of a reticle dividing the circle into quadrants.\n*   **Is the weapon viewmodel hidden or visible?** **Hidden.** There is no visible gun model in this screenshot. This is standard behavior for many first-person shooters when scoped in with a sniper rifle to provide an unobstructed view.\n*   **Is the view zoomed in?** **Yes.** The view is heavily zoomed in, as indicated by the close-up texture of what appears to be a wall or ground surface filling the entire circular viewport.\n*   **Any glitches?** **No obvious glitches.** The image appears to be a clean screenshot of a game's round-end screen (specifically from *Counter-Strike 2*) while the player was still in a scoped state. The UI overlay (\"TERRORISTS WIN\") is rendering correctly on top of the scope view.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792840321,
+  "id": "2026102419115815ec1364780d45be",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102419115815ec1364780d45be",
+  "usage": {
+    "completion_tokens": 234,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1112,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1346
+  }
+}
