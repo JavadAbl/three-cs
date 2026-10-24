@@ -1044,7 +1044,7 @@ const PBR: Record<SurfaceTex, PbrSpec> = {
 
 /** Task 77 — per-map texture identities. A map with an entry here renders its
  * surfaces from /textures/maps/<mapId>/<surface>.jpg instead of the shared
- * desert set (dust = shared; dust2 = shared albedo + scoped normals — Task 90).
+ * desert set (dust/dust2 = shared albedo + scoped normals — Tasks 90/96).
  * The ORIGINAL aim_headshot is built from
  * de_aztec.wad textures (AzGrass/AzWll/AzStat... — the "Az" prefix = Aztec,
  * confirmed via the BSP worldspawn wad list), so aimhead gets the aztec
@@ -1063,8 +1063,8 @@ const PBR: Record<SurfaceTex, PbrSpec> = {
  * pixel-for-pixel geometrically. dust2's dir ships only the 10 normals
  * (albedo/bump stay shared through the chain); aimhead's 5 aztec identity
  * surfaces get theirs appended (the hue-baked grass keeps its native
- * normal — hue moves color, not geometry). Plain "dust" stays bare-key
- * (can mirror dust2's entry any time). */
+ * normal — hue moves color, not geometry). Task 96 — plain "dust" mirrors
+ * the dust2 normals byte-for-byte (same shared desert set). */
 const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, PbrSpec>>> = {
   aimhead: {
     // tile params derive from MEASURED BSP UV density (Task 77): geom groups
@@ -1086,6 +1086,24 @@ const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, PbrSpec>>> = {
     brick: { tile: 2.2, bump: 1.3, normal: 1.1  }, // Bricks083 — tan medieval sandstone blocks
     wall:  { tile: 4.5, bump: 0.9, normal: 0.7  }, // Concrete044A — smooth charcoal concrete (tile raised 3.0->4.5 iter2: form-work band tiled visibly on the 64 m perimeter walls — Task-74 remedy)
     crate: { tile: 1.5, bump: 1.3, normal: 1.0  }, // Wood092 — warm fine crate wood (tile 1.2->1.5 iter2: finer grain, less vertical smear)
+  },
+  // Task 96 — plain 'dust' mirrors the dust2 scoped normal upgrade
+  // BYTE-FOR-BYTE: dust shares the desert albedo/height set with dust2
+  // (dust was the bare-key map), so its dir ships the same 10 PolyHaven
+  // nor_gl normals (copied from dust2/ — provenance in dust/sources.json);
+  // albedo/bump resolve through the chain to the shared files. Tiles/bumps
+  // mirror the dust2 spec verbatim. All four maps now carry real relief.
+  dust: {
+    sand:     { tile: 14,  bump: 0.55, normal: 0.6  }, // aerial_sand — ruts
+    wall:     { tile: 3.0, bump: 1.0,  normal: 0.75 }, // worn_cracked_plaster 2K — hairline cracks (dominant surface)
+    brick:    { tile: 1.8, bump: 1.5,  normal: 1.0  }, // large_sandstone_blocks
+    concrete: { tile: 3.0, bump: 0.8,  normal: 0.7  }, // concrete — dirty outdoor
+    crate:    { tile: 1.2, bump: 1.3,  normal: 1.0  }, // plywood
+    plank:    { tile: 2.0, bump: 1.2,  normal: 1.0  }, // wood_planks_dirt
+    metal:    { tile: 1.5, bump: 0.8,  normal: 0.8  }, // worn_corrugated_iron
+    dark:     { tile: 3.5, bump: 0.8,  normal: 0.6  }, // asphalt_03
+    door:     { tile: 1.1, bump: 1.0,  normal: 0.9  }, // painted_metal_shutter
+    doorBlue: { tile: 1.2, bump: 0.9,  normal: 0.9  }, // blue_painted_planks
   },
   dust2: {
     // Task 90 — dust2 gets the scoped normal upgrade: this dir ships ONLY the

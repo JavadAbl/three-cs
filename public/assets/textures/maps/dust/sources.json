@@ -1,0 +1,54 @@
+{
+  "_pipeline": "Task 96 — plain 'dust' mirrors the Task-90 dust2 scoped normal upgrade byte-for-byte: dust and dust2 share the desert albedo/height set (dust = shared bare-key), so each surface's own PolyHaven nor_gl normal (fetched once for dust2 by scripts/fetch-normal-maps.py) is copied into this dir unchanged. Albedo/bump resolve through the 4-step loader chain to the shared files; the accepted Task-75 look is untouched, only real relief is added. Native res, no resample, q85 linear.",
+  "_license": "All textures CC0 1.0 (polyhaven.com)",
+  "sand": {
+    "polyhaven_id": "aerial_sand",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/aerial_sand (1k nor_gl — OpenGL Y+)"
+  },
+  "wall": {
+    "polyhaven_id": "worn_cracked_plaster",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/worn_cracked_plaster (2k nor_gl — OpenGL Y+)"
+  },
+  "brick": {
+    "polyhaven_id": "large_sandstone_blocks",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/large_sandstone_blocks (1k nor_gl — OpenGL Y+)"
+  },
+  "concrete": {
+    "polyhaven_id": "concrete",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/concrete (1k nor_gl — OpenGL Y+)"
+  },
+  "crate": {
+    "polyhaven_id": "plywood",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/plywood (1k nor_gl — OpenGL Y+)"
+  },
+  "plank": {
+    "polyhaven_id": "wood_planks_dirt",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/wood_planks_dirt (1k nor_gl — OpenGL Y+)"
+  },
+  "metal": {
+    "polyhaven_id": "worn_corrugated_iron",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/worn_corrugated_iron (1k nor_gl — OpenGL Y+)"
+  },
+  "dark": {
+    "polyhaven_id": "asphalt_03",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/asphalt_03 (1k nor_gl — OpenGL Y+)"
+  },
+  "door": {
+    "polyhaven_id": "painted_metal_shutter",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/painted_metal_shutter (1k nor_gl — OpenGL Y+)"
+  },
+  "doorBlue": {
+    "polyhaven_id": "blue_painted_planks",
+    "license": "CC0 1.0 (polyhaven.com)",
+    "normal": "https://polyhaven.com/a/blue_painted_planks (1k nor_gl — OpenGL Y+)"
+  }
+}

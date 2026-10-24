@@ -1811,3 +1811,21 @@ Work Log:
 
 Stage Summary:
 - github.com/JavadAbl/three-cs current through Task 94 (housekeeping record); local and remote identical
+
+---
+Task ID: 96
+Agent: Super Z (main agent)
+Task: User: "ok do 1" — roll the real-normal PBR upgrade to plain 'dust', the last bare-key map (mirroring Task 90's dust2 scoped pattern)
+
+Work Log:
+- DESIGN: dust shares the desert albedo/height set with dust2 (dust was the bare-key map), so the upgrade is a byte-for-byte mirror — no new fetch needed: dust2's 10 PolyHaven nor_gl normals copied into public/assets/textures/maps/dust/ + sources.json (CC0 provenance, pipeline note); albedo/bump still resolve through the 4-step loader chain to the shared files, so the accepted Task-75 look is untouched
+- SPEC: PBR_BY_MAP gained the dust entry — all 10 surfaces with tiles/bumps/normals mirroring dust2 verbatim; header comments updated (dust no longer 'can mirror any time' — it has); preloader needed zero changes (pbrHasNormal reads the spec; texChain already generic)
+- TEST: new scripts/test-dust.ts (sed-derived from test-dust2.ts): map-served, spawn-standable, bots-move, round-flow, Task-96 identity-files-served (all 10 dust normal maps must 200 — silent-404 guard), and the POSITIVE bomb-carrier regression (dust is a defuse map: sites A/B exist, a T bot must carry the C4) — 6/6 PASS first run
+- LIVE E2E (scripts/ab-dust.sh, adapted from ab-dust2.sh; map-card click retargeted to the 'classic layout' desc text since plain Dust's card label is a substring of Dust II's): join via :81, dust normals fetched 10/10 (preloader warm + hot-swap, resource list covers all surfaces), pbrState dust:wall ready
+- VLM TIMING LESSON: first-pass spawn/wall180 shots read FLAT — they were captured before the async hot-swap landed (sleep-2-after-ready proved marginal); the last-taken pano0 already showed full relief. Retook both vantages seconds later: ALL THREE verdicts flipped to relief-works (stone/brick depth, sand ruts, wood grain, micro-shadowing) with zero rendering bugs. ab-dust.sh sleep 2->5 post-ready; scripts/vlm-dust-t96.mjs (createVision glm-4.6v) banks the verdicts
+- REGRESSIONS: dust 6/6 NEW, dust2 6/6, aimhead 8/8, aimdepot 8/8, game-server exit-0 (179 snapshots), bugfixes ALL PASS, bots 26/26, buymenu 217/217, audio 332/332 (bun); tsc: 0 src errors (28 pre-existing scripts/examples/skills baseline unchanged)
+- download/ dir had been wiped by a reaper/reboot mid-task — recreated; dust-t96-{spawn,wall180,pano0}.png regenerated
+
+Stage Summary:
+- ALL FOUR MAPS now carry real normal-map relief: dust + dust2 (shared desert set, scoped normals), aimhead (aztec), aimdepot (ambientCG) — the bare-key path is now only a fallback, every shipped map has a PBR_BY_MAP entry with a files-served guard test (10+10+15+12)
+- dust/ identity dir is pure normals (2.4MB, no albedo/bump duplication); test-dust.ts mirrors test-dust2.ts including the defuse bomb-carrier check
