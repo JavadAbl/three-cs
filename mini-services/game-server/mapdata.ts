@@ -604,13 +604,14 @@ function buildDust2(): MapDef {
 }
 
 // ============================================================
-// AIM DEPOT — classic crate-yard aim arena (Task 87)
+// AIM DEPOT — classic crate-yard aim arena (Task 87, reworked 99)
 // Rifle-duel counterpart to aim_headshot's pistol shoebox: flat sandy
 // yard 64 x 44, CT north / T south (standard orientation), three lanes
-// split by two WINDOW WALLS — a 1.2 m duck-cover band below an open
-// 1.2..3.0 window band (LOS + bullets pass through the band), symmetric
-// crate cover, a mid monolith stack. Registered bomb:false — pure
-// elimination rounds, no C4 anywhere (Task 85 semantics).
+// split by two LOW LANE WALLS (Task 99: the floating window upper bands
+// + parapet caps are gone — 1.2 m duck cover, clean open sightlines for
+// standing duels), symmetric crate cover, a mid monolith stack.
+// Registered bomb:false — pure elimination rounds, no C4 anywhere
+// (Task 85 semantics).
 // ============================================================
 function buildAimDepot(): MapDef {
   const { boxes, box, wall } = newBuilder()
@@ -623,21 +624,21 @@ function buildAimDepot(): MapDef {
   wall(-32.45, 22, 32.45, 22, 6)
   wall(32, -21.55, 32, 21.55, 6)
   wall(-32, -21.55, -32, 21.55, 6)
-  // parapet caps (Task 88 iter2, decor): break the abrupt wall-top sky edge
-  // + visually terminate the long perimeter faces (VLM tiling note)
-  box(0, -22, 65.3, 1.3, 0.5, 'wall', 5.75, true)
-  box(0, 22, 65.3, 1.3, 0.5, 'wall', 5.75, true)
-  box(32, 0, 1.3, 43.5, 0.5, 'wall', 5.75, true)
-  box(-32, 0, 1.3, 43.5, 0.5, 'wall', 5.75, true)
+  // (Task 99) parapet caps REMOVED — user: they read as two floating
+  // rectangles from the yard (thin 1.3 m slabs at y 5.75 above the 6 m
+  // walls; wall occluded by crates/window walls -> 'floating beam' look.
+  // VLM t99 confirmed cap end-faces/side-faces were the shapes). Clean
+  // wall-top edge restored. Mirrors src/game/mapdata.ts.
 
-  // ---------------- window walls — the three-lane split ----------------
-  // x +/-10, z -9..9. Low band 0..1.2 = duck cover; upper band 3.0..5.2.
-  // The 1.2..3.0 gap is a real shoot-through window: standing eye height
-  // (~1.6) sees and fires through it, crouchers hide behind the low band.
+  // ---------------- lane-split walls — the three-lane split ----------------
+  // (Task 99) UPPER BANDS REMOVED — user: the two floating brick slabs
+  // (3.0..5.2 with the open window gap below) read as 'two rectangles in
+  // the air'; VLM t99 color evidence (tan/brick, 1 big per side from
+  // spawn) identified THEM as the prominent pair. Walls are now clean
+  // 1.2 m duck-cover sightlines — classic aim-map lanes: duckers hide,
+  // standing duels shoot straight over the top. Mirrors src/game/mapdata.ts.
   box(-10, 0, 0.8, 18, 1.2, 'brick')          // west low band
-  box(-10, 0, 0.8, 18, 2.2, 'brick', 3.0)    // west upper band
   box(10, 0, 0.8, 18, 1.2, 'brick')         // east low band
-  box(10, 0, 0.8, 18, 2.2, 'brick', 3.0)     // east upper band
 
   // ---------------- spawn shields (forward spawn cover) ----------------
   // Center gap x -2..2 stays open; sides open past x +/-10.
@@ -681,7 +682,7 @@ function buildAimDepot(): MapDef {
   box(14, -26, 18, 8, 5, 'brick', 6, true)
 
   // CT north (z -18/-20.5), T south — default team yaw (T faces north, CT south)
-  return finishMap('aimdepot', 'Aim Depot', 1, { boxes, box, wall } as Builder, {
+  return finishMap('aimdepot', 'Aim Depot', 2, { boxes, box, wall } as Builder, {
     CT: [
       { x: 0, y: 0, z: -17.5 }, { x: -3, y: 0, z: -17.5 }, { x: 3, y: 0, z: -17.5 },
       { x: -6, y: 0, z: -17.5 }, { x: 6, y: 0, z: -17.5 }, { x: -9, y: 0, z: -17.5 },
@@ -708,7 +709,7 @@ function buildAimDepot(): MapDef {
     { id: 'ctEJ', x: 10, z: -13, y: 0 },      // east junction
     { id: 'ctWL', x: -21, z: -10, y: 0 },     // west lane entry
     { id: 'ctER', x: 21, z: -10, y: 0 },      // east lane entry
-    // lanes (outside the window walls)
+    // lanes (outside the low lane walls)
     { id: 'laneWN', x: -21, z: -4, y: 0 },
     { id: 'laneWS', x: -21, z: 4, y: 0 },
     { id: 'laneEN', x: 21, z: -4, y: 0 },
@@ -770,5 +771,5 @@ export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
   { id: 'dust', name: 'Dust', desc: 'The original three-lane classic layout' },
   { id: 'dust2', name: 'Dust II', desc: 'Long, mid, tunnels · catwalk · pit · window room' },
   { id: 'aimhead', name: 'Aim Headshot', desc: 'CS 1.6 BSP import · slit-wall aim arena' },
-  { id: 'aimdepot', name: 'Aim Depot', desc: 'Crate-yard aim arena · window walls · three lanes' },
+  { id: 'aimdepot', name: 'Aim Depot', desc: 'Crate-yard aim arena · low lane walls · three lanes' },
 ]

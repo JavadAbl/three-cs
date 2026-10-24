@@ -1859,3 +1859,20 @@ Work Log:
 Stage Summary:
 - The game now has a full announcer VOICE layer, all four requested events covered: round outcomes (team-neutral, names the winner) + bomb planted/defused layered over the mechanical C4 samples — verified live with all four played:true in one continuous match
 - The lines are TTS originals: zero CS:GO-pack licensing exposure, reproducible in one script, and the announceLog debug hook makes future regressions (silent fallback) testable from the browser
+
+---
+Task ID: 99
+Agent: Super Z (main agent)
+Task: User: "there are two Rectangle shapes on the air in aim depot map. can remove them?"
+
+Work Log:
+- FORENSICS round 1: live VLM over 3 fresh aimdepot vantages found floating-reading rectangles; first pass pinned them as the Task-88 iter2 PARAPET CAP strips (4 thin 1.3m slabs at y 5.75 over the 6m walls) viewed edge-on -> removed all 4 from BOTH mapdata copies (client + game-server), aimdepot version 1->2
+- FORENSICS round 2 (the real culprit): VLM's color evidence said 'light tan/beige BRICK pattern' — the caps were charcoal Concrete044A 'wall' tex; the brick-textured floating pair is the WINDOW-WALL UPPER BANDS (Task 87's 3.0..5.2 slabs, one per side, exactly TWO from the spawn panorama — matching the user's count). Caps were ALSO legitimately floating-read geometry (kept removed), but the prominent pair = the upper bands
+- FIX: window-wall upper bands removed from both copies; lane walls are now clean 1.2m duck-cover bands (classic aim-map lanes: crouchers hide, standing duels shoot straight over; the 1.2..3.0 shoot-through window is superseded by the fully open sightline). Map header comment + MAP_LIST desc updated ('window walls' -> 'low lane walls'); historical comments kept as provenance
+- SERVER: game-server restarted with new mapdata (fresh setsid bun --hot on :3003; stale old PID killed; one listener verified)
+- LIVE VERIFY (2 passes): round-A (caps removed) VLM 3/3 'no floating shapes'; final round (bands removed too) VLM 3/3 'clean straight wall-top edges, no floating slabs' — spawn/windowwall/mid vantages; scripts/vlm-{find,verify}-*-t99.mjs + aimdepot-capdiff-t99.py bank the evidence (pixel diff: windowwall pair top-third 0.1% changed = skyline stable, mid changes are bots)
+- REGRESSIONS: aimdepot 8/8 (spawns/waypoints/bot nav unaffected — bands were above standing height), dust 6/6, dust2 6/6, aimhead 8/8, bugfixes ALL PASS, bots 26/26, game-server exit-0; tsc 0 src errors (28 baseline)
+
+Stage Summary:
+- AIM DEPOT is floating-rectangle-free: BOTH floating-read geometry families removed (4 parapet caps + 2 window upper bands, 6 boxes total, both mapdata copies), live-verified by VLM at 3 vantages
+- Map plays more like a classic aim arena now: 1.2m duck-cover lane walls with clean open standing sightlines; version bumped to 2 to mark the rework
