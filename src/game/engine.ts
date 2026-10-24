@@ -501,6 +501,41 @@ export class Engine {
         vm: () => this.vmGroup ? { visible: this.vmGroup.visible, parts: this.vmGroup.children.length, parent: this.vmGroup.parent?.type ?? null, w: this.inventory[this.wIdx] } : null,
         // id of the staged GLB backing the current viewmodel (null = procedural)
         vmGlb: () => (this.vm?.group.userData as { glbVm?: string } | undefined)?.glbVm ?? null,
+        // Task 104: vm geometry in VIEW space (camera-local). The vm is a
+        // camera child, so view coords tell orientation deterministically:
+        // z<0 = into the scene, y>0 = up. Reports the vm bbox (per-mesh
+        // corners transformed), the muzzle-flash tip, and the front-most /
+        // rear-most / top-most / bottom-most MESH names.
+        vmProbe: () => {
+          if (!this.vmGroup) return null
+          this.vmGroup.updateWorldMatrix(true, true)
+          const v = new THREE.Vector3()
+          const toView = (wp: THREE.Vector3) => {
+            const cp = this.camera.worldToLocal(wp.clone())
+            return [Math.round(cp.x * 1000) / 1000, Math.round(cp.y * 1000) / 1000, Math.round(cp.z * 1000) / 1000] as [number, number, number]
+          }
+          const items: Array<{ n: string; c: [number, number, number] }> = []
+          let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity]
+          this.vmGroup.traverse(o => {
+            const m = o as THREE.Mesh
+            if (!m.isMesh || !m.geometry?.getAttribute?.('position')) return
+            const mb = new THREE.Box3().setFromObject(m)
+            // mesh bbox corners -> view space; expand the vm-wide box
+            for (const corner of [mb.min, mb.max]) {
+              const c = toView(corner.clone())
+              for (let i = 0; i < 3; i++) { mn[i] = Math.min(mn[i], c[i]); mx[i] = Math.max(mx[i], c[i]) }
+            }
+            items.push({ n: m.name || '(mesh)', c: toView(mb.getCenter(new THREE.Vector3())) })
+          })
+          const axis = (k: 0 | 1 | 2, sign: 1 | -1) =>
+            items.slice().sort((a, b) => sign * (b.c[k] - a.c[k]))[0] ?? null
+          return {
+            vmBoxView: { min: mn.map(v => Math.round(v * 1000) / 1000), max: mx.map(v => Math.round(v * 1000) / 1000) },
+            tipView: this.vm?.tip ? toView(this.vmGroup.localToWorld(this.vm.tip.clone())) : null,
+            meshes: items.length,
+            frontMost: axis(2, -1), rearMost: axis(2, 1), topMost: axis(1, 1), bottomMost: axis(1, -1),
+          }
+        },
         vmState: () => {
           const vm = this.vm
           if (!vm) return null

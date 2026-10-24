@@ -40,6 +40,10 @@ export const WEAPON_AUDIO: Record<string, WeaponAudio> = {
   // 2026-10-20, committed under /assets/sounds); distant + reload + draw
   // reuse the AK-47 family samples (same platform — accepted, committed)
   ak74: { fire: 'ak74_fire', distant: 'ak47_distant', out: 'ak47_clipout', in: 'ak47_clipin', rack: 'ak47_bolt', draw: 'ak47_draw' },
+  // Task 104: M4A4 — fire is the USER'S OWN m4.mp3 recording (replaced the
+  // CS:GO pack sample 2026-10-24, committed under /assets/sounds; old sample
+  // recoverable in git history); distant + reload + draw keep the pack's
+  // M4 family samples
   m4: { fire: 'm4_fire', distant: 'm4_distant', out: 'm4_clipout', in: 'm4_clipin', rack: 'm4_bolt', draw: 'm4_draw' },
   awp: { fire: 'awp_fire', distant: 'awp_distant', out: 'awp_clipout', in: 'awp_clipin', rack: 'awp_bolt', draw: 'awp_draw', bolt: 'awp_bolt' },
   deagle: { fire: 'deagle_fire', distant: 'deagle_distant', out: 'deagle_clipout', in: 'deagle_clipin', rack: 'deagle_slide', draw: 'deagle_draw' },

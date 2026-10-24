@@ -7,8 +7,8 @@ and it must NOT be restored from anywhere. The game runs the procedural
 soldier rig for all players until a NEW model is dropped into staging; the
 user will supply a better one later.
 
-**Weapon model status (2026-10-20): THREE accepted weapon models — ak47,
-ak74, galil.**
+**Weapon model status (2026-10-24): FOUR accepted weapon models — ak47,
+ak74, galil, m4.**
 The CC0 Quaternius "Ultimate Guns Pack" (33 GLBs staged 2026-10-19 for
 live evaluation) was **rejected by the user** ("wipe all weapon models.
 they are not good, il find new models") — every staged GLB and raw-pack
@@ -176,6 +176,7 @@ Served as plain static files (fetched lazily by `attachNightSky` on aimdepot onl
 | ak47 | `public/assets/models/weapons/ak47.glb` (committed; baked from `upload/ak-47.glb` via `scripts/bake-ak47.ts` + `compress-glb.sh`) | Lokeig | **CC Attribution-NonCommercial** (attribution required, commercial use forbidden) | https://sketchfab.com/3d-models/ak-47-384565b1779c450b90397232163e4e6d |
 | ak74 | `public/assets/models/weapons/ak74.glb` (committed; baked from the user's `upload/ak-74m.glb` via `scripts/bake-ak74.ts` + `compress-glb.sh`) | the user's own upload | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/ak-74m.glb` |
 | galil | `public/assets/models/weapons/galil.glb` (committed; baked from the user's `upload/galil_ar_counter_strike_2.glb` via `scripts/bake-galil.ts` + `compress-glb.sh`) | the user's own upload (Counter-Strike 2 game rip, internal name `GalilAr_CS2_weapon_rif_galilar`) | **not verified** (game-rip asset, no license; dev-only waiver applies) | uploaded directly to `upload/galil_ar_counter_strike_2.glb` |
+| m4 | `public/assets/models/weapons/m4.glb` (committed; baked from the user's `upload/m4.glb` via `scripts/bake-m4.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab export, generator "Sketchfab-12.65.0", FBX conversion) | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/m4.glb` (with `upload/m4.mp3`, the new fire sound) |
 
 **Acceptance verdict for ak47: ACCEPTED — DEV-ONLY (2026-10-20).** The
 user explicitly waived the license concern: "forgot about licence at
@@ -226,3 +227,24 @@ AR length; grip anchor = bbox center of the geometrically-detected rear
 grip bump). Re-tuning / recovery path: `npx tsx scripts/bake-galil.ts
 && bash scripts/compress-glb.sh scripts/.tmp/galil-fixed.glb
 <target>.glb`, then touch the weapon route to drop its buffer cache.
+
+**Acceptance verdict for m4: ACCEPTED — DEV-ONLY (2026-10-24).** The
+user supplied the model and a new fire recording together ("replace m4a4
+with this new one", `upload/m4.glb` + `upload/m4.mp3`) — the acceptance
+was in the instruction itself, so the staged GLB went live and was
+committed after evaluation (Task 104). Sketchfab FBX conversion: 268
+nodes, 89 unnamed `Pattern2D`/`Cylinder`/`TextPlus` meshes, 20,466 tris,
+single near-black PBR material (no textures), **no named part nodes** —
+parts animations silently skip, whole-vm motion still runs (galil
+class). No source URL was supplied — the row above records **not
+verified** under the same dev-only waiver as ak47/ak74/galil. The
+committed file: 127,364 bytes (1.01MB pre-Draco, 12.1%), baked parameters
+in `scripts/bake-m4.ts` (rotY(−90°) — the raw lies along +X with muzzle
+at −X: flash-hider cylinders + front sight at −2.7, buffer tube + butt
+plate at +2.7; uniform scale 0.1559 to the 0.840 m M4A4 length; anchor =
+bbox center of the receiver-floor band behind the trigger — the model
+has NO deep pistol-grip geometry). Re-tuning / recovery path: `npx tsx
+scripts/bake-m4.ts && bash scripts/compress-glb.sh
+scripts/.tmp/m4-fixed.glb <target>.glb`, then touch the weapon route to
+drop its buffer cache. The old CS:GO `m4_fire.ogg` sample is recoverable
+from git history (`git checkout HEAD~1 -- public/assets/sounds/m4_fire.ogg`).

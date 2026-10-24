@@ -36,7 +36,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * The string is part of the record key, so a bump also lets the install-time
  * sweep garbage-collect every previous version in one pass.
  */
-export const ASSET_CACHE_VERSION = 'v2'   // Task 101 iter 2: thinned stars-night.bin re-shipped
+export const ASSET_CACHE_VERSION = 'v5'   // Task 104: v4 ITSELF got polluted (stale HTTP-cache refill before the no-cache net-fetch fix landed in the bundle) — v5 sweeps it; with the STALE-REFILL FIX in place this is the last bump this re-ship needs
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
@@ -225,7 +225,22 @@ export function installAssetCache(): boolean {
       pending = (async () => {
         await gateAcquire()
         try {
-          const r = await netGuard(rf(input, init))
+          // Task 104 STALE-REFILL FIX: default the net fetch to 'no-cache'
+          // (ETag revalidation) when the caller set no cache mode. Without
+          // this, a re-shipped /assets/ body (e.g. m4_fire.ogg) NEVER
+          // propagates to existing browsers: the ASSET_CACHE_VERSION bump
+          // rotates the Cache-Storage key, but the refill fetch itself hits
+          // the browser HTTP cache, which holds the OLD body under
+          // max-age=86400 — the bump rule was silently a no-op for re-shipped
+          // static files (only callers that pass cache:'reload'/'no-cache'
+          // themselves, like nightsky.ts, escaped). Revalidation is one cheap
+          // conditional request per asset per cold load; unchanged files
+          // 304 and the browser transparently returns the cached 200 body,
+          // so the status-200 gate below still works.
+          const init2: RequestInit = init?.cache
+            ? init
+            : { ...init, cache: 'no-cache' }
+          const r = await netGuard(rf(input, init2))
           const type = r.headers.get('Content-Type') ?? 'application/octet-stream'
           const blob = await r.blob()
           if (r.status === 200) {

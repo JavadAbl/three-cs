@@ -19,15 +19,18 @@ import path from 'node:path'
 // If neither file exists the route 404s and the caller keeps its procedural
 // model — a fresh clone runs fully procedural, nothing breaks.
 //
-// Accepted set (2026-10-21): ak47, ak74, galil — the user's Sketchfab AK-47
-// (Lokeig, NOT the rejected CC0 Quaternius pack, which must never be
-// restored), the user's own AK-74M upload, and the user's CS2-rip Galil AR
+// Accepted set (2026-10-24): ak47, ak74, galil, m4 — the user's Sketchfab
+// AK-47 (Lokeig, NOT the rejected CC0 Quaternius pack, which must never be
+// restored), the user's own AK-74M upload, the user's CS2-rip Galil AR
 // (accepted "Galil accepted.", Task 71; single merged mesh, no named parts,
 // baked rotY 180° by scripts/bake-galil.ts — the first staging rendered
-// reversed). All three accepted for DEV-ONLY use per the user's explicit
-// decision ("i dont want publish this game. i want it for dev purposes
-// only") — see the license ledger in public/assets/models/README.md before
-// ever distributing this repo.
+// reversed), and the user's Sketchfab M4 upload (accepted with "replace m4a4
+// with this new one", Task 104; 89 unnamed Pattern2D/Cylinder meshes, no
+// named parts, baked rotY(-90°) by scripts/bake-m4.ts — the raw lies along
+// +X with the muzzle at -X). All four accepted for DEV-ONLY use per the
+// user's explicit decision ("i dont want publish this game. i want it for
+// dev purposes only") — see the license ledger in
+// public/assets/models/README.md before ever distributing this repo.
 // All other ids 404 → procedural (weapon GLB contract:
 // public/assets/models/README.md).
 

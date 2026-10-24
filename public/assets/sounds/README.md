@@ -8,11 +8,16 @@ launch-era roster (ak47/m4/awp/deagle/mp5/usp … knife, C4, footsteps, UI)
 plus the 166 Phase 3–8 weapons batch (pistols, SMGs, rifles, shotguns,
 machine guns, all six grenades + generic pinpull/throw/bounce). Same
 pipeline throughout: leading-silence strip (shot latency), Vorbis q3,
-44.1 kHz. **One accepted sample is NOT from the CS:GO pack:**
+44.1 kHz. **Two accepted samples are NOT from the CS:GO pack:**
 `ak74_fire.ogg` (Task 66/67) is the user's own AK-74M fire recording
 (`upload/ak74.mp3` → mono Vorbis q4, leading silence stripped, 1.46 s);
 the AK-74M's distant/reload/draw sounds reuse the AK-47 family samples
-(same platform).
+(same platform). And `m4_fire.ogg` was REPLACED (Task 104, 2026-10-24)
+with the user's own M4 fire recording (`upload/m4.mp3` → mono Vorbis q4,
+44.1 kHz, leading silence stripped, 0.996 s — the old 0.24 s CS:GO
+sample is recoverable via
+`git checkout HEAD~1 -- public/assets/sounds/m4_fire.ogg`); the M4A4's
+distant/reload/draw sounds keep the pack's M4 family samples.
 
 **Task 98 — 4 announcer VOICE lines** (256 `.ogg` total):
 `announce_t_win`, `announce_ct_win`, `announce_planted`,
