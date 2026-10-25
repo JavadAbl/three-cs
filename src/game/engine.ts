@@ -12,7 +12,7 @@ import type { MapDef, MapId } from './mapdata'
 import { buildMap } from './mapview'
 import { buildDetails } from './mapdetails'
 import type { MapBuild } from './mapview'
-import { PlayerManager } from './players'
+import { PlayerManager, HOLD, carriageFor } from './players'
 import { Effects, buildBombMesh, buildNadeMesh, SmokeCloud, FireZone } from './fx'
 import type { WorldFx } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
@@ -525,14 +525,49 @@ export class Engine {
           this.rebuildViewmodel()
           return { mul: this.vmGlbScaleMul, scale: Number((GLB_VM_SCALE * this.vmGlbScaleMul).toFixed(3)) }
         },
-        // live gun-in-hand offset tuning (GLB rig): __eng.gunTune(id, x,y,z, rx,ry,rz)
-        gunTune: (id: string, x?: number, y?: number, z?: number, rx?: number, ry?: number, rz?: number) => {
+        // Task 114: LIVE weapon-hold tuning — patch any HOLD carriage param
+        // (deep-merge, applies next frame, no reload needed):
+        //   __eng.hold({rifle:{gripZ:-0.36}})  __eng.hold({cant:0})
+        //   __eng.hold({aimBlend:1})          __eng.hold()  → read current
+        hold: (patch?: Record<string, unknown>) => {
+          if (patch) {
+            for (const [k, v] of Object.entries(patch)) {
+              const cur = (HOLD as unknown as Record<string, unknown>)[k]
+              if (typeof v === 'number' && typeof cur === 'number') {
+                ;(HOLD as unknown as Record<string, number>)[k] = v
+              } else if (v && typeof v === 'object' && cur && typeof cur === 'object') {
+                Object.assign(cur as Record<string, unknown>, v as Record<string, unknown>)
+              }
+            }
+          }
+          return JSON.parse(JSON.stringify(HOLD))
+        },
+        // Task 114: gun-to-hands contact measurement — where the gun grip and
+        // the support-hand target sit vs the actual hand anchors, plus the
+        // live gun axis. gripGap should be ~|GUN offset| (≈2–3 cm);
+        // supportGap (rifles) ≈ 0–8 cm = fingertips-on-handguard.
+        handContact: (id: string) => {
           const p = this.pm.getById(id)
           if (!p || !p.glb) return null
+          p.root.updateMatrixWorld(true)
           const rig = p.glb.gunRig
-          if (x !== undefined) rig.position.set(x, y ?? rig.position.y, z ?? rig.position.z)
-          if (rx !== undefined) rig.rotation.set(rx, ry ?? rig.rotation.y, rz ?? rig.rotation.z)
-          return { pos: rig.position.toArray(), rot: [rig.rotation.x, rig.rotation.y, rig.rotation.z] }
+          const gunPos = rig.getWorldPosition(new THREE.Vector3())
+          const gunDir = new THREE.Vector3(0, 0, -1).applyQuaternion(rig.getWorldQuaternion(new THREE.Quaternion()))
+          const hr = p.root.getObjectByName('HandR')?.getWorldPosition(new THREE.Vector3()) ?? null
+          const hl = p.root.getObjectByName('HandL')?.getWorldPosition(new THREE.Vector3()) ?? null
+          const C = carriageFor(p.weapon)
+          const r2 = (x: number) => Math.round(x * 1000) / 1000
+          const support = gunPos.clone().addScaledVector(gunDir, (C as { support?: number }).support ?? 0)
+          return {
+            weapon: p.weapon,
+            gunPos: gunPos.toArray().map(r2),
+            gunDir: gunDir.toArray().map(r2),
+            handR: hr?.toArray().map(r2) ?? null,
+            handL: hl?.toArray().map(r2) ?? null,
+            gripGap: hr ? Math.round(gunPos.distanceTo(hr) * 1000) / 1000 : null,
+            supportPoint: support.toArray().map(r2),
+            supportGap: hl ? Math.round(support.distanceTo(hl) * 1000) / 1000 : null,
+          }
         },
         // world position + rotation of any named node under a player's root (GLB bones)
         boneWorld: (id: string, name: string) => {

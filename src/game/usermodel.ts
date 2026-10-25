@@ -28,9 +28,28 @@ const TARGET_HEIGHT = 1.79
 // per-team tint (multiplied over every material of the model)
 const TEAM_TINT: Record<TeamId, number> = { CT: 0x9fb7d9, T: 0xd9bd92 }
 
-/** gun stub transform on the right-hand anchor (tuned against screenshots) */
-export const GUN_HAND_POS = new THREE.Vector3(0.02, 0.02, -0.02)
-export const GUN_HAND_ROT = new THREE.Euler(-1.62, 0, 0)
+/**
+ * Gun stub transform on the right-hand anchor — INITIAL value only. Once the
+ * player is interpolated, players.ts driveUser() overwrites the gunRig
+ * transform every frame (Task 114 IK hold: grip glued to the fist, gun axis
+ * locked to the carriage direction). Offset semantics: +Y toward the elbow,
+ * −Z toward the muzzle side of the hand.
+ */
+export const GUN_HAND_POS = new THREE.Vector3(0, 0.02, 0.01)
+export const GUN_HAND_ROT = new THREE.Euler(-1.92, 0.08, 0)
+
+/**
+ * Task 114 IK arm chains — bind geometry in TORSO-LOCAL space (the frame the
+ * arm bones live in; the torso joint sits at game-space y 1.08). S = shoulder
+ * pivot, E = elbow pivot, F = fist centroid — F measured from the staged
+ * soldier GLB (scripts/measure-arms-t114.mjs: right fist (0.32, 0.84, −0.02),
+ * left (−0.336, 0.857, −0.019), elbows ≈ (±0.34, 1.26, −0.04) vs the J-table
+ * pivots at (±0.34, 1.20, 0) — close enough that the blend band hides it).
+ */
+export const USER_ARM_RIG = {
+  right: { S: [0.27, 0.40, 0], E: [0.34, 0.12, 0], F: [0.32, -0.24, -0.02] },
+  left: { S: [-0.27, 0.40, 0], E: [-0.34, 0.12, 0], F: [-0.336, -0.223, -0.019] },
+} as const
 
 // ------------------------------------------------------------------ skeleton layout
 // joint positions in game space (feet at y 0, facing -Z, 1.79 m tall) — derived from the
@@ -251,11 +270,21 @@ function buildProto(src: THREE.Group): THREE.Group {
   }
   const boneList = BONE_ORDER.map(k => model.getObjectByName(k) as THREE.Bone)
 
-  // right-hand anchor for the gun (child of the right forearm bone)
+  // right-hand anchor for the gun (child of the right forearm bone).
+  // Task 114: anchored at the MEASURED fist centroid of the staged soldier
+  // (bind (0.32, 0.84, −0.02) game-space → local (−0.02, −0.36, −0.02) under
+  // foreR). The old (0.03, −0.22, 0.03) was tuned for the retired Vanguard
+  // model (0.22 forearm); this model's forearm joint→fist is 0.36 — the gun
+  // grip floated ~15 cm up the forearm and the fists gripped air.
   const handR = new THREE.Object3D()
   handR.name = 'HandR'
-  handR.position.set(0.03, -0.22, 0.03)
+  handR.position.set(-0.02, -0.36, -0.02)
   foreR.add(handR)
+  // left-hand twin anchor (probe/verification only — nothing parented)
+  const handL = new THREE.Object3D()
+  handL.name = 'HandL'
+  handL.position.set(0.004, -0.343, -0.019)
+  foreL.add(handL)
 
   // C4 on the upper back (+Z is the back)
   const c4Proto = buildC4()

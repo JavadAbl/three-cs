@@ -4,9 +4,9 @@
 import * as THREE from 'three'
 import { soldierCamo, soldierVest, soldierFace } from './textures'
 import { buildRemoteGun } from './weaponmodels'
-import { preloadUserModel, userModelReady, createUserModel, type UserInstance } from './usermodel'
+import { preloadUserModel, userModelReady, createUserModel, USER_ARM_RIG, type UserInstance } from './usermodel'
 import { preloadWeaponModels, buildGLBRemoteGun } from './weapongltf'
-import type { TeamId } from './weapons'
+import { WEAPONS, type TeamId } from './weapons'
 
 export interface RemotePlayer {
   id: string
@@ -94,6 +94,111 @@ function teamMat(key: string, make: () => THREE.MeshLambertMaterial): THREE.Mesh
 const HIPS_STAND = 0.92
 const HIPS_CROUCH = 0.46
 const GUN_LOCAL = new THREE.Vector3(0.09, 0.42, -0.30)
+
+// ------------------------------------------------------------------ Task 114: gun-hold IK
+// "characters are not holding the weapon in hands" — the staged soldier's
+// forearm (joint→fist 0.36 m) is far longer than the retired Vanguard model's
+// (0.22 m) the old hand anchor + FK arm poses were tuned against, so the gun
+// grip floated ~15 cm up the forearm at chin height, stock clipping the
+// backpack, fists gripping air. Fix: per-frame 2-bone analytic IK solved in
+// TORSO-LOCAL space — the right fist is driven ONTO the grip target, the left
+// fist onto the handguard (clamped at full extension — the model's short
+// total arm reach (0.63 m) puts the fingertips on it, which reads as
+// contact), and the gunRig ORIENTATION is set directly so the gun axis is
+// locked to the carriage direction (idle cant blended toward the bot's look
+// direction) regardless of where the elbow swings.
+interface ArmChain {
+  /** shoulder pivot, torso-local */
+  S: THREE.Vector3
+  /** bind upper-arm direction (S→E), unit */
+  e0: THREE.Vector3
+  /** bind forearm direction (E→fist), unit */
+  w0: THREE.Vector3
+  L1: number
+  L2: number
+}
+function mkChain(s: readonly number[], e: readonly number[], f: readonly number[]): ArmChain {
+  const S = new THREE.Vector3(s[0], s[1], s[2])
+  const E = new THREE.Vector3(e[0], e[1], e[2])
+  const F = new THREE.Vector3(f[0], f[1], f[2])
+  return { S, e0: E.clone().sub(S).normalize(), w0: F.clone().sub(E).normalize(), L1: E.distanceTo(S), L2: F.distanceTo(E) }
+}
+const ARM_R = mkChain(USER_ARM_RIG.right.S, USER_ARM_RIG.right.E, USER_ARM_RIG.right.F)
+const ARM_L = mkChain(USER_ARM_RIG.left.S, USER_ARM_RIG.left.E, USER_ARM_RIG.left.F)
+
+/** Solve one arm: bone quaternions that put the FIST on `target`.
+ * `pole` biases the elbow (direction from the shoulder→fist line toward the
+ * elbow). Targets beyond reach clamp to full extension pointing at the target. */
+function solveArm(c: ArmChain, target: THREE.Vector3, pole: THREE.Vector3,
+                  qUpper: THREE.Quaternion, qFore: THREE.Quaternion): void {
+  const sw = target.clone().sub(c.S)
+  let D = sw.length()
+  const dmax = c.L1 + c.L2 - 0.004
+  if (D > dmax) D = dmax
+  else if (D < 0.06) D = 0.06
+  const dsw = sw.normalize()
+  const h = (D * D + c.L1 * c.L1 - c.L2 * c.L2) / (2 * D)
+  const a = Math.sqrt(Math.max(0, c.L1 * c.L1 - h * h))
+  const pp = pole.clone().addScaledVector(dsw, -pole.dot(dsw))
+  if (pp.lengthSq() < 1e-8) pp.set(0, -1, 0).addScaledVector(dsw, dsw.y)
+  pp.normalize()
+  const elbow = c.S.clone().addScaledVector(dsw, h).addScaledVector(pp, a)
+  const e1 = elbow.clone().sub(c.S).normalize()
+  const w1 = target.clone().sub(elbow).normalize()
+  qUpper.setFromUnitVectors(c.e0, e1)
+  // forearm is a CHILD of the upper arm: its local rotation must map the bind
+  // forearm dir to the desired one EXPRESSED IN THE UPPER-ARM'S FRAME
+  const w1Local = w1.applyQuaternion(qUpper.clone().invert())
+  qFore.setFromUnitVectors(c.w0, w1Local)
+}
+
+/** weapon-carriage parameters, all torso-local, LIVE-TUNABLE via __eng.hold() */
+export const HOLD = {
+  // slot 1 (rifles / primaries): right fist on the grip, left fist out on the
+  // handguard. Support 0.17 is at the model's fingertip reach — deliberate.
+  rifle: { gripX: 0.16, gripY: 0.01, gripZ: -0.30, dirX: -0.14, dirY: -0.05, dirZ: -1, support: 0.17, supportDropY: 0.02 },
+  // slot 2 (pistols): both fists together in front of the chest
+  pistol: { gripX: 0.11, gripY: 0.05, gripZ: -0.28, dirX: -0.03, dirY: 0.0, dirZ: -1, leftX: -0.06, leftY: -0.07, leftZ: 0.02 },
+  // slot 3+ (knife / grenades / C4): low right-hand carry, left arm relaxed
+  knife: { gripX: 0.17, gripY: -0.05, gripZ: -0.24, dirX: 0.08, dirY: -0.30, dirZ: -1, leftX: -0.24, leftY: -0.24, leftZ: -0.10 },
+  // gun origin offset from the fist anchor (hand-local: +Y toward elbow, −Z muzzle side)
+  gunOX: 0, gunOY: 0.02, gunOZ: 0.01,
+  cant: 0.10,        // gun roll (rad) — slight CS-style cant
+  aimBlend: 0.85,    // 0 = idle carriage dir, 1 = full look-direction
+  pitchLift: 0.10,   // grip rises this much per rad of aim pitch
+  poleTilt: 0.45,    // elbow tucks back per rad of aim pitch
+  swayX: 0.012, bobY: 0.008, // walk sway glued to BOTH fist targets
+  crouchTuckY: 0.05,
+  poleRX: 0.10, poleRY: -1, poleRZ: 0.30,   // right elbow: down + slightly back
+  poleLX: -0.55, poleLY: -1, poleLZ: 0.10,   // left elbow: down + out
+}
+
+function weaponSlot(w: string): number {
+  return (WEAPONS as Record<string, { slot?: number } | undefined>)[w]?.slot ?? 3
+}
+
+/** active carriage params for a weapon id (shared with the __eng probes) */
+export function carriageFor(weapon: string) {
+  const slot = weaponSlot(weapon)
+  return slot === 1 ? HOLD.rifle : slot === 2 ? HOLD.pistol : HOLD.knife
+}
+
+// scratch (hot path — driveUser runs per player per frame)
+const _AX = new THREE.Vector3(1, 0, 0)
+const _AZ = new THREE.Vector3(0, 0, 1)
+const _UP = new THREE.Vector3(0, 1, 0)
+const _ORIGIN = new THREE.Vector3(0, 0, 0)
+const _dir = new THREE.Vector3()
+const _look = new THREE.Vector3()
+const _grip = new THREE.Vector3()
+const _left = new THREE.Vector3()
+const _poleR = new THREE.Vector3()
+const _poleL = new THREE.Vector3()
+const _qU = new THREE.Quaternion()
+const _qF = new THREE.Quaternion()
+const _qT = new THREE.Quaternion()
+const _qGun = new THREE.Quaternion()
+const _mLook = new THREE.Matrix4()
 
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t }
 function easeOutCubic(t: number) { return 1 - Math.pow(1 - t, 3) }
@@ -448,7 +553,7 @@ export class PlayerManager {
         p.root.rotation.z = 0
 
         if (g) {
-          this.driveUser(g, p.speed, pitch, ct, p.phase, now, wa, amp)
+          this.driveUser(g, p.weapon, p.speed, pitch, ct, p.phase, now, wa, amp)
         } else if (r) {
         // hips height + double-step bob
         r.hips.position.y = lerp(HIPS_STAND, HIPS_CROUCH, ct) + Math.sin(p.phase * 2) * 0.024 * wa
@@ -565,8 +670,9 @@ export class PlayerManager {
 
   /** User auto-rig: procedural bone drive from live speed / crouch / aim.
    *  Sign conventions: limbs extend -Y from their pivot → +rotation.x swings the tip FORWARD (-Z);
-   *  torso & head extend +Y → -rotation.x leans FORWARD, +pitch (looking up) tips them BACK. */
-  private driveUser(g: UserInstance, speed: number, pitch: number, ct: number, phase: number, now: number, wa: number, amp: number) {
+   *  torso & head extend +Y → -rotation.x leans FORWARD, +pitch (looking up) tips them BACK.
+   *  Arms + gun (Task 114): 2-bone IK — see the HOLD block above the class. */
+  private driveUser(g: UserInstance, weapon: string, speed: number, pitch: number, ct: number, phase: number, now: number, wa: number, amp: number) {
     const b = g.bones
 
     // hips: crouch drop + double-step walk bob
@@ -588,19 +694,72 @@ export class PlayerManager {
     // head follows aim pitch (positive pitch = look up)
     b.head.rotation.x = pitch * 0.55 - 0.10 * ct
 
-    // arms: weapon-ready pose, aim pitch raises the gun (gunRig rides the hand), subtle stride sway
-    b.armR.rotation.set(
-      1.10 - 0.08 * ct + Math.sin(phase) * 0.05 * wa + pitch * 0.28,
-      -0.22,
-      -0.12,
-    )
-    b.foreR.rotation.set(0.95 + 0.20 * ct + pitch * 0.15, 0, 0)
-    b.armL.rotation.set(
-      0.85 - 0.05 * ct + Math.sin(phase + Math.PI) * 0.05 * wa + pitch * 0.12,
-      0.30,
-      0.18,
-    )
-    b.foreL.rotation.set(1.05 + 0.15 * ct, 0, 0)
+    // ---- arms + gun: Task 114 IK hold (must run AFTER the torso write so
+    // b.torso.quaternion is current — the look-dir blend un-rotates it)
+    this.holdWeapon(g, weapon, pitch, ct, phase, wa)
+  }
+
+  /** Task 114 IK weapon hold: both fists onto the gun, gun axis locked to the
+   *  carriage direction. See the HOLD block above the class for parameters. */
+  private holdWeapon(g: UserInstance, weapon: string, pitch: number, ct: number, phase: number, wa: number) {
+    const C = carriageFor(weapon)
+    const P = HOLD
+    const b = g.bones
+
+    // gun direction: idle cant blended toward where the bot actually looks
+    // (look dir (0, sin p, −cos p) in root space → un-rotate the torso frame)
+    _dir.set(C.dirX, C.dirY, C.dirZ).normalize()
+    if (P.aimBlend > 0) {
+      _look.set(0, Math.sin(pitch), -Math.cos(pitch))
+      _qT.copy(b.torso.quaternion).invert()
+      _look.applyQuaternion(_qT)
+      _dir.lerp(_look, P.aimBlend).normalize()
+    }
+
+    // right-fist target = grip (+ aim lift, crouch tuck, glued walk sway/bob)
+    _grip.set(C.gripX, C.gripY + P.pitchLift * pitch - P.crouchTuckY * ct, C.gripZ)
+    _grip.x += Math.sin(phase) * P.swayX * wa
+    _grip.y += Math.sin(phase * 2) * P.bobY * wa
+
+    // right elbow pole: down + back, tucking further back as the bot aims up
+    _poleR.set(P.poleRX, P.poleRY, P.poleRZ).normalize()
+    _poleR.applyAxisAngle(_AX, -P.poleTilt * pitch)
+
+    solveArm(ARM_R, _grip, _poleR, _qU, _qF)
+    b.armR.quaternion.copy(_qU)
+    b.foreR.quaternion.copy(_qF)
+
+    // gun orientation: locked DIRECTLY to the carriage direction (independent
+    // of the elbow solution) — qGunRig = (qUpper·qFore)⁻¹ · qGunTorsoLocal
+    _mLook.lookAt(_ORIGIN, _dir, _UP) // -Z → _dir, +Y ≈ torso up
+    _qGun.setFromRotationMatrix(_mLook)
+    if (P.cant) _qGun.multiply(_qT.setFromAxisAngle(_AZ, P.cant))
+    _qT.copy(_qU).multiply(_qF).invert()
+    g.gunRig.quaternion.copy(_qT).multiply(_qGun)
+    g.gunRig.position.set(P.gunOX, P.gunOY, P.gunOZ)
+
+    // left-fist target
+    const slot = weaponSlot(weapon)
+    if (slot === 1) {
+      // support hand: out on the handguard, approaching from slightly below
+      // (_grip already carries the walk sway/bob — the support hand rides it,
+      // so it can never slide off the gun)
+      _left.copy(_grip).addScaledVector(_dir, (C as typeof HOLD.rifle).support)
+      _left.y -= (C as typeof HOLD.rifle).supportDropY
+    } else if (slot === 2) {
+      _left.set(_grip.x + (C as typeof HOLD.pistol).leftX,
+        _grip.y + (C as typeof HOLD.pistol).leftY,
+        _grip.z + (C as typeof HOLD.pistol).leftZ)
+    } else {
+      // relaxed hang carries its own counter-sway (grip-independent target)
+      _left.set((C as typeof HOLD.knife).leftX + Math.sin(phase) * P.swayX * wa,
+        (C as typeof HOLD.knife).leftY + Math.sin(phase * 2) * P.bobY * wa,
+        (C as typeof HOLD.knife).leftZ)
+    }
+    _poleL.set(P.poleLX, P.poleLY, P.poleLZ).normalize()
+    solveArm(ARM_L, _left, _poleL, _qU, _qF)
+    b.armL.quaternion.copy(_qU)
+    b.foreL.quaternion.copy(_qF)
   }
 
   hitboxMeshes(): THREE.Object3D[] {
