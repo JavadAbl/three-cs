@@ -2184,3 +2184,22 @@ Work Log:
 
 Stage Summary:
 - The rebel model is now an ACCEPTED, COMMITTED asset: public/assets/models/rebel.glb (20.7 MB, sha1 8f06fbf5…) — durable against staging wipes, served from /api/assets/rebel with per-request stat revalidation, client cache lineage rotated to v7 (old store GC'd). CT=soldier / T=rebel verified live post-acceptance, weapons still in hands (gripGap 0.022), all suites green. CT soldier (human.glb) remains in staging pending its own acceptance. NEW harness: scripts/ab-accept-t115.sh + vlm-accept-t115.mjs (the acceptance live-check pattern: glbTeams + caches.keys + handContact + one VLM frame).
+
+---
+Task ID: 117
+Agent: main (Z.ai)
+Task: user: "accept" (second) — accept the CT soldier model (human.glb), the acceptance I offered at the end of Task 116 ("say the word and I'll accept human.glb the same way").
+
+Work Log:
+- CONFIRMED SCOPE: with the rebel already accepted (Task 116), the only remaining staged player model is the CT soldier. Same documented procedure: mv staging→assets + git add + ASSET_CACHE_VERSION bump.
+- MOVE: recorded staged sha1 cdd14b1d4477e8b6bd04bf7acfbfb23a19b70827 / 9,723,308 B (the Task-112 v2 arm-surgery bake — the exact disk bytes Task 113 proved human-scale after the stale-cache monster fix; NOT the v1 supine bake, that one never left the v5 cache era) → mv public/staging/models/human.glb public/assets/models/human.glb → git add. staging/models/ is now EMPTY — both player models are committed assets.
+- VERSION BUMP: ASSET_CACHE_VERSION 'v7' → 'v8' (the v7 store holds /api/assets/human as a STAGED payload; bump rotates the lineage to the committed copy). Version-lineage comment updated: v6 (T113 monster sweep) → v7 (T115 rebel acceptance) → v8 (T117 human acceptance).
+- COMMENT SWEEPS: human route's outdated "binary itself stays untracked in git" line replaced with the accepted policy + ACCEPTED block (sha/size/v7→v8); preloader modelItems acceptance note added; t115 test assertion flipped v7→v8 with the lineage explanation (still 37/37). Task-number correction: my first-pass comments said "Task 116" for this work — 116 is the rebel acceptance, so all four files re-referenced to Task 117 before commit.
+- ROUTE VERIFY (per-request stat, no restart): POST /api/assets/human → 200, 9,723,308 B, etag "cdd14b1d4477e8b6", served sha == disk; POST /api/assets/rebel unaffected (200, 20,675,948 B).
+- REGRESSIONS: rebel-model-t115 37/37, gunhold-t114 24/24, buymenu 235/235, bots-ai 26/26, cache-t111 28/28, tsc src/game + src/app 0 errors (30 pre-existing, all in scripts/bsp + examples/ + skills/ helper trees + the test-local Q4 quirk — untouched).
+- LIVE (aim depot, joined as CT — scripts/ab-accept-t116.sh, new, the Task-116 harness with the team flipped so soldier bots are teammates): models ready; glbTeams {CT:"soldier", T:"rebel"}; browser caches.keys() = ["three-cs-assets-v8"] ONLY (v8 live, old stores GC'd); alive-CT handContact gripGap 0.022 (= |GUN_HAND_POS|, fist glued to grip) / supportGap 0.094 (left hand on handguard). VLM full-frame (vlm-accept-t115.mjs reused): helmet+vest tactical soldier, human-scale, weapon properly attached, clean geometry. (Zoomed-character VLM was Tasks 113–115's job on the same bytes — unchanged by a move.)
+- README: player-model status → "TWO accepted player models — CT soldier + T-side rebel" (with both shas, the rejection-history guard, and the re-drop path); human ledger row (CT side, baked via bake-soldier-t112.ts, not-verified license, dev-only waiver); human acceptance verdict paragraph; lifecycle section's stale "touch the route to drop the buffer cache" note replaced with the Task-113 per-request-stat reality + the bump rule.
+- GIT: commit 34123dd (7 files: human.glb + README + human route + preloader + t115 test + new ab-accept-t116.sh harness).
+
+Stage Summary:
+- BOTH player models are now accepted, committed assets: CT = soldier (human.glb, 9.7 MB, sha cdd14b1d…), T = rebel (rebel.glb, 20.7 MB, sha 8f06fbf5…). Cache lineage at v8; live-verified glbTeams, weapons in hands on both sides (gripGap 0.022), no scale/deformation regressions, all suites green. staging/models/ empty; re-evaluation is a fresh staging drop (staging wins instantly) + re-acceptance = mv + another bump. Next model slot is open for whatever the user uploads next.
