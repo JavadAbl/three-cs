@@ -2219,3 +2219,20 @@ Work Log:
 
 Stage Summary:
 - github.com/JavadAbl/three-cs main = 7a72cd7(+this record): the full 113–117 chain is public — monster fix, weapon-hold IK, both accepted player models (CT soldier 9.7 MB + T rebel 20.7 MB committed as repo binaries), cache lineage v8, all regression suites green at push time. Remote and local identical.
+
+---
+Task ID: 119
+Agent: main (Z.ai)
+Task: user: "status" — the status probe exposed a CONTAINER ROLLBACK; this task is the full recovery from it.
+
+Work Log:
+- DISCOVERY (via the status probe): local HEAD sat at 0272610 ("Task 109", an unpushed AMEND of the remote's be66e04), the working tree was Task-109-era code (no solveArm, no REBEL_SPEC, ASSET_CACHE_VERSION still v5, no player-model GLBs in assets, staging/ empty) — i.e. the container had been restored from an old snapshot while the conversation continued. git reflog confirmed .git itself rolled back (my Task-116..118 commits absent locally); dev(:3000)+game(:3003) processes were serving the old tree.
+- SOURCE OF TRUTH: origin/main 067bd04 (Task-118 push) — verified complete BEFORE any destructive step: remote log carries the whole chain (T109 be66e04 → T111 → T112 → T113 → T114 → T115 → acceptances → T118), remote tree contains human.glb + rebel.glb, solveArm/REBEL_SPEC/GLB_VM_ID_SCALE, ASSET_CACHE_VERSION v8. The stray local 0272610 is the pre-push AMEND twin of be66e04 (same content, reflog: "commit (amend)") — fully subsumed.
+- RECOVERY: git branch -f backup/t109-amend-0272610 0272610 (insurance ref, nothing lost) → git fetch origin → git reset --hard origin/main (510 files updated). Tree restored: both GLBs back with exact shas (human cdd14b1d…, rebel 8f06fbf5…), code markers all present, v8.
+- SERVERS: old process trees killed (dev pids 1056/1059/1060/1077/1114, game 1141/1176), .next build cache cleared (14-commit tree swap — no stale compile cache), both restarted double-forked (PPID=1): web :3000 via bun run dev, game :3003 via mini-services/game-server bun --hot index.ts → gs.log.
+- VERIFY: routes serve exact accepted bytes (human 200/9,723,308 B sha cdd14b1d…; rebel 200/20,675,948 B sha 8f06fbf5…); LIVE (ab-accept-t116.sh): models ready, glbTeams {CT:soldier, T:rebel}, browser cache store three-cs-assets-v8 only, alive-CT handContact gripGap 0.022/supportGap 0.093. REGRESSIONS: rebel-t115 37/37, gunhold-t114 24/24, buymenu 235/235, bots 26/26, cache-t111 28/28.
+- NOTE: upload/ raw user uploads survived the rollback untouched (incl. leather_rebel.glb, soldier_character.glb) — no action needed there. db/ untouched (no schema work in 113-118).
+- LESSON (ops, for every future session): on ANY session start or after any gap, run the three-command health probe FIRST: git log --oneline -1 (HEAD at the latest pushed worklog task?), ls public/assets/models/ (committed player models present?), grep ASSET_CACHE_VERSION src/game/preloader.ts (version at the latest bump?). A rolled-back container is silent — everything "works", just serves month-old state. The GitHub remote is the only durable line; local state is disposable.
+
+Stage Summary:
+- The rollback cost zero work: every Task-113..118 artifact lived on the remote (the Task-118 push is what made this recovery a two-command reset instead of a re-do). Local main = origin/main = 067bd04(+this record), both models verified in-tree, in-route and in-game, all suites green, servers freshly restarted on the current tree. backup/t109-amend-0272610 keeps the one divergent commit for forensics; delete after a green light.
