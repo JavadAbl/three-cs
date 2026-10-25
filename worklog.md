@@ -2203,3 +2203,19 @@ Work Log:
 
 Stage Summary:
 - BOTH player models are now accepted, committed assets: CT = soldier (human.glb, 9.7 MB, sha cdd14b1d…), T = rebel (rebel.glb, 20.7 MB, sha 8f06fbf5…). Cache lineage at v8; live-verified glbTeams, weapons in hands on both sides (gripGap 0.022), no scale/deformation regressions, all suites green. staging/models/ empty; re-evaluation is a fresh staging drop (staging wins instantly) + re-acceptance = mv + another bump. Next model slot is open for whatever the user uploads next.
+
+---
+Task ID: 118
+Agent: main (Z.ai)
+Task: user: "push updates" then supplied a fresh GitHub fine-grained PAT — publish the 9 pending commits (Tasks 113–117) to github.com/JavadAbl/three-cs.
+
+Work Log:
+- CREDENTIAL SCAN: no stored credentials anywhere (no ~/.git-credentials, no credential helper, no SSH keys, no GH_TOKEN/GITHUB_TOKEN env, .env holds only DATABASE_URL) — matches the Task-93-established pattern: each push needs the user's fresh in-chat PAT; earlier PATs were chat-exposed and stay revoked.
+- PRE-PUSH STATE: local main 7a72cd7, origin/main f3b32a4, ahead 9 — the whole Task-113→117 chain: monster fix (stale-route-cache stat revalidation + v5→v6 sweep + death-pose relax/forward-fall/rest-lift), weapon-hold IK (measured-fist anchor + per-frame 2-bone solve + aim-locked gun axis), Task-115 integration auto-commit, rebel acceptance (e5cf7fb + v6→v7), human acceptance (34123dd + v7→v8), worklogs 113/116/117. Payload ~45 MiB pack incl. human.glb 9.3 MB + rebel.glb 20 MB (both far under GitHub's 100 MB per-file limit).
+- TOKEN VERIFIED IN TWO STAGES (Task-93 protocol): authenticated ls-remote resolved refs/heads/main = f3b32a4 (read path), API /user = login JavadAbl / Mohammad Javad Abolhassani Far (owner identity).
+- PUSH: one-time tokened URL (x-access-token:***@github.com/JavadAbl/three-cs.git) — token NEVER written to .git/config, remote config, or any file; it exists only in this session's command lines. f3b32a4..7a72cd7 main -> main, one clean fast-forward, no force.
+- POST-PUSH: git fetch origin re-synced the tracking ref (main [origin/main], 0 commits ahead); this worklog record then committed and pushed with the same in-session credential so NOTHING is left dangling — remote = local after the second push.
+- SECURITY: the token is chat-exposed by definition — user should REVOKE/DELETE it in GitHub → Settings → Developer settings → Fine-grained tokens once done (same guidance as every previous PAT).
+
+Stage Summary:
+- github.com/JavadAbl/three-cs main = 7a72cd7(+this record): the full 113–117 chain is public — monster fix, weapon-hold IK, both accepted player models (CT soldier 9.7 MB + T rebel 20.7 MB committed as repo binaries), cache lineage v8, all regression suites green at push time. Remote and local identical.
