@@ -1,4 +1,4 @@
-import { readFile, access } from 'node:fs/promises'
+import { readFile, access, stat } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 
@@ -23,16 +23,25 @@ async function resolveFile(): Promise<string> {
   return ACCEPTED
 }
 
-// The parsed buffer is cached in module memory; after replacing the model
-// file, touch this file (or restart dev) to drop the cache and re-read.
-let cache: { body: Buffer; etag: string } | null = null
+// Task 113: this cache used to hold the parsed body FOREVER — "touch this
+// file (or restart dev) after replacing the model" — and that footgun is
+// exactly what showed the user a giant supine spiky "monster": the Task-112
+// v1 bake entered the module cache, the v2 re-bake replaced the file on disk
+// 30 s later, but the running dev server kept serving v1 (sha/content-length
+// mismatch vs the on-disk file proved it). Now every request stats the
+// resolved file (path + mtimeMs + size — a microsecond operation) and any
+// change re-reads the body and re-hashes the etag. Replacing the staged or
+// accepted file is picked up on the very next request, no touch/restart.
+interface Entry { path: string; mtimeMs: number; size: number; body: Buffer; etag: string }
+let cache: Entry | null = null
 
 async function loadFile(): Promise<{ body: Buffer; etag: string }> {
-  if (!cache) {
-    const body = await readFile(await resolveFile())
-    const etag = '"' + createHash('sha1').update(body).digest('hex').slice(0, 16) + '"'
-    cache = { body, etag }
-  }
+  const p = await resolveFile()
+  const st = await stat(p)
+  if (cache && cache.path === p && cache.mtimeMs === st.mtimeMs && cache.size === st.size) return cache
+  const body = await readFile(p)
+  const etag = '"' + createHash('sha1').update(body).digest('hex').slice(0, 16) + '"'
+  cache = { path: p, mtimeMs: st.mtimeMs, size: st.size, body, etag }
   return cache
 }
 

@@ -454,6 +454,54 @@ export class Engine {
           })
           return out
         },
+        // Task 113: world-space bbox of a player's SKINNED vertices, computed
+        // through the real CPU skinning path (applyBoneTransform = the vertex
+        // shader). Settles "is the rendered character human-scale or a giant
+        // monster" numerically, no screenshots needed — works for corpses too
+        // (root fall rotation included). ~400 sampled verts per skinned mesh.
+        skinBBox: (id: string) => {
+          const p = this.pm.getById(id)
+          if (!p || !p.glb) return null
+          const bb = new THREE.Box3()
+          const v = new THREE.Vector3()
+          let sampled = 0
+          p.glb.model.traverse(o => {
+            const m = o as THREE.SkinnedMesh
+            if (!m.isSkinnedMesh || !m.geometry?.attributes?.skinIndex) return
+            const pos = m.geometry.attributes.position as THREE.BufferAttribute
+            const step = Math.max(1, Math.floor(pos.count / 400))
+            for (let i = 0; i < pos.count; i += step) {
+              v.fromBufferAttribute(pos, i)
+              m.applyBoneTransform(i, v)
+              v.applyMatrix4(m.matrixWorld)
+              bb.expandByPoint(v)
+              sampled++
+            }
+          })
+          if (sampled === 0) return null
+          const r2 = (x: number) => Math.round(x * 100) / 100
+          const s = bb.getSize(new THREE.Vector3())
+          // bone pose snapshot (diagnosing death-pose relax: which joint is stuck)
+          const bones: Record<string, number[]> = {}
+          for (const key of Object.keys(p.glb.bones) as Array<keyof typeof p.glb.bones>) {
+            const bn = p.glb.bones[key]
+            bones[key] = [
+              Math.round(bn.rotation.x * 100) / 100,
+              Math.round(bn.rotation.y * 100) / 100,
+              Math.round(bn.rotation.z * 100) / 100,
+            ]
+          }
+          return {
+            alive: p.alive,
+            rootPos: p.root.position.toArray().map(r2),
+            rootRot: [Math.round(p.root.rotation.x * 100) / 100, Math.round(p.root.rotation.y * 100) / 100, Math.round(p.root.rotation.z * 100) / 100],
+            min: bb.min.toArray().map(r2),
+            max: bb.max.toArray().map(r2),
+            size: s.toArray().map(r2),
+            bones,
+            sampled,
+          }
+        },
         // live GLB vm pull-back tuning: positive dz = gun closer to you
         // (stock further off-screen), negative = deeper into the scene.
         // Applies instantly (bob loop renders from vmBasePos) and sticks

@@ -1,4 +1,4 @@
-import { readFile, access } from 'node:fs/promises'
+import { readFile, access, stat } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 
@@ -55,19 +55,22 @@ async function resolveFile(id: string): Promise<string> {
   throw new Error(`no glb for ${id}`)
 }
 
-// per-id parsed-buffer cache; touch this file (or restart dev) after
-// replacing a file to drop the cache and re-read.
-const cache = new Map<string, { body: Buffer; etag: string }>()
+// per-id parsed-buffer cache. Task 113: entries are validated against the
+// file on every request (path + mtimeMs + size), so replacing a staged or
+// accepted GLB is picked up on the next request — the previous forever-cache
+// was the bug that served a stale human model for half an hour after its
+// re-bake (see /api/assets/human/route.ts).
+const cache = new Map<string, { path: string; mtimeMs: number; size: number; body: Buffer; etag: string }>()
 
 async function loadFile(id: string): Promise<{ body: Buffer; etag: string }> {
-  let c = cache.get(id)
-  if (!c) {
-    const body = await readFile(await resolveFile(id))
-    const etag = '"' + createHash('sha1').update(body).digest('hex').slice(0, 16) + '"'
-    c = { body, etag }
-    cache.set(id, c)
-  }
-  return c
+  const p = await resolveFile(id)
+  const st = await stat(p)
+  const c = cache.get(id)
+  if (c && c.path === p && c.mtimeMs === st.mtimeMs && c.size === st.size) return c
+  const body = await readFile(p)
+  const etag = '"' + createHash('sha1').update(body).digest('hex').slice(0, 16) + '"'
+  cache.set(id, { path: p, mtimeMs: st.mtimeMs, size: st.size, body, etag })
+  return cache.get(id)!
 }
 
 function fileResponse(req: Request, c: { body: Buffer; etag: string }): Response {

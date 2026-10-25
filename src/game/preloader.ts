@@ -38,7 +38,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v5'   // Task 104: v4 ITSELF got polluted (stale HTTP-cache refill before the no-cache net-fetch fix landed in the bundle) — v5 sweeps it; with the STALE-REFILL FIX in place this is the last bump this re-ship needs
+export const ASSET_CACHE_VERSION = 'v6'   // Task 113: v5 holds the Task-112 v1 human-model bake (the "CT characters are a big monster" supine/spiky render) — the re-bake replaced the file on disk but the route's module cache kept serving v1, and the client Cache API stored it under v5. The route now stats the file per request (no more forever-cache), and this bump sweeps every v5 store so all browsers re-fetch the fixed model. (v5 itself was the Task-104 sweep of a stale-HTTP-refill-polluted v4.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'

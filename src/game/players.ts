@@ -322,6 +322,11 @@ export class PlayerManager {
     let p = this.players.get(id)
     if (p) return p
     const root = new THREE.Group()
+    // YXZ (yaw-outermost): the alive path only uses rotation.y (order-agnostic),
+    // but the Task-113 death fall tips the root about x — with XYZ that tip
+    // composes OUTSIDE the yaw and every corpse would collapse toward a
+    // world-fixed direction; YXZ keeps the fall facing-relative (forward/back).
+    root.rotation.order = 'YXZ'
     const hb = buildHitboxes(id)
     root.add(hb[0], hb[1], hb[2])
 
@@ -492,13 +497,49 @@ export class PlayerManager {
         // death: tip over around the feet, ease out over 0.55 s
         const since = (now - p.deathAt) / 1000
         const t = Math.min(1, since / 0.55)
+        // Task 113: FORWARD/BACKWARD falls only (fallAxis forced to x). The
+        // soldier silhouette is 1.08 m wide at the shoulders (armor pads at
+        // |x| 0.54 — measured in the staged GLB), so a SIDEWAYS fall rotates
+        // that width into the vertical: a ~1 m tall corpse slab sunk ~0.4 m
+        // through the floor — the "dead body reads as a monster" report.
+        // Tipping forward/back lays the ~0.54 m body depth down instead.
+        // DEATH_LIFT: the fall pivots on the skeleton axis, which floats
+        // ~0.26 m above the lying surface (vest + backpack bulk) — lift the
+        // root so the fallen body RESTS on its back/chest, not inside the floor.
         const rot = 1.52 * easeOutCubic(t) * p.fallSign
-        if (p.fallAxis === 'x') { p.root.rotation.x = rot; p.root.rotation.z = 0 } else { p.root.rotation.z = rot; p.root.rotation.x = 0 }
-        p.root.position.y = y + 0.04 * t
+        p.root.rotation.x = rot
+        p.root.rotation.z = 0
+        p.root.position.y = y + (0.04 + 0.26) * t
         if (g) {
-          // user rig: bones were driven every frame while alive — freeze at the death-moment
-          // pose (do NOT touch the skeleton while dead; the root fall rotation does the rest)
+          // Task 113 death-pose fix: the old "freeze at the death-moment pose"
+          // left weapon-ready arms + mid-stride legs pointing FORWARD in
+          // standing space — once the root tips ~87°, forward becomes DOWN,
+          // so limbs punched through the floor (measured skinned bbox sank to
+          // y = -0.65) and corpses read as mangled "monsters". Ease every bone
+          // toward a relaxed at-attention rest pose during the same 0.55 s
+          // fall: arms hang at the sides, legs straighten — after the tip the
+          // body lies flat along its length, nothing below ground.
           g.wasAlive = false
+          const k = easeOutCubic(t)
+          const b = g.bones
+          // legs straighten with a small natural spread
+          b.thighR.rotation.x = lerp(b.thighR.rotation.x, 0.06, k)
+          b.thighL.rotation.x = lerp(b.thighL.rotation.x, -0.04, k)
+          b.shinR.rotation.x = lerp(b.shinR.rotation.x, -0.08, k)
+          b.shinL.rotation.x = lerp(b.shinL.rotation.x, -0.05, k)
+          // torso + head neutral
+          b.torso.rotation.x = lerp(b.torso.rotation.x, -0.04, k)
+          b.torso.rotation.y = lerp(b.torso.rotation.y, 0, k)
+          b.head.rotation.x = lerp(b.head.rotation.x, 0, k)
+          // arms relax to the sides (they lie along the body after the tip)
+          b.armR.rotation.x = lerp(b.armR.rotation.x, 0.15, k)
+          b.armR.rotation.y = lerp(b.armR.rotation.y, 0, k)
+          b.armR.rotation.z = lerp(b.armR.rotation.z, -0.06, k)
+          b.foreR.rotation.x = lerp(b.foreR.rotation.x, 0.12, k)
+          b.armL.rotation.x = lerp(b.armL.rotation.x, 0.15, k)
+          b.armL.rotation.y = lerp(b.armL.rotation.y, 0, k)
+          b.armL.rotation.z = lerp(b.armL.rotation.z, 0.06, k)
+          b.foreL.rotation.x = lerp(b.foreL.rotation.x, 0.12, k)
         } else if (r) {
         // limp limbs
         r.hips.position.y = lerp(HIPS_STAND, 0.72, t)
