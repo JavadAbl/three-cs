@@ -43,7 +43,7 @@ export const ASSET_CACHE_VERSION = 'v6'   // Task 113: v5 holds the Task-112 v1 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
 const PREFIXES = ['/assets/', '/staging/', '/draco/']
-const ROUTE_RE = /^\/api\/assets\/(weapon|human)\//
+const ROUTE_RE = /^\/api\/assets\/(weapon|human|rebel)\//
 
 export interface CacheStats { hits: number; net: number; stored: number; bypass: number; bytesNet: number; neg: number }
 export const cacheStats: CacheStats = { hits: 0, net: 0, stored: 0, bypass: 0, bytesNet: 0, neg: 0 }
@@ -361,6 +361,11 @@ function modelItems(): Item[] {
     items.push({ chain: [{ url: `/api/assets/weapon/${id}`, init: { method: 'POST' } }] })
   }
   items.push({ chain: [{ url: '/api/assets/human', init: { method: 'POST' } }] })
+  // Task 115: the T-side rebel model (CT = soldier above). Missing file → 404
+  // → negative-cached like unbaked weapons; usermodel falls T back to the
+  // soldier. Accepting the rebel later (mv staging -> assets) must bump
+  // ASSET_CACHE_VERSION per the bump rule above.
+  items.push({ chain: [{ url: '/api/assets/rebel', init: { method: 'POST' } }] })
   for (const f of ['draco_wasm_wrapper.js', 'draco_decoder.js', 'draco_decoder.wasm']) {
     items.push({ chain: [{ url: `/draco/gltf/${f}` }] })
   }

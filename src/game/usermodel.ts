@@ -1,32 +1,42 @@
-// Auto-rigged player model: the user-supplied character. Pending copy lives at
-// public/staging/models/human.glb (gitignored, evaluation); accepted copy at
-// public/assets/models/human.glb (committed). The API route serves whichever
-// is present — staging wins while it exists.
-// The GLB is a STATIC, unrigged A-pose character (no skeleton, no real animation clips),
+// Auto-rigged player models — PER TEAM since Task 115:
+//   CT: human.glb  — the soldier (Task 112/113/114 pipeline, bluish tint)
+//   T:  rebel.glb  — the leather rebel (Task 115, rendered untinted — the
+//                    model itself is the T identity). If the rebel file is
+//                    missing, T falls back to the SOLDIER proto with the
+//                    classic tan tint (exactly the pre-115 T look).
+// Pending copies live in public/staging/models/*.glb (gitignored, evaluation);
+// accepted copies at public/assets/models/*.glb. The API routes serve
+// whichever is present — staging wins while it exists.
+// Both GLBs are STATIC, unrigged A-pose characters (no skeleton, no clips),
 // so at load time we:
 //   1. bake node transforms + normalization (1.79 m, grounded, centered, facing -Z) into the geometry,
 //   2. build a small skeleton (hips/torso/head/arms/forearms/thighs/shins),
 //   3. assign per-vertex skin weights from spatial rules with smooth blend bands
 //      (knee / hip / elbow / shoulder / neck) so limbs deform without gaps,
 //   4. convert every original mesh into a SkinnedMesh sharing that skeleton.
-// players.ts then drives the bones procedurally (walk / run / crouch / aim / death).
+// Everything model-specific (joint table J, weight-band thresholds, IK arm
+// rig, hand anchors, tint) lives in a ModelSpec MEASURED from each model's
+// geometry (scripts/measure-rebel-t115.mjs / measure-arms-t114.mjs) — the two
+// figures have different proportions (soldier: armored, 1.08 m shoulder width,
+// forearms 0.36; rebel: lean, 0.58 m wide, arms hug the torso) and a shared
+// constant table would spike one of them (Task 112 gotcha #2).
+// players.ts then drives the bones procedurally (walk / run / crouch / aim /
+// death) and solves the 2-bone IK arms against each instance's own chain.
 // The procedural box-soldier rig in players.ts stays as the load-fallback.
 import * as THREE from 'three'
 import { sharedGLTFLoader } from './gltf'
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import type { TeamId } from './weapons'
 
-// Served via the extensionless API route /api/assets/human and fetched with
-// method POST on purpose: download-manager extensions (IDM & friends) hook
-// GET requests that look like downloadable files (URL extension / binary
-// content type) and steal them — a POST fetch is invisible to them.
-const MODEL_URL = '/api/assets/human'
+// Served via the extensionless API routes /api/assets/{human,rebel} and
+// fetched with method POST on purpose: download-manager extensions (IDM &
+// friends) hook GET requests that look like downloadable files (URL extension
+// / binary content type) and steal them — a POST fetch is invisible to them.
+const CT_MODEL_URL = '/api/assets/human'
+const T_MODEL_URL = '/api/assets/rebel'
 
 // target silhouette height (legacy hitboxes: head sphere center 1.62, r .17 → top ~1.79)
 const TARGET_HEIGHT = 1.79
-
-// per-team tint (multiplied over every material of the model)
-const TEAM_TINT: Record<TeamId, number> = { CT: 0x9fb7d9, T: 0xd9bd92 }
 
 /**
  * Gun stub transform on the right-hand anchor — INITIAL value only. Once the
@@ -37,6 +47,32 @@ const TEAM_TINT: Record<TeamId, number> = { CT: 0x9fb7d9, T: 0xd9bd92 }
  */
 export const GUN_HAND_POS = new THREE.Vector3(0, 0.02, 0.01)
 export const GUN_HAND_ROT = new THREE.Euler(-1.92, 0.08, 0)
+
+// ------------------------------------------------------------------ IK arm chains
+/** 2-bone analytic IK chain in TORSO-LOCAL space (the frame the arm bones
+ *  live in). S = shoulder pivot, E = elbow pivot, F = fist centroid. */
+export interface ArmChain {
+  /** shoulder pivot, torso-local */
+  S: THREE.Vector3
+  /** bind upper-arm direction (S→E), unit */
+  e0: THREE.Vector3
+  /** bind forearm direction (E→fist), unit */
+  w0: THREE.Vector3
+  L1: number
+  L2: number
+}
+export function mkChain(s: readonly number[], e: readonly number[], f: readonly number[]): ArmChain {
+  const S = new THREE.Vector3(s[0], s[1], s[2])
+  const E = new THREE.Vector3(e[0], e[1], e[2])
+  const F = new THREE.Vector3(f[0], f[1], f[2])
+  return { S, e0: E.clone().sub(S).normalize(), w0: F.clone().sub(E).normalize(), L1: E.distanceTo(S), L2: F.distanceTo(E) }
+}
+
+/** IK arm rig in torso-local space: S/E/F triplets per side (see USER_ARM_RIG) */
+export interface ArmRig {
+  right: { S: readonly number[]; E: readonly number[]; F: readonly number[] }
+  left: { S: readonly number[]; E: readonly number[]; F: readonly number[] }
+}
 
 /**
  * Task 114 IK arm chains — bind geometry in TORSO-LOCAL space (the frame the
@@ -51,23 +87,20 @@ export const USER_ARM_RIG = {
   left: { S: [-0.27, 0.40, 0], E: [-0.34, 0.12, 0], F: [-0.336, -0.223, -0.019] },
 } as const
 
-// ------------------------------------------------------------------ skeleton layout
-// joint positions in game space (feet at y 0, facing -Z, 1.79 m tall) — derived from the
-// measured island bounds of this specific model (arms hang at |x| 0.2..0.44, knees ~0.5)
-const J = {
-  hips: [0, 0.95, 0] as const,
-  torso: [0, 1.08, 0] as const,
-  head: [0, 1.50, 0] as const,
-  armL: [-0.27, 1.48, 0] as const,
-  armR: [0.27, 1.48, 0] as const,
-  foreL: [-0.34, 1.20, 0] as const,
-  foreR: [0.34, 1.20, 0] as const,
-  thighL: [-0.09, 0.92, 0] as const,
-  thighR: [0.09, 0.92, 0] as const,
-  shinL: [-0.09, 0.48, 0] as const,
-  shinR: [0.09, 0.48, 0] as const,
-}
+/**
+ * Task 115 rebel arm chains, MEASURED from the staged rebel GLB in game space
+ * (scripts/measure-rebel-t115.mjs): right fist (0.205, 0.782, −0.027), left
+ * (−0.202, 0.787, −0.043), elbows (±0.21, 1.11, +0.04), shoulders
+ * (±0.195, 1.47, +0.06 surface → joints pulled 1 cm medial). S/E match the
+ * rebel J-table pivots exactly (IK chain vs bone pivots must agree or the
+ * skin swings off the solved fist).
+ */
+export const REBEL_ARM_RIG = {
+  right: { S: [0.185, 0.39, 0.05], E: [0.21, 0.03, 0.04], F: [0.205, -0.298, -0.027] },
+  left: { S: [-0.185, 0.39, 0.05], E: [-0.21, 0.03, 0.03], F: [-0.202, -0.293, -0.043] },
+} as const
 
+// ------------------------------------------------------------------ model specs
 export interface UserBones {
   hips: THREE.Bone
   torso: THREE.Bone
@@ -91,17 +124,30 @@ export interface UserInstance {
   /** C4 charge parented to the upper back (torso bone) */
   c4: THREE.Group
   wasAlive: boolean
+  /** Task 115: per-instance IK chains (the spec's proportions, not a global) */
+  armR: ArmChain
+  armL: ArmChain
 }
 
-interface Asset {
-  state: 'idle' | 'loading' | 'ready' | 'failed'
-  proto: THREE.Group | null
-  /** original material → per-team tinted clone (shared by all players of a team) */
-  teamMats: Partial<Record<TeamId, Map<THREE.Material, THREE.Material>>>
-  waiter: Promise<void> | null
-}
+/** joint positions in game space, keyed like BONE_ORDER */
+type JointTable = Record<string, readonly [number, number, number]>
 
-const asset: Asset = { state: 'idle', proto: null, teamMats: {}, waiter: null }
+interface ModelSpec {
+  /** POST-served GLB route */
+  url: string
+  /** per-team tint multiplied over every material (white = as authored) */
+  tint: Record<TeamId, number>
+  /** skeleton joint positions in game space (feet y 0, facing -Z, 1.79 m) */
+  J: JointTable
+  /** spatial skin-weight rule for this model's proportions */
+  weights: (x: number, y: number) => Array<[BoneKey, number]>
+  /** IK arm rig in torso-local space (S/E must equal J.armX/foreX pivots) */
+  armRig: ArmRig
+  /** right-fist anchor in foreR-local space (the gun grip point) */
+  handR: readonly [number, number, number]
+  /** left-fist anchor in foreL-local space (probe/support verification) */
+  handL: readonly [number, number, number]
+}
 
 // ------------------------------------------------------------------ skin weights
 // bone order for skinIndex (must match the order passed to new THREE.Skeleton)
@@ -110,8 +156,8 @@ type BoneKey = (typeof BONE_ORDER)[number]
 const BONE_INDEX: Record<BoneKey, number> = {} as never
 BONE_ORDER.forEach((k, i) => { BONE_INDEX[k] = i })
 
-/** Spatial rule: which bones influence a vertex at game-space (x, y, z). Returns up to 2 [key, weight]. */
-function vertexWeights(x: number, y: number): Array<[BoneKey, number]> {
+/** Spatial rule: which bones influence a vertex at game-space (x, y). Returns up to 2 [key, weight]. */
+function soldierWeights(x: number, y: number): Array<[BoneKey, number]> {
   const ax = Math.abs(x)
   // --- arms (hanging A-pose: |x| 0.2..0.44, y 0.78..1.66; shoulder caps reach in to |x| ~0.12 above y 1.32)
   const armX = y > 1.32 ? 0.13 : 0.20
@@ -160,55 +206,213 @@ function vertexWeights(x: number, y: number): Array<[BoneKey, number]> {
   return [['torso', 1]]
 }
 
-// ------------------------------------------------------------------ prototype build
-
-/** load the prototype once; resolves when ready (or failed → callers keep the procedural rig) */
-export function preloadUserModel(): Promise<void> {
-  if (asset.waiter) return asset.waiter
-  asset.state = 'loading'
-  asset.waiter = new Promise<void>((resolve) => {
-    // POST + extensionless URL: download-manager extensions never intercept this
-    fetch(MODEL_URL, { method: 'POST' })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.arrayBuffer()
-      })
-      .then((buf) => {
-        sharedGLTFLoader().parse(
-          buf,
-          '',
-          (gltf) => {
-            try {
-              asset.proto = buildProto(gltf.scene)
-              asset.state = 'ready'
-            } catch (e) {
-              console.warn('[usermodel] auto-rig failed, keeping procedural rig', e)
-              asset.state = 'failed'
-            }
-            resolve()
-          },
-          (err) => {
-            console.warn('[usermodel] human.glb failed to load, keeping procedural rig', err)
-            asset.state = 'failed'
-            resolve()
-          },
-        )
-      })
-      .catch((err) => {
-        console.warn('[usermodel] human.glb failed to load, keeping procedural rig', err)
-        asset.state = 'failed'
-        resolve()
-      })
-  })
-  return asset.waiter
+/**
+ * Rebel spatial rule — MEASURED bands (scripts/measure-rebel-{,meshes-}t115.mjs):
+ * arms hug the torso (inner edge |x| ≈ 0.195 at the sleeve beside the ribs,
+ * 0.165 at the deltoid, 0.18 at the forearm/hand; y 0.72..1.52), elbow at
+ * y 1.11 (blend 1.00..1.22), neck tightens above y 1.52 (head blend to 1.60),
+ * knee at y 0.50 (blend 0.46..0.60 — same as the soldier). Legs are set a
+ * little wider (knee ±0.14 — the model's stance splays to ±0.19 at the boots).
+ */
+function rebelWeights(x: number, y: number): Array<[BoneKey, number]> {
+  const ax = Math.abs(x)
+  // --- arms (hanging A-pose, sleeves against the jacket sides)
+  if (y > 0.72 && y < 1.52) {
+    const armX = y > 1.32 ? 0.165 : (y > 1.08 ? 0.195 : 0.18)
+    if (ax > armX) {
+      const upper: BoneKey = x < 0 ? 'armL' : 'armR'
+      const fore: BoneKey = x < 0 ? 'foreL' : 'foreR'
+      if (y > 1.00 && y < 1.22) {
+        // elbow blend band
+        const t = (y - 1.00) / 0.22
+        return [[upper, t], [fore, 1 - t]]
+      }
+      return y >= 1.11 ? [[upper, 1]] : [[fore, 1]]
+    }
+  }
+  // --- head + neck
+  if (ax < 0.16) {
+    if (y > 1.60) return [['head', 1]]
+    if (y > 1.52) {
+      const t = (y - 1.52) / 0.08
+      return [['head', t], ['torso', 1 - t]]
+    }
+  }
+  // --- legs + pelvis (knee 0.50 measured — soldier bands carry over)
+  if (y < 0.46) {
+    if (ax < 0.05) return [['shinL', 0.5], ['shinR', 0.5]]
+    return [[x < 0 ? 'shinL' : 'shinR', 1]]
+  }
+  if (y < 0.60) {
+    const t = (y - 0.46) / 0.14
+    const thigh: BoneKey = x < 0 ? 'thighL' : 'thighR'
+    const shin: BoneKey = x < 0 ? 'shinL' : 'shinR'
+    if (ax < 0.05) return [['hips', t], [shin, 1 - t]]
+    return [[thigh, t], [shin, 1 - t]]
+  }
+  if (y < 0.94) {
+    if (ax < 0.07) return [['hips', 1]]
+    return [[x < 0 ? 'thighL' : 'thighR', 1]]
+  }
+  if (y < 1.10) {
+    const t = (y - 0.94) / 0.16
+    if (ax < 0.07) return [['hips', 1]]
+    return [['hips', t], [x < 0 ? 'thighL' : 'thighR', 1 - t]]
+  }
+  // --- torso (chest/waist)
+  return [['torso', 1]]
 }
 
-export function userModelReady(): boolean { return asset.state === 'ready' }
+/** Task 112/113/114 soldier — joint table measured from the staged human.glb. */
+const SOLDIER_SPEC: ModelSpec = {
+  url: CT_MODEL_URL,
+  // per-team tint (multiplied over every material): one geometry, two teams
+  tint: { CT: 0x9fb7d9, T: 0xd9bd92 },
+  J: {
+    hips: [0, 0.95, 0],
+    torso: [0, 1.08, 0],
+    head: [0, 1.50, 0],
+    armL: [-0.27, 1.48, 0],
+    armR: [0.27, 1.48, 0],
+    foreL: [-0.34, 1.20, 0],
+    foreR: [0.34, 1.20, 0],
+    thighL: [-0.09, 0.92, 0],
+    thighR: [0.09, 0.92, 0],
+    shinL: [-0.09, 0.48, 0],
+    shinR: [0.09, 0.48, 0],
+  },
+  weights: soldierWeights,
+  armRig: USER_ARM_RIG,
+  // Task 114: anchored at the MEASURED fist centroid of the staged soldier
+  // (bind (0.32, 0.84, −0.02) game-space → local (−0.02, −0.36, −0.02) under
+  // foreR). The old (0.03, −0.22, 0.03) was tuned for the retired Vanguard
+  // model (0.22 forearm); this model's forearm joint→fist is 0.36.
+  handR: [-0.02, -0.36, -0.02],
+  handL: [0.004, -0.343, -0.019],
+}
 
-/** debug: current asset state (for __eng + E2E checks) */
-export function userModelState(): string { return asset.state }
+/** Task 115 leather rebel — everything measured 2025-10-25 (staged rebel.glb). */
+const REBEL_SPEC: ModelSpec = {
+  url: T_MODEL_URL,
+  // the rebel IS the terrorist identity model — render as authored (white)
+  tint: { CT: 0xffffff, T: 0xffffff },
+  J: {
+    hips: [0, 0.95, 0],
+    torso: [0, 1.08, 0],
+    head: [0, 1.52, 0],
+    armL: [-0.185, 1.47, 0.05],
+    armR: [0.185, 1.47, 0.05],
+    foreL: [-0.21, 1.11, 0.03],
+    foreR: [0.21, 1.11, 0.04],
+    thighL: [-0.10, 0.92, 0],
+    thighR: [0.10, 0.92, 0],
+    shinL: [-0.14, 0.48, 0.05],
+    shinR: [0.14, 0.48, 0.05],
+  },
+  weights: rebelWeights,
+  armRig: REBEL_ARM_RIG,
+  // measured right fist (0.205, 0.782, −0.027) − foreR joint (0.21, 1.11, 0.04);
+  // forearm joint→fist 0.335 (soldier: 0.36)
+  handR: [-0.005, -0.328, -0.067],
+  handL: [0.008, -0.323, -0.073],
+}
 
-function buildProto(src: THREE.Group): THREE.Group {
+// ------------------------------------------------------------------ asset slots
+interface Asset {
+  state: 'idle' | 'loading' | 'ready' | 'failed'
+  proto: THREE.Group | null
+  /** original material → per-team tinted clone (shared by all players of a team) */
+  teamMats: Partial<Record<TeamId, Map<THREE.Material, THREE.Material>>>
+  waiter: Promise<void> | null
+}
+interface Slot { spec: ModelSpec; asset: Asset }
+
+// CT = soldier; T = rebel (falls back to the soldier proto + tan tint when
+// the rebel file is absent — createUserModel resolves that chain)
+const slots: Record<TeamId, Slot> = {
+  CT: { spec: SOLDIER_SPEC, asset: { state: 'idle', proto: null, teamMats: {}, waiter: null } },
+  T: { spec: REBEL_SPEC, asset: { state: 'idle', proto: null, teamMats: {}, waiter: null } },
+}
+
+// ------------------------------------------------------------------ prototype build
+
+function loadSlot(slot: Slot): Promise<void> {
+  const a = slot.asset
+  return fetch(slot.spec.url, { method: 'POST' })
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.arrayBuffer()
+    })
+    .then((buf) => new Promise<void>((resolve) => {
+      sharedGLTFLoader().parse(
+        buf,
+        '',
+        (gltf) => {
+          try {
+            const built = buildProto(gltf.scene, slot.spec)
+            a.proto = built.proto
+            a.teamMats = built.teamMats
+            a.state = 'ready'
+          } catch (e) {
+            console.warn(`[usermodel] auto-rig failed for ${slot.spec.url}, ${slot.spec.url.includes('rebel') ? 'T keeps the soldier fallback' : 'keeping procedural rig'}`, e)
+            a.state = 'failed'
+          }
+          resolve()
+        },
+        (err) => {
+          console.warn(`[usermodel] ${slot.spec.url} failed to load, ${slot.spec.url.includes('rebel') ? 'T keeps the soldier fallback' : 'keeping procedural rig'}`, err)
+          a.state = 'failed'
+          resolve()
+        },
+      )
+    }))
+    .catch((err) => {
+      console.warn(`[usermodel] ${slot.spec.url} failed to load, ${slot.spec.url.includes('rebel') ? 'T keeps the soldier fallback' : 'keeping procedural rig'}`, err)
+      a.state = 'failed'
+    })
+}
+
+/** load a team's model (memoized). No arg = warm BOTH teams (page.tsx lobby
+ *  warm-up; resolves once every slot has settled — success OR failure). */
+export function preloadUserModel(team?: TeamId): Promise<void> {
+  if (team) {
+    const a = slots[team].asset
+    if (a.waiter) return a.waiter
+    a.state = 'loading'
+    a.waiter = loadSlot(slots[team])
+    return a.waiter
+  }
+  return Promise.all([preloadUserModel('CT'), preloadUserModel('T')]).then(() => { })
+}
+
+/** true when this team has a usable proto (T counts the soldier fallback). */
+export function userModelReady(team?: TeamId): boolean {
+  if (team === 'CT') return !!slots.CT.asset.proto
+  if (team === 'T') return !!(slots.T.asset.proto || slots.CT.asset.proto)
+  return userModelState() === 'ready'
+}
+
+/** E2E/debug contract: 'ready' only once EVERY slot has settled and at least
+ *  one proto exists — the moment players.ts upgrades finish, matching the
+ *  pre-115 single-model semantics (ab-* harnesses wait on this string). */
+export function userModelState(): string {
+  const ct = slots.CT.asset, t = slots.T.asset
+  const pending = ct.state === 'idle' || ct.state === 'loading' || t.state === 'idle' || t.state === 'loading'
+  if (pending) return (ct.state === 'idle' && t.state === 'idle') ? 'idle' : 'loading'
+  return (ct.proto || t.proto) ? 'ready' : 'failed'
+}
+
+/** richer per-team detail for __eng debugging: which proto each team renders */
+export function userModelStates(): Record<TeamId, string> {
+  const t = slots.T.asset
+  return {
+    CT: slots.CT.asset.proto ? 'soldier' : slots.CT.asset.state,
+    T: t.proto ? 'rebel' : (slots.CT.asset.proto ? 'soldier-fallback' : t.state),
+  }
+}
+
+function buildProto(src: THREE.Group, spec: ModelSpec): { proto: THREE.Group; teamMats: Partial<Record<TeamId, Map<THREE.Material, THREE.Material>>> } {
+  const J = spec.J
   // ---- 1. bake node transforms into geometries (collect meshes, flatten)
   src.updateMatrixWorld(true)
   const items: Array<{ geo: THREE.BufferGeometry; mats: THREE.Material[] }> = []
@@ -220,7 +424,7 @@ function buildProto(src: THREE.Group): THREE.Group {
     geo.deleteAttribute('tangent')
     items.push({ geo, mats: Array.isArray(m.material) ? [...m.material] : [m.material] })
   })
-  if (items.length === 0) throw new Error('no meshes in human.glb')
+  if (items.length === 0) throw new Error('no meshes in model')
 
   // ---- 2. normalization: scale to 1.79 m, ground y=0, center x/z, face -Z (source faces +Z)
   const box = new THREE.Box3()
@@ -270,20 +474,16 @@ function buildProto(src: THREE.Group): THREE.Group {
   }
   const boneList = BONE_ORDER.map(k => model.getObjectByName(k) as THREE.Bone)
 
-  // right-hand anchor for the gun (child of the right forearm bone).
-  // Task 114: anchored at the MEASURED fist centroid of the staged soldier
-  // (bind (0.32, 0.84, −0.02) game-space → local (−0.02, −0.36, −0.02) under
-  // foreR). The old (0.03, −0.22, 0.03) was tuned for the retired Vanguard
-  // model (0.22 forearm); this model's forearm joint→fist is 0.36 — the gun
-  // grip floated ~15 cm up the forearm and the fists gripped air.
+  // right-hand anchor for the gun (child of the right forearm bone) at the
+  // MEASURED fist centroid of THIS model (spec.handR); left-hand twin anchor
+  // (probe/verification only — nothing parented)
   const handR = new THREE.Object3D()
   handR.name = 'HandR'
-  handR.position.set(-0.02, -0.36, -0.02)
+  handR.position.set(spec.handR[0], spec.handR[1], spec.handR[2])
   foreR.add(handR)
-  // left-hand twin anchor (probe/verification only — nothing parented)
   const handL = new THREE.Object3D()
   handL.name = 'HandL'
-  handL.position.set(0.004, -0.343, -0.019)
+  handL.position.set(spec.handL[0], spec.handL[1], spec.handL[2])
   foreL.add(handL)
 
   // C4 on the upper back (+Z is the back)
@@ -292,7 +492,7 @@ function buildProto(src: THREE.Group): THREE.Group {
   c4Proto.position.set(0, 0.30, 0.15)
   torso.add(c4Proto)
 
-  // ---- 4. skinned meshes with spatial weights
+  // ---- 4. skinned meshes with this model's spatial weights
   const x = new THREE.Vector3()
   for (const it of items) {
     const pos = it.geo.attributes.position as THREE.BufferAttribute
@@ -301,7 +501,7 @@ function buildProto(src: THREE.Group): THREE.Group {
     const sw = new Float32Array(n * 4)
     for (let i = 0; i < n; i++) {
       x.fromBufferAttribute(pos, i)
-      const w = vertexWeights(x.x, x.y)
+      const w = spec.weights(x.x, x.y)
       for (let k = 0; k < 4; k++) {
         if (k < w.length) {
           si[i * 4 + k] = BONE_INDEX[w[k][0]]
@@ -327,6 +527,7 @@ function buildProto(src: THREE.Group): THREE.Group {
   })
 
   // per-team tinted material clones
+  const teamMats: Partial<Record<TeamId, Map<THREE.Material, THREE.Material>>> = {}
   for (const team of ['CT', 'T'] as TeamId[]) {
     const map = new Map<THREE.Material, THREE.Material>()
     for (const it of items) {
@@ -334,13 +535,13 @@ function buildProto(src: THREE.Group): THREE.Group {
         if (map.has(mat)) continue
         const c = mat.clone()
         const sm = c as THREE.MeshStandardMaterial
-        if (sm.color) sm.color.multiply(new THREE.Color(TEAM_TINT[team]))
+        if (sm.color) sm.color.multiply(new THREE.Color(spec.tint[team]))
         map.set(mat, c)
       }
     }
-    asset.teamMats[team] = map
+    teamMats[team] = map
   }
-  return model
+  return { proto: model, teamMats }
 }
 
 function buildC4(): THREE.Group {
@@ -359,13 +560,19 @@ function buildC4(): THREE.Group {
   return g
 }
 
-/** create a per-player instance (only call when userModelReady()) */
+/** create a per-player instance (only call when userModelReady(team)) */
 export function createUserModel(team: TeamId): UserInstance {
-  const proto = asset.proto!
+  // primary = this team's own slot; T falls back to the soldier proto (tan
+  // tint) when the rebel is unavailable — the exact pre-115 T rendering
+  let slot = slots[team]
+  if (!slot.asset.proto && team === 'T' && slots.CT.asset.proto) slot = slots.CT
+  const proto = slot.asset.proto
+  const swapMap = slot.asset.teamMats[team]!
+  if (!proto || !swapMap) throw new Error(`user model not ready for team ${team}`)
+  const spec = slot.spec
   const model = skeletonClone(proto) as THREE.Group
 
   // swap in team-tinted materials (shared across all players of that team)
-  const swapMap = asset.teamMats[team]!
   model.traverse((o) => {
     const m = o as THREE.Mesh
     if (!m.isMesh) return
@@ -390,5 +597,10 @@ export function createUserModel(team: TeamId): UserInstance {
 
   const c4 = model.getObjectByName('C4Back') as THREE.Group | null
 
-  return { model, bones, gunRig, c4: c4 ?? buildC4(), wasAlive: true }
+  // Task 115: per-instance IK chains from the spec that actually built this
+  // proto (players.ts holdWeapon solves against g.armR / g.armL)
+  const armR = mkChain(spec.armRig.right.S, spec.armRig.right.E, spec.armRig.right.F)
+  const armL = mkChain(spec.armRig.left.S, spec.armRig.left.E, spec.armRig.left.F)
+
+  return { model, bones, gunRig, c4: c4 ?? buildC4(), wasAlive: true, armR, armL }
 }

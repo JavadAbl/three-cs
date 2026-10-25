@@ -4,7 +4,7 @@
 import * as THREE from 'three'
 import { soldierCamo, soldierVest, soldierFace } from './textures'
 import { buildRemoteGun } from './weaponmodels'
-import { preloadUserModel, userModelReady, createUserModel, USER_ARM_RIG, type UserInstance } from './usermodel'
+import { preloadUserModel, userModelReady, createUserModel, type UserInstance, type ArmChain } from './usermodel'
 import { preloadWeaponModels, buildGLBRemoteGun } from './weapongltf'
 import { WEAPONS, type TeamId } from './weapons'
 
@@ -107,24 +107,10 @@ const GUN_LOCAL = new THREE.Vector3(0.09, 0.42, -0.30)
 // contact), and the gunRig ORIENTATION is set directly so the gun axis is
 // locked to the carriage direction (idle cant blended toward the bot's look
 // direction) regardless of where the elbow swings.
-interface ArmChain {
-  /** shoulder pivot, torso-local */
-  S: THREE.Vector3
-  /** bind upper-arm direction (S→E), unit */
-  e0: THREE.Vector3
-  /** bind forearm direction (E→fist), unit */
-  w0: THREE.Vector3
-  L1: number
-  L2: number
-}
-function mkChain(s: readonly number[], e: readonly number[], f: readonly number[]): ArmChain {
-  const S = new THREE.Vector3(s[0], s[1], s[2])
-  const E = new THREE.Vector3(e[0], e[1], e[2])
-  const F = new THREE.Vector3(f[0], f[1], f[2])
-  return { S, e0: E.clone().sub(S).normalize(), w0: F.clone().sub(E).normalize(), L1: E.distanceTo(S), L2: F.distanceTo(E) }
-}
-const ARM_R = mkChain(USER_ARM_RIG.right.S, USER_ARM_RIG.right.E, USER_ARM_RIG.right.F)
-const ARM_L = mkChain(USER_ARM_RIG.left.S, USER_ARM_RIG.left.E, USER_ARM_RIG.left.F)
+// Task 115: the arm chains moved INTO each UserInstance (g.armR / g.armL) —
+// the soldier and the rebel have different measured proportions, so a module
+// -level pair of chains would solve one model's arms against the other's
+// pivots. The ArmChain type + mkChain live in usermodel.ts next to the specs.
 
 /** Solve one arm: bone quaternions that put the FIST on `target`.
  * `pole` biases the elbow (direction from the shoulder→fist line toward the
@@ -376,12 +362,16 @@ export class PlayerManager {
    * the procedural stub staying as fallback for ids that aren't staged.
    */
   preloadModels(): void {
-    void preloadUserModel().then(() => {
-      if (!userModelReady()) return
-      for (const p of this.players.values()) {
-        if (!p.glb && p.rig) this.upgradeToGlb(p)
-      }
-    })
+    // per-team: each team upgrades the moment ITS model lands (the rebel is
+    // 2× the soldier's bytes — CT players must not wait for it)
+    for (const team of ['CT', 'T'] as TeamId[]) {
+      void preloadUserModel(team).then(() => {
+        if (!userModelReady(team)) return
+        for (const p of this.players.values()) {
+          if (p.team === team && !p.glb && p.rig) this.upgradeToGlb(p)
+        }
+      })
+    }
     void preloadWeaponModels().then(() => this.refreshGuns())
   }
 
@@ -399,6 +389,7 @@ export class PlayerManager {
   private upgradeToGlb(p: RemotePlayer) {
     const rig = p.rig
     if (!rig) return
+    if (!userModelReady(p.team)) return   // Task 115: per-team readiness (T counts the soldier fallback)
     const glb = createUserModel(p.team)
     p.rig = null
     p.glb = glb
@@ -437,7 +428,7 @@ export class PlayerManager {
 
     let rig: SoldierRig | null = null
     let glb: UserInstance | null = null
-    if (userModelReady()) {
+    if (userModelReady(team)) {
       glb = createUserModel(team)
       root.add(glb.model)
     } else {
@@ -725,7 +716,7 @@ export class PlayerManager {
     _poleR.set(P.poleRX, P.poleRY, P.poleRZ).normalize()
     _poleR.applyAxisAngle(_AX, -P.poleTilt * pitch)
 
-    solveArm(ARM_R, _grip, _poleR, _qU, _qF)
+    solveArm(g.armR, _grip, _poleR, _qU, _qF)
     b.armR.quaternion.copy(_qU)
     b.foreR.quaternion.copy(_qF)
 
@@ -757,7 +748,7 @@ export class PlayerManager {
         (C as typeof HOLD.knife).leftZ)
     }
     _poleL.set(P.poleLX, P.poleLY, P.poleLZ).normalize()
-    solveArm(ARM_L, _left, _poleL, _qU, _qF)
+    solveArm(g.armL, _left, _poleL, _qU, _qF)
     b.armL.quaternion.copy(_qU)
     b.foreL.quaternion.copy(_qF)
   }

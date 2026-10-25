@@ -18,7 +18,7 @@ import type { WorldFx } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
 import { pbrState } from './textures'
 import { preloadWeaponModels, buildGLBKnifeVM, buildGLBGunVM, weaponModelsState, GLB_VM_SCALE } from './weapongltf'
-import { userModelState } from './usermodel'
+import { userModelState, userModelStates } from './usermodel'
 import type { ViewModel } from './weaponmodels'
 import { audio } from './audio'
 
@@ -438,6 +438,8 @@ export class Engine {
         })),
         sock: () => this.socket,
         glb: () => userModelState(),
+        // Task 115: which proto each team actually renders ('soldier' | 'rebel' | 'soldier-fallback' | state)
+        glbTeams: () => userModelStates(),
         wglb: () => weaponModelsState(),
         upgrade: () => this.pm.upgradeAllNow(),
         meshWorld: (id: string) => {

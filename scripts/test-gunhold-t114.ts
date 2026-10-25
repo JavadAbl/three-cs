@@ -198,7 +198,7 @@ function posedFist(qU: Quat, qF: Quat): V3 {
 // ---------------------------------------------------------------- usermodel anchors
 const userSrc = readFileSync('src/game/usermodel.ts', 'utf8')
 check('usermodel: HandR anchored at the MEASURED fist (−0.02, −0.36, −0.02)',
-  /handR\.position\.set\(-0\.02, -0\.36, -0\.02\)/.test(userSrc))
+  /handR: \[-0\.02, -0\.36, -0\.02\]/.test(userSrc))
 check('usermodel: HandL probe anchor exists on foreL',
   /handL\.name = 'HandL'/.test(userSrc) && /foreL\.add\(handL\)/.test(userSrc))
 check('usermodel: USER_ARM_RIG bind geometry exported',
@@ -210,7 +210,9 @@ check('usermodel: forearm length matches the measurement (F.y−E.y = −0.36)',
 check('players: driveUser receives the weapon (slot-based carriage)',
   /driveUser\(g, p\.weapon,/.test(playersSrc))
 check('players: holdWeapon solves BOTH arms',
-  /solveArm\(ARM_R, _grip/.test(playersSrc) && /solveArm\(ARM_L, _left/.test(playersSrc))
+  /solveArm\(g\.armR, _grip/.test(playersSrc) && /solveArm\(g\.armL, _left/.test(playersSrc))
+check('players: per-instance IK chains (Task 115 — soldier and rebel have different proportions)',
+  /armR: ArmChain/.test(userSrc) && /armL: ArmChain/.test(userSrc) && !/const ARM_R = mkChain/.test(playersSrc))
 check('players: bone QUATERNIONS driven (not FK eulers)',
   /b\.armR\.quaternion\.copy/.test(playersSrc) && /b\.foreL\.quaternion\.copy/.test(playersSrc))
 check('players: gunRig orientation locked to the carriage direction',
