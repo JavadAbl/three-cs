@@ -155,8 +155,8 @@ check('route: /api/assets/rebel serves staging-first with per-request stat (Task
   /staging', 'models', 'rebel\.glb'/.test(routeSrc) && /assets', 'models', 'rebel\.glb'/.test(routeSrc) && /cache\.mtimeMs === st\.mtimeMs/.test(routeSrc))
 check('preloader: rebel route cached (ROUTE_RE) + manifest item',
   /\(weapon\|human\|rebel\)/.test(preloaderSrc) && /url: '\/api\/assets\/rebel'/.test(preloaderSrc))
-check('preloader: acceptance bump applied (v6 held the staged rebel payload; v7 restarts the lineage from the committed copy)',
-  /ASSET_CACHE_VERSION = 'v7'/.test(preloaderSrc))
+check('preloader: acceptance bump applied (rebel acceptance was v6→v7; human acceptance in Task 117 then bumped v7→v8 — the store tracks the latest acceptance lineage)',
+  /ASSET_CACHE_VERSION = 'v8'/.test(preloaderSrc))
 check('engine: glbTeams probe exposed',
   /glbTeams: \(\) => userModelStates\(\)/.test(readFileSync('src/game/engine.ts', 'utf8')))
 

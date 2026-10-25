@@ -1,23 +1,27 @@
 # Player & weapon model assets — staging & acceptance workflow
 
-**Player model status (2026-10-25): ONE accepted player model — the
-T-side rebel (`rebel.glb`)**, plus the CT soldier still **staged/evaluative**.
-The earlier `human.glb` was rejected (2026-10-19, "remove human.glb. i dont
-want it. i find better one later") and must NOT be restored. The CT soldier
-(Sketchfab soldier_character, staged as `public/staging/models/human.glb`,
-Tasks 112–114: auto-rig + weapon-hold IK) is live for CT but **not yet
-accepted** — it still lives only in gitignored staging. The user's leather
+**Player model status (2026-10-25): TWO accepted player models — CT
+soldier (`human.glb`) + T-side rebel (`rebel.glb`).** The earlier
+`human.glb` was rejected (2026-10-19, "remove human.glb. i dont
+want it. i find better one later") and must NOT be restored — the
+current soldier is a LATER upload. The CT soldier (Sketchfab
+soldier_character; Tasks 112–114: arm-surgery bake + auto-rig +
+weapon-hold IK; Task 113: live-verified human-scale after the monster
+fix) was accepted on 2026-10-25 ("accept") — committed at
+`public/assets/models/human.glb` (9,723,308 bytes, sha1
+`cdd14b1d4477e8b6bd04bf7acfbfb23a19b70827` — the v2 arm-surgery bake)
+with the required `ASSET_CACHE_VERSION` v7→v8 sweep (the v7 store held
+the staged payload under the `/api/assets/human` key). The user's leather
 rebel upload (`upload/leather_rebel.glb`, Sketchfab; Task 115: measured
 ModelSpec, per-team CT=soldier/T=rebel wiring, `/api/assets/rebel` route,
-T-side fallback to the tan soldier proto when missing) was accepted on
-2026-10-25 ("accept") — committed at
+T-side fallback to the tan soldier proto when missing) was accepted the
+same day — committed at
 `public/assets/models/rebel.glb` (20,675,948 bytes, sha1
 `8f06fbf5591741f330536e44287fa63d78e8aefd`, staged verbatim — no bake;
-the game's buildProto normalizes + auto-rigs it) with the required
-`ASSET_CACHE_VERSION` v6→v7 sweep (the v6 store held the staged payload
-under the `/api/assets/rebel` key). CT accepts the soldier the same way:
-`mv public/staging/models/human.glb public/assets/models/human.glb` +
-version bump.
+the game's buildProto normalizes + auto-rigs it) with the
+`ASSET_CACHE_VERSION` v6→v7 sweep. Re-drops: put a new
+`public/staging/models/{human,rebel}.glb` in place (staging wins
+immediately) and re-accept with another version bump.
 
 **Weapon model status (2026-10-24): SIX accepted weapon models — ak47,
 ak74, galil, m4, famas, aug.**
@@ -71,9 +75,14 @@ game can run them for live evaluation).
    out of git (keep it on disk, or move it to staging again).
 
 While a staged copy exists it **overrides** the accepted copy (evaluation
-always tests the newest drop). The route caches the parsed buffer in module
-memory — touch `src/app/api/assets/human/route.ts` (or restart dev) after
-replacing a file to re-read it.
+always tests the newest drop). The routes stat the resolved file
+(path + mtimeMs + size) on every request and re-read + re-hash the etag
+on any change (Task-113 lesson — the old forever-cache served a stale
+bake as the "big monster"); replacing a file on disk is picked up on
+the next request, no touch or restart needed. Any **committed** change
+under `public/assets/**` (including this acceptance mv) requires the
+`ASSET_CACHE_VERSION` bump in `src/game/preloader.ts` so browsers drop
+their Cache API stores and re-fetch.
 
 ## How the game loads the player model
 
@@ -205,6 +214,7 @@ Served as plain static files (fetched lazily by `attachNightSky` on aimdepot onl
 | famas | `public/assets/models/weapons/famas.glb` (committed; baked from the user's `upload/famas_-_csgo__plasmas.glb` via `scripts/bake-famas.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab export, generator "Sketchfab-12.66.0", "FAMAS - CSGO | Plasmas" skin, PNG baseColor) | **not verified** (game-rip-derived skin, no license; dev-only waiver applies) | uploaded directly to `upload/famas_-_csgo__plasmas.glb` |
 | aug | `public/assets/models/weapons/aug.glb` (committed; baked from the user's `upload/steyr_aug_a3.glb` via `scripts/bake-aug.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab rip, generator "Sketchfab-12.66.0", Steyr AUG A3 with baseColorTexture + metallicRoughnessTexture) | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/steyr_aug_a3.glb` |
 | rebel (player, T side) | `public/assets/models/rebel.glb` (committed VERBATIM from `upload/leather_rebel.glb` — no bake; the game's buildProto bakes + normalizes + auto-rigs in-engine) | the user's own upload (Sketchfab export, "leather rebel" — sleeveless leather vest, tattoo sleeves, jeans; 173,283 verts / 284,648 tris, 4 embedded PNGs, no skeleton) | **not verified** (Sketchfab export, no license captured; dev-only waiver applies) | uploaded directly to `upload/leather_rebel.glb` |
+| human (player, CT side) | `public/assets/models/human.glb` (committed; the Task-112 v2 arm-surgery bake re-staged from `upload/soldier_character.glb` via `scripts/bake-soldier-t112.ts` — output moved staging→assets at acceptance) | the user's own upload (Sketchfab soldier_character export, helmet/vest/backpack soldier with armor pads) | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/soldier_character.glb` |
 
 **Acceptance verdict for ak47: ACCEPTED — DEV-ONLY (2026-10-20).** The
 user explicitly waived the license concern: "forgot about licence at
@@ -352,3 +362,26 @@ any future re-drop: `public/staging/preview.html?model=rebel` (isolated
 preview with a 1.79 m reference pole); dropping a new
 `public/staging/models/rebel.glb` overrides the accepted copy
 immediately (staging wins), and re-acceptance bumps the version again.
+
+**Acceptance verdict for human: ACCEPTED — DEV-ONLY (2026-10-25).** The
+user approved the CT soldier after live evaluation ("accept", following
+my "say the word and I'll accept human.glb the same way"). The committed
+file: `public/assets/models/human.glb`, 9,723,308 bytes, sha1
+`cdd14b1d4477e8b6bd04bf7acfbfb23a19b70827` — the Task-112 v2
+arm-surgery bake (the exact disk bytes Task 113 live-verified
+human-scale after killing the stale-cache "monster"; the earlier v1
+supine bake was never accepted anywhere). Acceptance steps executed per
+policy: `mv public/staging/models/human.glb
+public/assets/models/human.glb` + `git add` + `ASSET_CACHE_VERSION`
+v7→v8 (the v7 store held the staged payload under the
+`/api/assets/human` key; the bump rotates the store so the human
+lineage restarts from the committed copy — live-verified: browser cache
+keys = `three-cs-assets-v8` only). Live post-acceptance check (aim
+depot, joined as CT): `glbTeams` = `{CT: soldier, T: rebel}`, models
+ready, `handContact` on an alive CT bot gripGap 0.022 m / supportGap
+0.094 (weapons in hands), VLM full-frame: helmet+vest soldier,
+human-scale, weapon properly attached, no deformation. Same dev-only
+waiver as everything else. Re-bake path if a tuning change is ever
+needed: `npx tsx scripts/bake-soldier-t112.ts` writes a fresh
+`public/staging/models/human.glb` (staging wins immediately);
+re-acceptance is another mv + version bump.

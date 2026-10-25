@@ -38,7 +38,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v7'   // Task 115 acceptance: v6 holds the /api/assets/rebel key as a STAGED payload (net-fetched from staging-first resolve during evaluation). Accepting the model (mv staging→assets) rotates the store so the rebel lineage restarts from the committed copy — any future re-bake + re-acceptance gets a clean sweep, per the bump rule. (v6 itself was the Task-113 monster sweep of the stale v5 human-model bake.)
+export const ASSET_CACHE_VERSION = 'v8'   // Task 117 human acceptance: v7 holds the /api/assets/human key as a STAGED payload (the good v2 arm-surgery bake, net-fetched from staging-first resolve during evaluation). Accepting the model (mv staging→assets) rotates the store so the human lineage restarts from the committed copy — same rule as the rebel's v6→v7. (v7 itself was the Task-115 rebel acceptance sweep of v6, which held the Task-113 monster-fix human bake.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
@@ -361,6 +361,8 @@ function modelItems(): Item[] {
     items.push({ chain: [{ url: `/api/assets/weapon/${id}`, init: { method: 'POST' } }] })
   }
   items.push({ chain: [{ url: '/api/assets/human', init: { method: 'POST' } }] })
+  // Task 117: the CT soldier is ACCEPTED — committed at
+  // public/assets/models/human.glb + ASSET_CACHE_VERSION v7→v8.
   // Task 115: the T-side rebel model (CT = soldier above). Missing file → 404
   // → negative-cached like unbaked weapons; usermodel falls T back to the
   // soldier. ACCEPTED (Task 115 acceptance): committed at

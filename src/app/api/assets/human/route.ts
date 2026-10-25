@@ -8,13 +8,21 @@ import path from 'node:path'
 //   1. no `.glb` extension in the URL (extension matching is their main trigger)
 //   2. the game fetches it with method POST — download managers only hook GET
 //   3. explicit `model/gltf-binary` Content-Type, never octet-stream/attachment
-// The binary itself stays untracked in git (see public/assets/models/README.md).
+// The binary is committed when ACCEPTED (see the policy below and
+// public/assets/models/README.md); pending/evaluation copies live in
+// public/staging (gitignored).
 
 // Asset-acceptance policy v3: accepted model = public/assets/models/human.glb
 // (committed). Pending model = public/staging/models/human.glb (gitignored,
 // evaluation copy). STAGING WINS if present — dropping a new version into
 // staging immediately overrides the accepted copy, so the user can evaluate
-// it live; acceptance is a plain `mv staging -> assets` + `git add`.
+// it live; acceptance is a plain `mv staging -> assets` + `git add` +
+// ASSET_CACHE_VERSION bump (the staged human payload IS a cached key by
+// then, see preloader.ts).
+// ACCEPTED (Task 117 acceptance, 2026-10-25): committed at
+// public/assets/models/human.glb (sha1 cdd14b1d4477e8b6bd04bf7acfbfb23a19b70827,
+// 9,723,308 B — the Task-112 v2 arm-surgery bake that Task 113 live-verified
+// human-scale) + ASSET_CACHE_VERSION v7→v8.
 const ACCEPTED = path.join(process.cwd(), 'public', 'assets', 'models', 'human.glb')
 const STAGED = path.join(process.cwd(), 'public', 'staging', 'models', 'human.glb')
 
