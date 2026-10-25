@@ -2087,3 +2087,21 @@ Stage Summary:
 - NEW scripts/test-cache-t111.ts 28/28; scripts/netlog-warm-t111.sh (reusable warm-run diagnosis harness).
 - REGRESSIONS: buymenu 235/235, bots 26/26, audio 336/336, tsc src 0. Junk commit dropped; core.fileMode=false set locally.
 - Note for future agents: fire-and-forget store.put can lose big blobs if the tab closes immediately after a cold run (warm1 re-stored 7 once, self-heals) — acceptable, noted not fixed.
+
+---
+Task ID: 112
+Agent: main (Z.ai)
+Task: user uploaded soldier_character.glb — "is it good for counter terrorist character?" Evaluation + staging through the game's real character pipeline.
+
+Work Log:
+- ANALYSIS (scripts/analyze-soldier-t112.mjs): 5 meshes / 16,165 verts / 22,793 tris (game-ready), materials Body/Head/Vest/Equipment, 9 embedded textures (PNGs 1.3-1.7MB — file is 9.27MB, mostly texture), NO skeleton (expected: usermodel.ts auto-rigs static characters), bbox 7.05x2.99x10.0.
+- KEY GOTCHA #1: the GLB's Sketchfab_model node carries a raw `matrix` = rotX(-90) — the figure ALREADY STANDS in three.js. v1 of the bake script wrapped the scene with an extra rotX(-90) (verified only against raw accessor bounds, missing node matrices) -> staged a supine figure -> the "exploded spiky shards" in-game mess. Lesson: node TRS dumps must include `matrix`; verify staged GLBs headless with GLTFLoader (scripts/verify-soldier-t112.mjs), not accessor math.
+- KEY GOTCHA #2: T-pose. The auto-rigger's spatial weights + J bone table assume hanging A-pose arms (|x| 0.2..0.44 after 1.79m normalize); T-pose arms reach |x| 0.63 -> bone swings (walk/aim) fling arm verts = spikes. v2 surgery (scripts/bake-soldier-t112.ts): rotate arm verts down ~78 deg about the raw-Y axis through shoulder pivots (±1.6, z 5.8), smooth blend band |x| 1.45..1.70, normals rotated too, POSITION min/max recomputed, in-place BIN edit. 2,243 verts moved; width 7.05 -> 6.04 (hands at ~0.36 normalized — inside the rig band).
+- KEY GOTCHA #3: staging bakes vs caches — the game serves /api/assets/human (POST, never HTTP-cached but Cache-API cached: wipe caches between bakes), the preview page served /staging/models/human.glb through the plain browser HTTP cache (stale for minutes; cache-bust with ?v=N).
+- LIVE VERIFICATION: 9/9 players auto-rigged ('ready'); warm-up standing bot shot t112-u2 VLM PASS: "standing upright, ~1.8m scale, distinctly bluish CT, helmet + vest + backpack, no stretching or spiky deformation, correctly grounded, reads as a proper counter-terrorist soldier". Dead-body close-ups read spiky but were vantage-confounded (camera inside fallen meshes during death-fall root rotation); death-pose polish can be a follow-up.
+- VERDICT FOR USER: YES — good CT character model: right poly budget, proper gear, auto-rigs cleanly in A-pose, team tint reads. Production acceptance would still want: texture compression (9.3MB -> ~1-2MB), facing-direction double-check, and the arms' elbow-split bands tuned if needed.
+
+Stage Summary:
+- Staged (gitignored eval slot): public/staging/models/human.glb = upload run through arm-lowering surgery. Acceptance = mv to public/assets/models/human.glb (+ per the bump rule, ASSET_CACHE_VERSION must be bumped since the GLB API route payload changes!).
+- NEW scripts: analyze-soldier-t112.mjs, bake-soldier-t112.ts (env-tunable surgery), verify-soldier-t112.mjs (headless three bbox check), vlm-soldier-t112{,b,c,d}.mjs. Key pngs copied to scripts/.
+- No game-code changes; regressions unaffected (no src/ touched).
