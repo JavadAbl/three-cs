@@ -38,7 +38,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v6'   // Task 113: v5 holds the Task-112 v1 human-model bake (the "CT characters are a big monster" supine/spiky render) — the re-bake replaced the file on disk but the route's module cache kept serving v1, and the client Cache API stored it under v5. The route now stats the file per request (no more forever-cache), and this bump sweeps every v5 store so all browsers re-fetch the fixed model. (v5 itself was the Task-104 sweep of a stale-HTTP-refill-polluted v4.)
+export const ASSET_CACHE_VERSION = 'v7'   // Task 115 acceptance: v6 holds the /api/assets/rebel key as a STAGED payload (net-fetched from staging-first resolve during evaluation). Accepting the model (mv staging→assets) rotates the store so the rebel lineage restarts from the committed copy — any future re-bake + re-acceptance gets a clean sweep, per the bump rule. (v6 itself was the Task-113 monster sweep of the stale v5 human-model bake.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
@@ -363,8 +363,8 @@ function modelItems(): Item[] {
   items.push({ chain: [{ url: '/api/assets/human', init: { method: 'POST' } }] })
   // Task 115: the T-side rebel model (CT = soldier above). Missing file → 404
   // → negative-cached like unbaked weapons; usermodel falls T back to the
-  // soldier. Accepting the rebel later (mv staging -> assets) must bump
-  // ASSET_CACHE_VERSION per the bump rule above.
+  // soldier. ACCEPTED (Task 115 acceptance): committed at
+  // public/assets/models/rebel.glb + ASSET_CACHE_VERSION v6→v7.
   items.push({ chain: [{ url: '/api/assets/rebel', init: { method: 'POST' } }] })
   for (const f of ['draco_wasm_wrapper.js', 'draco_decoder.js', 'draco_decoder.wasm']) {
     items.push({ chain: [{ url: `/draco/gltf/${f}` }] })

@@ -1,11 +1,23 @@
 # Player & weapon model assets — staging & acceptance workflow
 
-**Player model status (2026-10-19): NO accepted player model.** The previously
-evaluated `human.glb` was **rejected by the user** ("remove human.glb. i dont
-want it. i find better one later") — every copy was deleted (mirror included)
-and it must NOT be restored from anywhere. The game runs the procedural
-soldier rig for all players until a NEW model is dropped into staging; the
-user will supply a better one later.
+**Player model status (2026-10-25): ONE accepted player model — the
+T-side rebel (`rebel.glb`)**, plus the CT soldier still **staged/evaluative**.
+The earlier `human.glb` was rejected (2026-10-19, "remove human.glb. i dont
+want it. i find better one later") and must NOT be restored. The CT soldier
+(Sketchfab soldier_character, staged as `public/staging/models/human.glb`,
+Tasks 112–114: auto-rig + weapon-hold IK) is live for CT but **not yet
+accepted** — it still lives only in gitignored staging. The user's leather
+rebel upload (`upload/leather_rebel.glb`, Sketchfab; Task 115: measured
+ModelSpec, per-team CT=soldier/T=rebel wiring, `/api/assets/rebel` route,
+T-side fallback to the tan soldier proto when missing) was accepted on
+2026-10-25 ("accept") — committed at
+`public/assets/models/rebel.glb` (20,675,948 bytes, sha1
+`8f06fbf5591741f330536e44287fa63d78e8aefd`, staged verbatim — no bake;
+the game's buildProto normalizes + auto-rigs it) with the required
+`ASSET_CACHE_VERSION` v6→v7 sweep (the v6 store held the staged payload
+under the `/api/assets/rebel` key). CT accepts the soldier the same way:
+`mv public/staging/models/human.glb public/assets/models/human.glb` +
+version bump.
 
 **Weapon model status (2026-10-24): SIX accepted weapon models — ak47,
 ak74, galil, m4, famas, aug.**
@@ -192,6 +204,7 @@ Served as plain static files (fetched lazily by `attachNightSky` on aimdepot onl
 | m4 | `public/assets/models/weapons/m4.glb` (committed; baked from the user's `upload/m4.glb` via `scripts/bake-m4.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab export, generator "Sketchfab-12.65.0", FBX conversion) | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/m4.glb` (with `upload/m4.mp3`, the new fire sound) |
 | famas | `public/assets/models/weapons/famas.glb` (committed; baked from the user's `upload/famas_-_csgo__plasmas.glb` via `scripts/bake-famas.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab export, generator "Sketchfab-12.66.0", "FAMAS - CSGO | Plasmas" skin, PNG baseColor) | **not verified** (game-rip-derived skin, no license; dev-only waiver applies) | uploaded directly to `upload/famas_-_csgo__plasmas.glb` |
 | aug | `public/assets/models/weapons/aug.glb` (committed; baked from the user's `upload/steyr_aug_a3.glb` via `scripts/bake-aug.ts` + `compress-glb.sh`) | the user's own upload (Sketchfab rip, generator "Sketchfab-12.66.0", Steyr AUG A3 with baseColorTexture + metallicRoughnessTexture) | **not verified** (no source URL supplied; dev-only waiver applies) | uploaded directly to `upload/steyr_aug_a3.glb` |
+| rebel (player, T side) | `public/assets/models/rebel.glb` (committed VERBATIM from `upload/leather_rebel.glb` — no bake; the game's buildProto bakes + normalizes + auto-rigs in-engine) | the user's own upload (Sketchfab export, "leather rebel" — sleeveless leather vest, tattoo sleeves, jeans; 173,283 verts / 284,648 tris, 4 embedded PNGs, no skeleton) | **not verified** (Sketchfab export, no license captured; dev-only waiver applies) | uploaded directly to `upload/leather_rebel.glb` |
 
 **Acceptance verdict for ak47: ACCEPTED — DEV-ONLY (2026-10-20).** The
 user explicitly waived the license concern: "forgot about licence at
@@ -316,3 +329,26 @@ is −5mm BELOW THE ANCHOR, not a fixed body datum). Re-tuning /
 recovery path: `npx tsx scripts/bake-aug.ts && bash
 scripts/compress-glb.sh scripts/.tmp/aug-fixed.glb <target>.glb`, then
 touch the weapon route to drop its buffer cache.
+
+**Acceptance verdict for rebel: ACCEPTED — DEV-ONLY (2026-10-25).** The
+user approved it after live evaluation ("accept", following the Task-115
+integration of `upload/leather_rebel.glb` as the T-side character). The
+committed file: `public/assets/models/rebel.glb`, 20,675,948 bytes,
+sha1 `8f06fbf5591741f330536e44287fa63d78e8aefd` — the staged copy moved
+VERBATIM (no bake step; the engine's buildProto handles normalize +
+auto-rig + team tinting — the rebel renders untinted, as authored).
+Acceptance steps executed per policy: `mv public/staging/models/rebel.glb
+public/assets/models/rebel.glb` + `git add` + `ASSET_CACHE_VERSION`
+v6→v7 (the v6 Cache API store held the staged payload under the
+`/api/assets/rebel` key; the bump rotates the store so the lineage
+restarts from the committed copy — live-verified: browser cache keys =
+`three-cs-assets-v7` only). Live post-acceptance check (aim depot,
+joined as T): `glbTeams` = `{CT: soldier, T: rebel}`, models ready,
+`handContact` on an alive T bot gripGap 0.022 m (fist glued to the
+grip), VLM full-frame: human-scale, weapons held, no deformation. Same
+dev-only waiver as the weapons: if this project is ever published,
+re-clear or replace the Sketchfab-sourced model. Evaluation harness for
+any future re-drop: `public/staging/preview.html?model=rebel` (isolated
+preview with a 1.79 m reference pole); dropping a new
+`public/staging/models/rebel.glb` overrides the accepted copy
+immediately (staging wins), and re-acceptance bumps the version again.

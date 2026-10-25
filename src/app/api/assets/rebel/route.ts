@@ -13,8 +13,11 @@ import path from 'node:path'
 // public/staging/models/rebel.glb (gitignored, evaluation copy).
 // STAGING WINS if present — dropping a new version into staging immediately
 // overrides the accepted copy, so the user can evaluate it live; acceptance
-// is a plain `mv staging -> assets` + `git add` (+ ASSET_CACHE_VERSION bump:
-// the staged rebel payload IS a cached key by then, see preloader.ts).
+// is a plain `mv staging -> assets` + `git add` + ASSET_CACHE_VERSION bump
+// (the staged rebel payload IS a cached key by then, see preloader.ts).
+// ACCEPTED (Task 115 acceptance, 2026-10-25): committed at
+// public/assets/models/rebel.glb (sha1 8f06fbf5591741f330536e44287fa63d78e8aefd,
+// 20,675,948 B) + ASSET_CACHE_VERSION v6→v7.
 const ACCEPTED = path.join(process.cwd(), 'public', 'assets', 'models', 'rebel.glb')
 const STAGED = path.join(process.cwd(), 'public', 'staging', 'models', 'rebel.glb')
 
