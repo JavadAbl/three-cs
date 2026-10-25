@@ -2067,3 +2067,23 @@ Work Log:
 
 Stage Summary:
 - Shooting now has a learnable CS-style spray: pull down against a per-weapon pattern, pause returns your aim. Q quick-switch survives round resets (ID-based last weapon), mid-reload switch cancels cleanly end-to-end. Getting shot paints a red arc at the attacker's bearing. All three live-verified + 22-check suite guarding them.
+
+---
+Task ID: 111
+Agent: main (Z.ai)
+Task: user: "did this game cache data? seems every time i open app it downloads data. how can cache data? is it possible?" — make the Task-81 asset cache actually stick across sessions and PROVE it to the user.
+
+Work Log:
+- Answered: yes, the game already caches (Task 81: versioned Cache API store around window.fetch, ~16-30 MB) — but diagnosed why it FELT like a re-download every launch.
+- Dropped junk commit a418024 (auto-committer snapshot of 260 file-mode flips, 0 content changes); set core.fileMode=false locally to kill the recurring noise.
+- Added navigator.storage.persist() ask (memoized, guarded, before installAssetCache's idempotence guard) — Cache Storage is best-effort by default and evictable; verdict surfaced via new __assetCache.persisted()/estimate().
+- Added cacheStats.bytesNet (real 200-download bytes) + LoadProgress net/bytes deltas; page.tsx loading bar now shows live 'CACHED — NO DOWNLOAD' vs 'DOWNLOADING · X MB' (source-neutral before first tick), console verdict line extended to 'downloads N (X MB) · CACHED'.
+- LIVE NETLOG DIAGNOSIS (scripts/netlog-warm-t111.sh): warm runs were hits:260 but net:96/bytesNet:0 — every launch re-probed ~70-100 URLs that 404 (28 unbaked weapon GLB ids, scoped map-texture paths that only ship _normal variants, staging fallbacks). 0 real bytes but one round-trip each, every session — the user's exact "downloads every time" symptom over a real network.
+- NEGATIVE CACHE: 404 responses now persist like 200s (else-if branch: cacheStats.neg++, memCache status-404 memo, storeKeys.add, store.put). Loader chain fallback (staging -> procedural) unchanged, just offline; 404-becomes-file re-ships covered by the version-bump rule (comment extended).
+- LIVE PROOF: cold 373 net/16 MB -> warm1 40 probes (negatives populating) -> warm2 net:0, bytesNet:0, hits:288 — a full dust2 match now serves from cache with ZERO network calls. persisted=false in headless (no engagement heuristic) — expected; real browsers grant it.
+
+Stage Summary:
+- src/game/preloader.ts: persist() ask + bytesNet/neg counters + negative-cache branch + persisted()/estimate() hooks; src/app/page.tsx: live source label + net/bytes plumbing + verdict log.
+- NEW scripts/test-cache-t111.ts 28/28; scripts/netlog-warm-t111.sh (reusable warm-run diagnosis harness).
+- REGRESSIONS: buymenu 235/235, bots 26/26, audio 336/336, tsc src 0. Junk commit dropped; core.fileMode=false set locally.
+- Note for future agents: fire-and-forget store.put can lose big blobs if the tab closes immediately after a cold run (warm1 re-stored 7 once, self-heals) — acceptable, noted not fixed.

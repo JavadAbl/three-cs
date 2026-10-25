@@ -49,6 +49,8 @@ interface LoadPhase {
   total: number
   pct: number    // 0..1 across BOTH halves (preload 0-70, warmup 70-100)
   cached: boolean
+  net: number    // Task 111: real network fetches so far this preload
+  bytes: number  // Task 111: real network bytes so far (drives 'DOWNLOADING · X MB')
 }
 
 const WARM_PCT: Record<string, number> = { textures: 0.78, sounds: 0.88, shaders: 0.96 }
@@ -60,11 +62,21 @@ function LoadingOverlay({ phase, mapName }: { phase: LoadPhase; mapName: string 
   const WARM_LABEL: Record<string, string> = {
     textures: 'PREPARING TEXTURES', sounds: 'DECODING SOUNDS', shaders: 'COMPILING SHADERS',
   }
+  // Task 111 — the bar now SAYS where the data comes from while it loads:
+  // warm cache = 'CACHED — NO DOWNLOAD', cold = 'DOWNLOADING · X MB'. A bar
+  // that only says 'LOADING SOUNDS · 120/252' looks identical warm and cold,
+  // which read as 'it downloads every time'. done===0 (before the first tick)
+  // stays source-neutral — no assertion before evidence.
+  const src = phase.net > 0
+    ? `DOWNLOADING · ${(phase.bytes / 1048576).toFixed(1)} MB`
+    : 'CACHED — NO DOWNLOAD'
   const label = phase.stage.startsWith('warmup:')
     ? WARM_LABEL[phase.stage.slice(7)] ?? 'FINISHING'
     : phase.stage === 'done'
       ? (phase.cached ? 'READY — SERVED FROM CACHE' : 'READY')
-      : `${stageLabel(phase.stage)} · ${phase.done}/${phase.total}`
+      : phase.done === 0
+        ? stageLabel(phase.stage)
+        : `${src} · ${stageLabel(phase.stage)} · ${phase.done}/${phase.total}`
   const pct = Math.round(phase.pct * 100)
   return (
     <div data-loading="1" className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black">
@@ -238,14 +250,16 @@ export default function Home() {
     engineOptsRef.current = { room: roomId, map: mapId, readyGate }
     setJoining(false)
     const gen = ++loadGenRef.current
-    setLoadPhase({ stage: 'textures', done: 0, total: 1, pct: 0, cached: false })
+    setLoadPhase({ stage: 'textures', done: 0, total: 1, pct: 0, cached: false, net: 0, bytes: 0 })
     setScreen('game')   // engine mounts in parallel; its fetches dedupe into the preload
     ;(async () => {
       const t0 = performance.now()
+      let netN = 0, netB = 0   // Task 111: final delta, for the console verdict line
       try {
         await preloadGameAssets(mapId, (p) => {
           if (loadGenRef.current !== gen) return
-          setLoadPhase(l => l ? { ...l, stage: p.stage, done: p.done, total: p.total, pct: p.pct * 0.7 } : l)
+          netN = p.net; netB = p.bytes
+          setLoadPhase(l => l ? { ...l, stage: p.stage, done: p.done, total: p.total, pct: p.pct * 0.7, net: p.net, bytes: p.bytes } : l)
         })
         if (loadGenRef.current !== gen) return
         const cached = performance.now() - t0 < 3000   // near-instant = IDB hits, not downloads
@@ -265,7 +279,7 @@ export default function Home() {
         }
         if (loadGenRef.current !== gen) return
         setLoadPhase(l => l ? { ...l, stage: 'done', pct: 1, cached } : l)
-        console.log(`[preload] match ready in ${((performance.now() - t0) / 1000).toFixed(1)}s${cached ? ' (cached)' : ''}`)
+        console.log(`[preload] match ready in ${((performance.now() - t0) / 1000).toFixed(1)}s · downloads ${netN} (${(netB / 1048576).toFixed(1)} MB)${cached ? ' · CACHED' : ''}`)
         releaseJoin()   // bar finished — the match may begin
         setTimeout(() => { if (loadGenRef.current === gen) setLoadPhase(null) }, 300)
       } catch {

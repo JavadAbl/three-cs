@@ -34,7 +34,9 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * public/draco/** or the GLB API routes REQUIRES bumping this string —
  * otherwise users keep getting stale blobs until they clear site data.
  * The string is part of the record key, so a bump also lets the install-time
- * sweep garbage-collect every previous version in one pass.
+ * sweep garbage-collect every previous version in one pass. This covers the
+ * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
+ * just like a changed 200.
  */
 export const ASSET_CACHE_VERSION = 'v5'   // Task 104: v4 ITSELF got polluted (stale HTTP-cache refill before the no-cache net-fetch fix landed in the bundle) — v5 sweeps it; with the STALE-REFILL FIX in place this is the last bump this re-ship needs
 
@@ -43,8 +45,8 @@ const STORE = 'blobs'
 const PREFIXES = ['/assets/', '/staging/', '/draco/']
 const ROUTE_RE = /^\/api\/assets\/(weapon|human)\//
 
-export interface CacheStats { hits: number; net: number; stored: number; bypass: number }
-export const cacheStats: CacheStats = { hits: 0, net: 0, stored: 0, bypass: 0 }
+export interface CacheStats { hits: number; net: number; stored: number; bypass: number; bytesNet: number; neg: number }
+export const cacheStats: CacheStats = { hits: 0, net: 0, stored: 0, bypass: 0, bytesNet: 0, neg: 0 }
 
 // ---------------------------------------------------------------- storage: Cache API
 // Layer choice (the debugging story): the first implementation used raw
@@ -167,11 +169,34 @@ function netGuard<T>(p: Promise<T>): Promise<T> {
   })
 }
 
+// Task 111 — ask the browser to make the asset cache PERSISTENT. By default
+// Cache Storage is "best-effort": under disk pressure (or LRU pressure from
+// other sites) Chrome may evict it entirely, and the next launch silently
+// turns back into a cold ~30 MB re-download — exactly the "it downloads
+// every time I open it" report. navigator.storage.persist() opts the origin
+// into persistent storage (no eviction, counted against quota). Chrome may
+// refuse without engagement/gesture — the cache still works either way, it
+// just stays best-effort; the verdict is surfaced via __assetCache.persisted().
+let persistOnce: Promise<boolean> | null = null
+function requestPersistentStorage(): void {
+  if (persistOnce) return
+  persistOnce = (async () => {
+    try {
+      const st = navigator.storage
+      if (!st?.persist) return false
+      if (await st.persisted?.()) return true   // already granted — don't re-ask
+      return await st.persist()
+    } catch { return false }
+  })()
+  persistOnce.catch(() => { /* best-effort only */ })
+}
+
 /** Idempotent install. Call as early as possible (app mount) so even the lobby
  * warm-ups (character model, weapon GLBs) populate the cache. Every storage
  * hop degrades to plain network on timeout — the cache can slow a load down
  * but can never freeze the game. */
 export function installAssetCache(): boolean {
+  requestPersistentStorage()   // memoized; runs before the idempotence guard so every mount retries the ask
   if (realFetch || typeof window === 'undefined' || !window.fetch) return false
   realFetch = window.fetch.bind(window)
   window.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -243,12 +268,30 @@ export function installAssetCache(): boolean {
           const r = await netGuard(rf(input, init2))
           const type = r.headers.get('Content-Type') ?? 'application/octet-stream'
           const blob = await r.blob()
+          if (r.status === 200) cacheStats.bytesNet += blob.size   // Task 111: real-download bytes for the loading-bar display
           if (r.status === 200) {
             memCache.set(key, { status: 200, blob, type })
             storeKeys?.add(key)
             if (store) {
               cacheStats.stored++
               // store a FRESH Response (blob stays usable for callers)
+              void softTimeout(store.put(cacheKey(url), new Response(blob, { headers: { 'Content-Type': type } })), undefined)
+            }
+          } else if (r.status === 404) {
+            // Task 111 NEGATIVE CACHE. Warm-run netlog diagnosis: every launch
+            // re-probed ~70-100 URLs that 404 — unbaked weapon GLB ids (only 6
+            // ids have baked GLBs; the rest 404 to procedural fallback) and
+            // scoped map-texture paths that only ship _normal variants. 0 real
+            // bytes, but one network round-trip EACH, every session — over a
+            // real network that's seconds of "it downloads every time".
+            // Fix: persist the 404 like any asset. Cache-hit path then serves
+            // it instantly; the loaders' chain fallback (staging -> procedural)
+            // is unchanged, just offline. A 404 that later becomes a real file
+            // is handled by the version-bump sweep, same as changed assets.
+            cacheStats.neg++
+            memCache.set(key, { status: 404, blob, type })
+            storeKeys?.add(key)
+            if (store) {
               void softTimeout(store.put(cacheKey(url), new Response(blob, { headers: { 'Content-Type': type } })), undefined)
             }
           }
@@ -273,6 +316,8 @@ export function installAssetCache(): boolean {
     gate: () => ({ active: netActive, queued: netQueue.length }),
     storeKeys: () => ({ ready: storeKeys !== null, size: storeKeys?.size ?? 0 }),
     mem: () => memCache.size,
+    persisted: () => persistOnce ?? Promise.resolve(false),
+    estimate: () => navigator.storage?.estimate?.() ?? Promise.resolve(null as unknown as StorageEstimate),
   }
   return true
 }
@@ -335,7 +380,7 @@ function soundItems(): Item[] {
 }
 
 // ---------------------------------------------------------------- preloader
-export interface LoadProgress { stage: string; done: number; total: number; pct: number }
+export interface LoadProgress { stage: string; done: number; total: number; pct: number; net: number; bytes: number }
 
 const STAGE_LABEL: Record<string, string> = {
   textures: 'LOADING TEXTURES',
@@ -355,6 +400,10 @@ export async function preloadGameAssets(mapId: string | undefined, onProgress?: 
   installAssetCache()
   prewarmFromCache()   // wake the storage backend + fill the session memo behind the bar
   const t0 = performance.now()
+  // Task 111: delta of real network fetches/bytes — drives the live
+  // "CACHED — NO DOWNLOAD vs DOWNLOADING · X MB" label on the bar. Warm
+  // short-circuits via storeKeys never touch fetch(), so the deltas stay 0.
+  const net0 = cacheStats.net, bytes0 = cacheStats.bytesNet
   const HARD_CAP_MS = 120_000
   const stages: Array<{ stage: string; items: Item[] }> = [
     { stage: 'textures', items: [...mapTextureItems(mapId), ...weaponTextureItems()] },
@@ -365,7 +414,7 @@ export async function preloadGameAssets(mapId: string | undefined, onProgress?: 
   let done = 0
   const tick = (stage: string) => {
     done++
-    onProgress?.({ stage, done, total, pct: Math.min(0.97, done / total) })
+    onProgress?.({ stage, done, total, pct: Math.min(0.97, done / total), net: cacheStats.net - net0, bytes: cacheStats.bytesNet - bytes0 })
   }
   for (const s of stages) {
     await pool(s.items, 8, async (item) => {
@@ -386,7 +435,7 @@ export async function preloadGameAssets(mapId: string | undefined, onProgress?: 
       tick(s.stage)   // exhausted: the loader's own fallback (procedural/synth) owns this
     })
   }
-  onProgress?.({ stage: 'done', done: total, total, pct: 1 })
+  onProgress?.({ stage: 'done', done: total, total, pct: 1, net: cacheStats.net - net0, bytes: cacheStats.bytesNet - bytes0 })
 }
 
 async function pool(items: Item[], n: number, fn: (it: Item) => Promise<void>): Promise<void> {
