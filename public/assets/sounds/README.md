@@ -22,14 +22,24 @@ distant/reload/draw sounds keep the pack's M4 family samples.
 **Task 98 — 4 announcer VOICE lines** (256 `.ogg` total):
 `announce_t_win`, `announce_ct_win`, `announce_planted`,
 `announce_defused` ("Terrorists win." / "Counter-Terrorists win." /
-"The bomb has been planted." / "The bomb has been defused."). These are
-**original TTS synthesis (z-ai TTS, voice `kazi`, speed 0.95) — NOT from
-the CS:GO pack**, so they carry no pack licensing constraints. Pipeline:
-WAV → lead/tail silence strip (−45 dB threshold) → Vorbis q3 44.1 kHz;
-reproducible via `scripts/make-announcer-sounds-t98.sh`. Wired in
-`src/game/engine.ts`: the round-end line is team-neutral (heard by all
-players, names the WINNING team); planted/defused lines layer over the
-existing `c4_plant`/`c4_disarmfinish` mechanical samples.
+"The bomb has been planted." / "The bomb has been defused.").
+Wired in `src/game/engine.ts`: the round-end line is team-neutral
+(heard by all players, names the WINNING team); planted/defused lines
+layer over the existing `c4_plant`/`c4_disarmfinish` mechanical samples.
+
+**Task 120 — the 4 announcer lines are now the REAL CS radio announcer.**
+The Task-98 TTS synthesis was a stopgap; per user request the four
+bodies were replaced with the genuine announcer samples from
+`github.com/sourcesounds/csgo` (`sound/radio/{terwin,ctwin,bombpl,
+bombdef}.wav` — the legacy CS announcer CS:GO itself ships, 22.05 kHz
+mono u8 → highpass 50 Hz + 44.1 kHz + Vorbis q3 via
+`scripts/replace-announcer-csgo-t120.sh`). Same filenames, zero
+gameplay-code changes; `ASSET_CACHE_VERSION` bumped v8→v9 so existing
+browsers refetch the re-shipped bodies. The raw sourcesounds/csgo clone
+lives gitignored at `assets/packs/sourcesounds-csgo/`. The TTS
+originals remain recoverable from the Task-98 commit 7ef919b
+(`git checkout 7ef919b -- public/assets/sounds/announce_*.ogg`);
+`scripts/make-announcer-sounds-t98.sh` regenerates them on demand.
 
 ## Staging (for future batches) — `public/staging/sounds/`
 

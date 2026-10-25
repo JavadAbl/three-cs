@@ -2236,3 +2236,20 @@ Work Log:
 
 Stage Summary:
 - The rollback cost zero work: every Task-113..118 artifact lived on the remote (the Task-118 push is what made this recovery a two-command reset instead of a re-do). Local main = origin/main = 067bd04(+this record), both models verified in-tree, in-route and in-game, all suites green, servers freshly restarted on the current tree. backup/t109-amend-0272610 keeps the one divergent commit for forensics; delete after a green light.
+
+---
+Task ID: 120
+Agent: main (Z.ai)
+Task: user pointed at github.com/sourcesounds/csgo — "grab your missing or generated sound from this rep. sound like win notify, bomb defuse and others"
+
+Work Log:
+- AUDIT: the only generated (non-pack) sounds in public/assets/sounds/ are the 4 Task-98 announcer lines (announce_{t_win,ct_win,planted,defused}.ogg, z-ai TTS "kazi"); every other name in the 256-file set is pack-sourced (git provenance: task-11 85-sample re-integration + 166-file batch + 2 user recordings ak74_fire/m4_fire which stay). No round-draw case exists in the engine, so the announcer set is complete at 4.
+- REPO: GitHub API rate-limited (403) → blobless no-checkout clone to gitignored assets/packs/sourcesounds-csgo/ (10,223 files, tree exploration local). The announcer VOICE lines are sound/radio/{ctwin,terwin,bombpl,bombdef}.wav — the legacy CS radio announcer CS:GO itself ships (22.05 kHz mono u8 PCM, 1.5-1.9 s). No sound/announcer/ dir exists; hostage/rescue lines not applicable.
+- PIPELINE (scripts/replace-announcer-csgo-t120.sh): highpass 50 Hz (removes the u8 files' -1.7% DC offset; voice fundamentals 85 Hz+ untouched) -> 44.1 kHz -> Vorbis q3. NO silence-strip: legacy noise floor RMS ~-17 dB makes the pack's -45 dB strip a no-op/hazard, and the files have no leading silence anyway. Levels kept authentic (peak ~-4 dB ≈ TTS set's -3 dB — announce gain 0.55 needs no retune). Same filenames -> zero gameplay-code changes; TTS originals recoverable from commit 7ef919b; make-announcer-sounds-t98.sh header now warns it would overwrite the real announcer.
+- CACHE: ASSET_CACHE_VERSION v8 -> v9 (preloader.ts) — re-shipped /assets/ bodies must reach existing browsers (Task-104 no-cache wrapper + BUMP RULE).
+- DOCS: sounds README Task-98 section rewritten (provenance, pipeline, recovery path); shared/weapons-audio.ts NON_WEAPON_FILES comment corrected (was "TTS-generated, license-clean").
+- VERIFY: audio-map 336/336 (all 256 committed files HTTP 200); tsc src+shared 0 errors (31 pre-existing lines in examples//scripts/bsp/ unchanged, proven by stash-compare); served == local byte-identical (sha1 match on all 4); LIVE via :81 (see ops note): pack loaded 252/252 errors [] in-browser, in-page fetch+decodeAudioData durations exact-match the sources (1.877/1.645/1.509/1.776 s), and a real aim-depot round ended on CT elimination -> announceLog [{announce_ct_win, played:true}] — full server->engine->WebAudio path firing the real announcer.
+- OPS NOTE (cost ~10 min): live multiplayer verification must go through the :81 platform proxy (XTransformPort=3003 convention), NOT localhost:3000 directly — on :3000 the socket never connects (silent: client renders warmup, 0 players, no bots). Port 81 is the only listener that resolves the game-server proxy path.
+
+Stage Summary:
+- The 4 announcer lines are now the genuine CS radio announcer (sourcesounds/csgo sound/radio/), replacing the Task-98 TTS stopgap per explicit user request; same filenames, zero gameplay-code changes, ASSET_CACHE_VERSION v9. New files: ct_win 18,132 B/1.877 s, t_win 15,694 B/1.645 s, planted 16,073 B/1.509 s, defused 17,930 B/1.776 s. All suites green; live round-end announcer confirmed played:true. Raw clone kept gitignored at assets/packs/sourcesounds-csgo/ for future grabs (10,223 CS:GO sounds available).

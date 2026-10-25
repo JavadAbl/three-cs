@@ -142,8 +142,10 @@ export const NON_WEAPON_FILES: string[] = [
   // misc + music stingers
   'buy', 'cant_buy', 'uiclick', 'zoom',
   'round_start', 'round_win', 'round_lose',
-  // Task 98 — announcer VOICE lines (TTS-generated, license-clean — see
-  // public/assets/sounds/README.md): team-neutral round outcomes + bomb state
+  // Announcer VOICE lines: team-neutral round outcomes + bomb state. Task 98
+  // made these as TTS; Task 120 REPLACED all four with the real CS radio
+  // announcer samples (sourcesounds/csgo sound/radio/{terwin,ctwin,bombpl,
+  // bombdef}.wav — same lineage as the rest of the pack). Same filenames.
   'announce_t_win', 'announce_ct_win', 'announce_planted', 'announce_defused',
 ]
 

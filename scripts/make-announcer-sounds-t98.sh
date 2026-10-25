@@ -2,6 +2,10 @@
 # Task 98 — generate the 4 round/bomb announcer lines via z-ai TTS,
 # then convert to the repo's Vorbis convention (44.1 kHz, q3).
 # Announcer voice: kazi (clear standard). Speed 0.95 for a little gravitas.
+# ⚠ Task 120 SUPERSEDED these: the live announce_*.ogg files are now the REAL
+# CS radio announcer (sourcesounds/csgo, see replace-announcer-csgo-t120.sh).
+# Running THIS script would overwrite them with TTS — only use it to
+# deliberately roll back to the Task-98 voice.
 set -e
 TMP=/home/z/my-project/scripts/.tmp/tts-t98
 OUT=/home/z/my-project/public/assets/sounds

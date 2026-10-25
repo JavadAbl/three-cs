@@ -38,7 +38,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v8'   // Task 117 human acceptance: v7 holds the /api/assets/human key as a STAGED payload (the good v2 arm-surgery bake, net-fetched from staging-first resolve during evaluation). Accepting the model (mv staging→assets) rotates the store so the human lineage restarts from the committed copy — same rule as the rebel's v6→v7. (v7 itself was the Task-115 rebel acceptance sweep of v6, which held the Task-113 monster-fix human bake.)
+export const ASSET_CACHE_VERSION = 'v9'   // Task 120: re-shipped the 4 /assets/sounds/announce_*.ogg bodies (Task-98 TTS -> REAL CS radio announcer from sourcesounds/csgo, same filenames) — existing browsers must refetch them. (v8 was the Task-117 human acceptance: staged->committed rotation for /api/assets/human. The BUMP RULE + no-cache wrapper from Task 104 is what makes this re-ship reachable.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
