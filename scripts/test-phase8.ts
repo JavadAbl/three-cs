@@ -163,7 +163,7 @@ check('viewmodels differ per kind (HE ball vs flash cylinder vs decoy box)',
         if (!m.isMesh) return
         if ((m.geometry as THREE.SphereGeometry).type === 'SphereGeometry') spheres++
         else if ((m.geometry as THREE.CylinderGeometry).type === 'CylinderGeometry') cyls++
-        else if ((m.geometry as THREE.BoxGeometry).type === 'BoxGeometry') boxes++
+        else if ((m.geometry as THREE.BoxGeometry).type === 'BoxGeometry' || (m.geometry as THREE.BoxGeometry).type === 'RoundedBoxGeometry') boxes++ // Task 124: rounded boxes
       })
       return { spheres, cyls, boxes }
     }

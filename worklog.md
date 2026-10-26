@@ -222,3 +222,20 @@ Work Log:
 
 Stage Summary:
 - Characters now take ground-matched strides — walk looks like a walk, sprint like a sprint; feet no longer slide at run speed. Same skeleton/spec, zero asset changes; ASSET_CACHE_VERSION untouched (code-only change).
+
+---
+Task ID: 124
+Agent: main (Z.ai)
+Task: user: "can make procedural models and textures better?"
+
+Work Log:
+- GEOMETRY: box() now returns RoundedBoxGeometry (three examples/jsm) with auto chamfer r = clamp(min(w,h,d)*0.16, 0.5mm, 3mm) — every P(g, box(...)) call site across ALL 30+ builders (viewmodels, gloves, remote guns, fx.ts muzzle parts) upgraded in one move; .parameters patched back to real dims so repeatFor() texel density stays exact. cyl() default segments 12 -> 18 (smoother barrel/suppressor silhouettes). Flush-stacked curved-mag segments got +4-6mm height overlap so the chamfers can't open joint wedges (AK mag, buildRifle mags).
+- MATERIALS: 3 new PBR families generated (z-ai image 1024 -> process.py mirror-tile + sobel + roughness): steel_stainless (bright brushed), wood_walnut (dark oil-finished), polymer_fde (flat dark earth). Applied: deagle slide+rib, revolver cylinder/barrel/underlug (stainless against blued frames); sawedoff furniture+grip, g3sg1 grip, sawedoff remote (walnut); mag7 receiver+tail, m249 ammo box+stock, mag7/m249 remotes (FDE). Per acceptance policy v3 the 9 new jpgs live in public/staging/textures/weapons/ (gitignored, web-served); getTex + preloader weaponTextureItems now chain /assets -> /staging so they render+precache pre-acceptance. WEAPON_TEX_KEYS auto-derives from FALLBACK -> preloader manifest picked the new keys up with no extra wiring.
+- FIX (Task-122 cleanup regression): scripts/domstub.ts was wrongly purged — 8 kept files import it (gen-buy-icons, phase3/5/7/8 tests, user-glb/rig, check-icon-orientation), breaking them silently (Task 122 verification only ran buymenu/bots/audio which don't need it). Recovered from git 67e81f6; all importers green again.
+- STALE TEST EXPECTATIONS refreshed (all verified failing on stashed HEAD first): test-phase8 box-type check accepts RoundedBoxGeometry; check-icon-orientation mag coverage 31->32 (Task 66 ak74); test-phase7 roster 43/39 -> 44/40 (same ak74). KNOWN pre-existing (NOT mine, left alone): test-user-glb fixture parse fails on stash too; test-gunhold solveArm exactness flakes ~1/6 runs on unlucky random arm configs (worst 5-13mm, near-singular IK).
+- BUY ICONS: regenerated 43 silhouettes from the new chamfered geometry into public/staging/icons/ (policy v3 — accepted /assets copies still win in-game until the user accepts the mv).
+- VERIFY: tsc src+shared clean; regressions buymenu 235, cache 28, gunhold 24, rebel 37, bots-ai 26, phase3 130, phase4 125, phase5 182, phase7 98, phase8 81, icon-orientation 36, user-rig exit-0. LIVE (:81, aim depot, T): bought deagle -> revolver -> sawedoff -> m249 across rounds via in-page DOM poller (synthetic KeyB opens the buy menu; the CLI's per-step latency kept missing the buy window). VLM verdicts: deagle "bright stainless, machining detail, chamfered, no glitches"; sawedoff "rich walnut grain, not orange laminate"; m249 "FDE tan ammo box + stock vs olive receiver, clean chamfers, no z-fighting"; revolver "stainless cylinder/barrel vs blued frame, normal-mapped". Full 5v5 match ran through multiple rounds with zero page errors. Evidence: scripts/t124/*.png (on disk, not committed).
+- ASSET_CACHE_VERSION stays v9: no accepted body re-shipped (new families are NEW urls; the 7 accepted sets untouched).
+
+Stage Summary:
+- Procedural weapons now read as manufactured parts: chamfered edges catch the RoomEnvironment IBL, cylinders are smoother, and 3 new real-material families replace flat tints on 6 guns (both viewmodels and remote stubs). Pending user acceptance: mv public/staging/textures/weapons/{steel_stainless,wood_walnut,polymer_fde}* public/assets/textures/weapons/ + git add; icons likewise from staging/icons/. No push (no PAT this session).

@@ -30,5 +30,11 @@ gen glove_fabric "Seamless tileable texture of black tactical shooting glove fab
 
 gen pcb_green "Seamless tileable texture of green printed circuit board, dark green solder mask, gold copper traces, small microchips and electronic components evenly spread, photorealistic PBR albedo map, flat even lighting, no shadows, top-down macro photograph, high detail"
 
+gen steel_stainless "Seamless tileable texture of brushed stainless steel gun slide, fine vertical machining brush marks, subtle holster rub wear scratches, faint fingerprint smudges, bright silver steel, photorealistic PBR albedo map, flat even lighting, no shadows, top-down macro photograph, high detail"
+
+gen wood_walnut "Seamless tileable texture of dark walnut gun stock wood, deep chocolate brown grain with fine straight fibers, oil-finished sheen, subtle handling wear, photorealistic PBR albedo map, flat even lighting, no shadows, top-down macro photograph, high detail"
+
+gen polymer_fde "Seamless tileable texture of flat dark earth tan polymer plastic, matte FDE tactical firearm furniture, fine speckled anti-slip pebble texture, muted desert brown, photorealistic PBR albedo map, flat even lighting, no shadows, top-down macro photograph, high detail"
+
 echo "=== done ==="
 ls -la "$RAW"

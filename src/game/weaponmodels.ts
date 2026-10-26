@@ -9,7 +9,13 @@
 //    (and keep them forever if the images 404)
 //  - per-part texture repeat derived from geometry size (uniform texel density)
 //  - material + geometry caches keep draw setup cheap; texture clones share one GPU upload
+//  - Task 124 quality pass: box() returns chamfered RoundedBoxGeometry (edge
+//    highlights = manufactured look; auto radius 0.5-3 mm by part size) and
+//    10 material families — the Task-124 trio (steel_stainless / wood_walnut /
+//    polymer_fde) ships from public/staging until accepted, with getTex +
+//    preloader chaining /assets -> /staging.
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import type { TeamId, WeaponId } from './weapons'
 import { WEAPONS } from './weapons'
 
@@ -40,6 +46,7 @@ export interface ViewModel {
 export type TexKey =
   | 'steel_blued' | 'polymer_black' | 'wood_laminate' | 'enamel_od'
   | 'metal_dark' | 'glove_fabric' | 'pcb_green'
+  | 'steel_stainless' | 'wood_walnut' | 'polymer_fde'
 
 const TEX_DIR = '/assets/textures/weapons'
 
@@ -74,6 +81,11 @@ const FALLBACK: Record<TexKey, { color: number; metalness: number; roughness: nu
   metal_dark:    { color: 0x2b2f33, metalness: 0.85, roughness: 0.55, density: 3.0 },
   glove_fabric:  { color: 0x1a1c1f, metalness: 0.00, roughness: 0.90, density: 6.5 },
   pcb_green:     { color: 0x1c3a26, metalness: 0.30, roughness: 0.60, density: 4.0 },
+  // Task 124 families: bright stainless (pistol slides), dark oil-finished
+  // walnut (classic wood furniture), flat dark earth polymer (modern tan)
+  steel_stainless: { color: 0x9aa0a6, metalness: 0.95, roughness: 0.35, density: 2.6 },
+  wood_walnut:     { color: 0x4a3020, metalness: 0.05, roughness: 0.55, density: 2.8 },
+  polymer_fde:     { color: 0x6b5d43, metalness: 0.15, roughness: 0.80, density: 7.0 },
 }
 
 /** Task 81 preloader: every viewmodel material texture set (albedo/_n/_r —
@@ -88,8 +100,15 @@ function getTex(key: TexKey): TexEntry {
     remaining--
     if (remaining <= 0) flush(key)
   }
-  // onError also counts down -> failed loads keep the flat color fallback
-  const load = (file: string) => loader.load(`${TEX_DIR}/${file}`, onOne, undefined, onOne)
+  // onError also counts down -> failed loads keep the flat color fallback.
+  // Asset-acceptance policy v3: accepted copy (/assets) first; while a new
+  // family is still staged, fall back to /staging so it renders pre-acceptance.
+  const load = (file: string) => {
+    const t = loader.load(`${TEX_DIR}/${file}`, onOne, undefined, () => {
+      loader.load(`${TEX_DIR.replace('/assets', '/staging')}/${file}`, onOne, undefined, onOne)
+    })
+    return t
+  }
   e = { albedo: load(`${key}.jpg`), normal: load(`${key}_n.jpg`), rough: load(`${key}_r.jpg`), ready: false, pending: [] }
   texDB.set(key, e)
   return e
@@ -161,14 +180,32 @@ export function preloadWeaponTextures() {
 // ---------------------------------------------------------------- geometry cache
 const geoCache = new Map<string, THREE.BufferGeometry>()
 
+/** Chamfer radius scaled to the part — big shells get up to 3 mm edge
+ * rounds (real manufactured parts catch light on the edges), tiny detail
+ * bits (sight ears, trigger bars) get a ~0.5 mm micro-chamfer that just
+ * kills the CG-perfect sharp edge. */
+function chamfer(w: number, h: number, d: number): number {
+  return Math.min(0.003, Math.max(0.0005, Math.min(w, h, d) * 0.16))
+}
+
+/** Box part with chamfered/rounded edges (Task 124 quality pass).
+ * Same signature & caching as before — every P(g, box(...)) call site in the
+ * builders upgrades automatically. */
 export function box(w: number, h: number, d: number): THREE.BoxGeometry {
   const k = `b${w.toFixed(3)}:${h.toFixed(3)}:${d.toFixed(3)}`
   let g = geoCache.get(k) as THREE.BoxGeometry | undefined
-  if (!g) { g = new THREE.BoxGeometry(w, h, d); geoCache.set(k, g) }
+  if (!g) {
+    const rb = new RoundedBoxGeometry(w, h, d, 2, chamfer(w, h, d))
+    // RoundedBoxGeometry's super() call stamps parameters 1x1x1 — restore the
+    // real dims so repeatFor()'s texel-density math stays exact
+    ;(rb as unknown as Record<string, unknown>).parameters = { width: w, height: h, depth: d }
+    g = rb as unknown as THREE.BoxGeometry
+    geoCache.set(k, g)
+  }
   return g
 }
 
-export function cyl(r: number, len: number, seg = 12): THREE.CylinderGeometry {
+export function cyl(r: number, len: number, seg = 18): THREE.CylinderGeometry {
   const k = `c${r.toFixed(3)}:${len.toFixed(3)}:${seg}`
   let g = geoCache.get(k) as THREE.CylinderGeometry | undefined
   if (!g) { g = new THREE.CylinderGeometry(r, r, len, seg); geoCache.set(k, g) }
@@ -289,7 +326,7 @@ function buildAK(team: TeamId): ViewModel {
   const mag = new THREE.Group()
   g.add(mag)
   for (let i = 0; i < 4; i++) {
-    P(mag, box(0.047, 0.05, 0.078), 'metal_dark', { roughnessMul: 0.8 },
+    P(mag, box(0.047, 0.056, 0.078), 'metal_dark', { roughnessMul: 0.8 },
       0, -0.062 - i * 0.047, -0.135 - i * 0.021, -0.24 * i)
   }
   P(mag, box(0.05, 0.014, 0.085), 'metal_dark', {}, 0, -0.232, -0.182, -0.75)
@@ -491,7 +528,9 @@ function buildRifle(id: keyof typeof RIFLES, team: TeamId): ViewModel {
   const magZ = s.magBehindGrip ? bodyZ + 0.08 : (s.layout === 'bullpup' ? bodyZ - 0.02 : -0.09)
   const segH = s.magLen / s.magSegs
   for (let i = 0; i < s.magSegs; i++) {
-    P(mag, box(0.036, segH, 0.055), 'metal_dark', { color: 0x1b1e21 },
+    // +4mm on the segment height: the rounded-box chamfer pulls back each
+    // edge — the overlap keeps the curved-mag joints sealed
+    P(mag, box(0.036, segH + 0.004, 0.055), 'metal_dark', { color: 0x1b1e21 },
       0, -0.05 - i * segH, magZ - i * 0.016, -0.22 * i)
   }
   P(mag, box(0.04, 0.012, 0.062), 'metal_dark', { color: 0x141618 }, 0, -0.05 - s.magLen - 0.004, magZ - s.magSegs * 0.016, -0.35)
@@ -566,7 +605,8 @@ function buildSniper(id: keyof typeof SNIPERS, team: TeamId): ViewModel {
   P(g, box(s.bodyW, 0.02, 0.12), 'polymer_black', { color: s.stockCol }, 0, 0.038, bodyZ + s.bodyLen / 2 + 0.08)
   P(g, box(s.bodyW, 0.09, 0.016), 'polymer_black', { color: 0x16181a }, 0, -0.005, bodyZ + s.bodyLen / 2 + 0.205)
   // grip + trigger
-  P(g, box(0.034, 0.09, 0.05), 'polymer_black', { density: 9, color: s.woodGrip ? 0x6b4520 : 0x1f2224 }, 0, -0.06, 0.03, 0.26)
+  P(g, box(0.034, 0.09, 0.05), s.woodGrip ? 'wood_walnut' : 'polymer_black',
+    s.woodGrip ? {} : { density: 9, color: 0x1f2224 }, 0, -0.06, 0.03, 0.26)
   P(g, box(0.005, 0.026, 0.008), 'metal_dark', { color: 0x101214 }, 0, -0.026, -0.005, 0.15)
   // magazine box
   const mag = new THREE.Group()
@@ -609,6 +649,7 @@ interface ShotgunSpec {
   pumpLen: number                         // 0 = no cycling fore-end (xm1014)
   stock: 'full' | 'compact' | 'none'
   wood?: boolean
+  fde?: boolean                           // mag7: flat dark earth furniture
   bead?: boolean
   heatShield?: boolean
   chargingHandle?: boolean
@@ -629,9 +670,9 @@ const SHOTGUNS: Record<'nova' | 'xm1014' | 'mag7' | 'sawedoff', ShotgunSpec> = {
     heatShield: true, chargingHandle: true,
   },
   mag7: {
-    bodyLen: 0.24, bodyH: 0.07, bodyW: 0.052, bodyCol: 0x2a2d30,
+    bodyLen: 0.24, bodyH: 0.07, bodyW: 0.052, bodyCol: 0x6b5d43,
     barrelR: 0.013, barrelLen: 0.20, muzzleZ: -0.40,
-    tubeR: 0, tubeLen: 0, pumpLen: 0.09, stock: 'compact',
+    tubeR: 0, tubeLen: 0, pumpLen: 0.09, stock: 'compact', fde: true,
     boxMag: { w: 0.04, h: 0.09, d: 0.055 },
   },
   sawedoff: {
@@ -647,11 +688,11 @@ function buildShotgun(id: keyof typeof SHOTGUNS, team: TeamId): ViewModel {
   const g = new THREE.Group()
   const bodyZ = -s.bodyLen / 2 + 0.03
   const boreY = 0.02
-  const furn: TexKey = s.wood ? 'wood_laminate' : 'polymer_black'
-  const furnCol = s.wood ? 0x6e4a26 : s.bodyCol
+  const furn: TexKey = s.wood ? 'wood_walnut' : (s.fde ? 'polymer_fde' : 'polymer_black')
+  const furnCol = s.wood ? 0x4a3020 : s.bodyCol
 
   // receiver
-  P(g, box(s.bodyW, s.bodyH, s.bodyLen), s.wood ? 'metal_dark' : 'polymer_black',
+  P(g, box(s.bodyW, s.bodyH, s.bodyLen), s.wood ? 'metal_dark' : (s.fde ? 'polymer_fde' : 'polymer_black'),
     { color: s.bodyCol }, 0, boreY, bodyZ)
   if (s.hammer) {
     // sawed-off: exposed spur hammer behind the receiver
@@ -730,8 +771,8 @@ function buildShotgun(id: keyof typeof SHOTGUNS, team: TeamId): ViewModel {
     P(g, box(0.04, 0.06, 0.16), furn, { color: furnCol }, 0, 0.008, bodyZ + s.bodyLen / 2 + 0.07)
     P(g, box(0.043, 0.08, 0.014), 'polymer_black', { color: 0x16181a }, 0, -0.002, bodyZ + s.bodyLen / 2 + 0.155)
   } else if (s.stock === 'compact') {
-    // mag7: thick polymer tail block with sling loop
-    P(g, box(0.042, 0.07, 0.1), 'polymer_black', { color: 0x25282a }, 0, 0.0, bodyZ + s.bodyLen / 2 + 0.05)
+    // mag7: thick FDE polymer tail block with sling loop
+    P(g, box(0.042, 0.07, 0.1), 'polymer_fde', {}, 0, 0.0, bodyZ + s.bodyLen / 2 + 0.05)
     P(g, box(0.045, 0.085, 0.014), 'polymer_black', { color: 0x16181a }, 0, -0.004, bodyZ + s.bodyLen / 2 + 0.105)
   }
   // sawedoff: no stock — bare grip + receiver ring
@@ -763,6 +804,7 @@ interface MGSpec {
   shroudR: number; shroudLen: number        // perforated barrel shroud
   boxW: number; boxH: number; boxD: number; boxCol: number
   stockLen: number; stockCol: number
+  fde?: boolean                              // m249: tan ammo box + furniture
   carryHandle: boolean
   gasBlock: boolean                          // m249 front gas system
   boxRake: number                            // negev box sits slightly angled
@@ -773,8 +815,8 @@ const MGS: Record<'m249' | 'negev', MGSpec> = {
     bodyLen: 0.34, bodyH: 0.085, bodyW: 0.055, bodyCol: 0x2b3428,
     barrelR: 0.011, barrelLen: 0.30, muzzleZ: -0.72,
     shroudR: 0.017, shroudLen: 0.22,
-    boxW: 0.055, boxH: 0.13, boxD: 0.075, boxCol: 0x1e2124,
-    stockLen: 0.24, stockCol: 0x2b3428,
+    boxW: 0.055, boxH: 0.13, boxD: 0.075, boxCol: 0x6b5d43,
+    stockLen: 0.24, stockCol: 0x6b5d43, fde: true,
     carryHandle: true, gasBlock: true, boxRake: 0,
   },
   negev: {
@@ -827,13 +869,13 @@ function buildMG(id: keyof typeof MGS, team: TeamId): ViewModel {
   // ammo box (mag group — drops on reload): top latch ridge + front stub
   const mag = new THREE.Group()
   g.add(mag)
-  P(mag, box(s.boxW, s.boxH, s.boxD), 'polymer_black', { color: s.boxCol }, 0, -0.045 - s.boxH / 2, frontZ + 0.075, s.boxRake)
+  P(mag, box(s.boxW, s.boxH, s.boxD), s.fde ? 'polymer_fde' : 'polymer_black', { color: s.boxCol }, 0, -0.045 - s.boxH / 2, frontZ + 0.075, s.boxRake)
   P(mag, box(s.boxW + 0.004, 0.014, s.boxD + 0.006), 'metal_dark', { color: 0x141618 }, 0, -0.045 - 0.007, frontZ + 0.075, s.boxRake)
   P(mag, box(s.boxW - 0.02, 0.02, 0.012), 'metal_dark', { color: 0x101214 }, 0, -0.045 - 0.02, frontZ + 0.075 + s.boxD / 2 + 0.004, s.boxRake)
   // belt of rounds feeding out of the tray into the receiver front
   P(g, box(0.03, 0.012, 0.03), 'metal_dark', { color: 0x4a3b22 }, 0, -0.034, frontZ + 0.02)
   // stock: fixed polymer + butt pad (m249 long, negev stubby)
-  P(g, box(s.bodyW - 0.004, 0.062, s.stockLen), 'polymer_black', { color: s.stockCol }, 0, 0.006, bodyZ + s.bodyLen / 2 + s.stockLen / 2 - 0.01)
+  P(g, box(s.bodyW - 0.004, 0.062, s.stockLen), s.fde ? 'polymer_fde' : 'polymer_black', { color: s.stockCol }, 0, 0.006, bodyZ + s.bodyLen / 2 + s.stockLen / 2 - 0.01)
   P(g, box(s.bodyW, 0.085, 0.015), 'polymer_black', { color: 0x16181a }, 0, -0.004, bodyZ + s.bodyLen / 2 + s.stockLen - 0.012)
   buildGloves(g, team,
     { x: 0, y: -0.068, z: 0.0, rx: 0.3 },
@@ -1031,9 +1073,9 @@ function buildBizon(team: TeamId): ViewModel {
 // ---------------------------------------------------------------- Desert Eagle
 function buildDeagle(team: TeamId): ViewModel {
   const g = new THREE.Group()
-  // slide + top rib + barrel
-  const slide = P(g, box(0.043, 0.05, 0.21), 'metal_dark', { roughnessMul: 0.8, normalScale: 0.8 }, 0, 0.028, -0.08)
-  P(g, box(0.014, 0.014, 0.2), 'steel_blued', { roughnessMul: 0.5 }, 0, 0.06, -0.08)
+  // slide + top rib + barrel — bright stainless slide (Task 124)
+  const slide = P(g, box(0.043, 0.05, 0.21), 'steel_stainless', { roughnessMul: 0.75, normalScale: 0.8 }, 0, 0.028, -0.08)
+  P(g, box(0.014, 0.014, 0.2), 'steel_stainless', { roughnessMul: 0.6 }, 0, 0.06, -0.08)
   P(g, cyl(0.0095, 0.028), 'steel_blued', { roughnessMul: 0.5 }, 0, 0.03, -0.192, q(90))
   // slide serrations
   for (let i = 0; i < 4; i++) {
@@ -1235,16 +1277,16 @@ function buildRevolver(team: TeamId): ViewModel {
   // frame block + top strap
   P(g, box(0.036, 0.05, 0.08), 'steel_blued', { color: 0x2c3033, roughnessMul: 0.7 }, 0, 0.005, -0.02)
   P(g, box(0.012, 0.01, 0.05), 'steel_blued', {}, 0, 0.048, -0.05)
-  // 8-shot cylinder + chamber ring
-  P(g, cyl(0.021, 0.052, 16), 'steel_blued', { color: 0x2b2f33, roughnessMul: 0.6 }, 0, 0.012, -0.115, q(90))
+  // 8-shot cylinder + chamber ring — stainless cylinder against the blued frame
+  P(g, cyl(0.021, 0.052, 16), 'steel_stainless', { roughnessMul: 0.55 }, 0, 0.012, -0.115, q(90))
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2
     P(g, cyl(0.0035, 0.054, 8), 'metal_dark', { color: 0x0f1113 },
       Math.cos(a) * 0.013, 0.012 + Math.sin(a) * 0.013, -0.115, q(90))
   }
-  // barrel + underlug + ejector rod
-  P(g, cyl(0.011, 0.16), 'steel_blued', { roughnessMul: 0.5 }, 0, 0.02, -0.225, q(90))
-  P(g, box(0.013, 0.012, 0.15), 'steel_blued', {}, 0, 0.003, -0.225)
+  // barrel + underlug + ejector rod — stainless barrel
+  P(g, cyl(0.011, 0.16), 'steel_stainless', { roughnessMul: 0.45 }, 0, 0.02, -0.225, q(90))
+  P(g, box(0.013, 0.012, 0.15), 'steel_stainless', { roughnessMul: 0.6 }, 0, 0.003, -0.225)
   P(g, cyl(0.0035, 0.11, 8), 'metal_dark', { color: 0x33383d, metalness: 0.9, roughnessMul: 0.4 }, 0, 0.004, -0.215, q(90))
   // hammer + sights
   P(g, box(0.008, 0.022, 0.014), 'metal_dark', { color: 0x101214 }, 0, 0.042, 0.014, -0.45)
@@ -1548,7 +1590,7 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
       P(g, cyl(0.011, long ? 0.26 : 0.2), 'steel_blued', {}, 0, 0.018, long ? -0.36 : -0.29, q(90))
       P(g, cyl(long ? 0.017 : 0.023, 0.2, 12), 'metal_dark', { roughnessMul: 0.75, color: long ? 0x2b3428 : 0x2a2d30 }, 0, 0.018, long ? -0.31 : -0.26, q(90))
       // ammo box under the receiver front + latch ridge
-      P(g, box(0.05, 0.11, 0.07), 'polymer_black', { color: long ? 0x1e2124 : 0x232629 }, 0, -0.06, long ? -0.16 : -0.13, long ? 0 : 0.1)
+      P(g, box(0.05, 0.11, 0.07), long ? 'polymer_fde' : 'polymer_black', { color: long ? 0x6b5d43 : 0x232629 }, 0, -0.06, long ? -0.16 : -0.13, long ? 0 : 0.1)
       P(g, box(0.054, 0.014, 0.076), 'metal_dark', { color: 0x141618 }, 0, -0.012, long ? -0.16 : -0.13, long ? 0 : 0.1)
       // folded bipod legs + top carry hint
       P(g, cyl(0.004, 0.09, 8), 'metal_dark', { color: 0x16181a }, 0.012, -0.03, long ? -0.38 : -0.31, q(90), q(9))
@@ -1558,17 +1600,17 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
       break
     }
     case 'mag7': {
-      P(g, box(0.05, 0.06, 0.24), 'polymer_black', { color: 0x2a2d30 }, 0, 0.01, -0.06)
+      P(g, box(0.05, 0.06, 0.24), 'polymer_fde', {}, 0, 0.01, -0.06)
       P(g, cyl(0.011, 0.16), 'steel_blued', {}, 0, 0.026, -0.26, q(90))
       P(g, box(0.034, 0.1, 0.05), 'metal_dark', { color: 0x1b1e21 }, 0, -0.07, -0.02, -0.1)
-      P(g, box(0.04, 0.06, 0.09), 'polymer_black', { color: 0x25282a }, 0, 0.0, 0.09)
+      P(g, box(0.04, 0.06, 0.09), 'polymer_fde', {}, 0, 0.0, 0.09)
       break
     }
     case 'sawedoff': {
       P(g, box(0.038, 0.045, 0.16), 'metal_dark', { color: 0x3a2f26 }, 0, 0.01, -0.02)
       P(g, cyl(0.009, 0.2), 'steel_blued', {}, 0, 0.022, -0.2, q(90))
       P(g, cyl(0.011, 0.16, 10), 'metal_dark', { color: 0x2b2f33 }, 0, -0.002, -0.18, q(90))
-      P(g, box(0.03, 0.09, 0.045), 'wood_laminate', { color: 0x5a3d1e }, 0, -0.06, 0.015, 0.45)
+      P(g, box(0.03, 0.09, 0.045), 'wood_walnut', {}, 0, -0.06, 0.015, 0.45)
       break
     }
     case 'mp5':
@@ -1601,7 +1643,7 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
       P(g, box(0.032, 0.045, 0.12), 'polymer_black', { color: 0x25282a }, 0, 0.005, 0.11)
       break
     case 'deagle':
-      P(g, box(0.038, 0.045, 0.2), 'metal_dark', { roughnessMul: 0.8 }, 0, 0.015, -0.05)
+      P(g, box(0.038, 0.045, 0.2), 'steel_stainless', { roughnessMul: 0.75 }, 0, 0.015, -0.05)
       P(g, box(0.036, 0.09, 0.05), 'polymer_black', { density: 9 }, 0, -0.06, 0.03, 0.22)
       break
     case 'glock': case 'usp':
@@ -1627,8 +1669,8 @@ export function buildRemoteGun(weaponId: string): THREE.Group {
       break
     case 'revolver':
       P(g, box(0.03, 0.04, 0.07), 'steel_blued', { color: 0x2c3033 }, 0, 0.005, -0.01)
-      P(g, cyl(0.018, 0.05, 12), 'steel_blued', { roughnessMul: 0.6 }, 0, 0.012, -0.055, q(90))
-      P(g, cyl(0.009, 0.13, 10), 'steel_blued', { roughnessMul: 0.5 }, 0, 0.02, -0.13, q(90))
+      P(g, cyl(0.018, 0.05, 12), 'steel_stainless', { roughnessMul: 0.55 }, 0, 0.012, -0.055, q(90))
+      P(g, cyl(0.009, 0.13, 10), 'steel_stainless', { roughnessMul: 0.5 }, 0, 0.02, -0.13, q(90))
       P(g, box(0.03, 0.085, 0.045), 'polymer_black', { density: 9, color: 0x1f2224 }, 0, -0.05, 0.015, 0.28)
       break
     case 'taser':

@@ -25,7 +25,17 @@ CFG = {
     'metal_dark':    (2.2, 1.0, 0.62, 0.16, 0.00),
     'glove_fabric':  (3.0, 0.9, 0.90, 0.08, 0.00),
     'pcb_green':     (3.6, 0.8, 0.55, 0.20, 0.00),
+    # Task 124 families
+    'steel_stainless': (2.2, 1.1, 0.28, 0.16, 0.00),
+    'wood_walnut':      (2.6, 1.4, 0.50, 0.16, 0.00),
+    'polymer_fde':      (3.2, 1.0, 0.84, 0.10, 0.00),
 }
+
+# Task 124: optional OUT=<dir> override (staging per acceptance policy v3) and
+# positional args to process only the named families
+import sys
+ONLY = [a for a in sys.argv[1:] if not a.startswith('/')]
+OUT = next((a for a in sys.argv[1:] if a.startswith('/')), OUT)
 
 def make_tileable(img: Image.Image) -> Image.Image:
     """2x2 mirrored quad -> seamless; keep detail via 2048 intermediate."""
@@ -73,6 +83,8 @@ def roughness_map(albedo: Image.Image, base: float, gain: float, bias: float) ->
     return Image.fromarray(np.stack([out, out, out], axis=-1), 'RGB')
 
 for name, (nstr, blur, rbase, rgain, rbias) in CFG.items():
+    if ONLY and name not in ONLY:
+        continue
     src = os.path.join(RAW, f'{name}.png')
     if not os.path.isfile(src):
         print('MISSING', name); continue

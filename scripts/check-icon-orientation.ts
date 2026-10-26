@@ -73,8 +73,8 @@ for (const e of BUY_ENTRIES as BuyEntry[]) {
   check(`[${e.id}] anatomy: magazine ${below ? 'below' : 'above'} barrel line (${TOP_MAG.has(e.id) ? 'top-mag by design' : 'standard'})`,
     expected, `magY ${magY.toFixed(3)} vs barrelY ${barrelY.toFixed(3)}`)
 }
-check('mag anatomy coverage (31 mag guns of 33; revolver/taser skipped)',
-  guns === 31, `${guns} checked, ${skipped} no-mag skipped`)
+check('mag anatomy coverage (32 mag guns of 34; revolver/taser skipped)',
+  guns === 32, `${guns} checked, ${skipped} no-mag skipped`) // Task 66 added ak74 (43rd weapon) — count 31→32
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

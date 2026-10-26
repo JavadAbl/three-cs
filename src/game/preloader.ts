@@ -326,12 +326,19 @@ export function installAssetCache(): boolean {
 interface Candidate { url: string; init?: RequestInit }
 interface Item { chain: Candidate[] }   // try in order; first 200 wins (mirrors every loader's fallback chain)
 
-/** 7 weapon material sets × albedo/normal/roughness (weaponmodels getTex). */
+/** 10 weapon material sets × albedo/normal/roughness (weaponmodels getTex).
+ * Task 124: chain /assets → /staging — new families live in staging until
+ * accepted, and getTex probes exactly this order. */
 function weaponTextureItems(): Item[] {
   const items: Item[] = []
   for (const k of WEAPON_TEX_KEYS) {
     for (const suf of ['', '_n', '_r']) {
-      items.push({ chain: [{ url: `/assets/textures/weapons/${k}${suf}.jpg` }] })
+      items.push({
+        chain: [
+          { url: `/assets/textures/weapons/${k}${suf}.jpg` },
+          { url: `/staging/textures/weapons/${k}${suf}.jpg` },
+        ],
+      })
     }
   }
   return items
