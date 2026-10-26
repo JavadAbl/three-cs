@@ -297,3 +297,14 @@ Work Log:
 
 Stage Summary:
 - cs_office is the 5th map: 4192-waypoint nav graph, 175 func_wall props (desks/paper/trash/elevators), CT garage + T front-entrance spawns, hostage-free round flow, winter overcast atmosphere, lightmap-baked BSP faces, 7 new texture families (5 ambientCG photo-PBR + procedural glass/fence). PENDING ACCEPTANCE in public/staging/: maps/office/geom.json (2.4MB) + textures/maps/office/ (21 jpgs + sources.json). On user 'accept': mv staging->assets, flip map-office.ts geomUrl to /assets/maps/office/, bump ASSET_CACHE_VERSION v10->v11.
+---
+Task ID: 128
+Agent: main (Z.ai)
+Task: push Task-127 office map commit with the session PAT
+
+Work Log:
+- Pushed 501b8b6..fd6c69c (office map) with the PAT inline in the push URL only.
+- Remote verified: origin/main == fd6c69c.
+
+Stage Summary:
+- Remote synced. PAT again exposed in chat — user should revoke after the session (third reminder).
