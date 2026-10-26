@@ -15,6 +15,34 @@ then `git add` (no `-f` needed). Note: this system is currently dormant
 (`weaponskins.ts` is not imported by the live weapon renderer, which uses the
 procedural PBR texture sets).
 
+## PBR material families (the LIVE weapon texture system)
+
+The running weapon renderer (`src/game/weaponmodels.ts` getTex) loads these
+shared material sets — each family is a `<name>.jpg` albedo + `<name>_n.jpg`
+tangent-space normal + `<name>_r.jpg` roughness, tileable at 1024×1024:
+
+| Family | Used on | Added |
+|--------|---------|-------|
+| `steel_blued` | default gun steel (slides, barrels, receivers) | Task 10 era |
+| `polymer_black` | grips, stocks, magazines | Task 10 era |
+| `wood_laminate` | AK-47 wood furniture | Task 10 era |
+| `enamel_od` | olive-drab painted parts | Task 10 era |
+| `metal_dark` | parkerized metal, scopes | Task 10 era |
+| `glove_fabric` | first-person gloves | Task 10 era |
+| `pcb_green` | C4 bomb electronics | Task 10 era |
+| `steel_stainless` | deagle slide+rib, revolver cylinder/barrel/underlug | **Task 124, accepted 2026-10-26 (Task 125, v10)** |
+| `wood_walnut` | sawedoff furniture+grip, g3sg1 grip | **Task 124, accepted 2026-10-26 (Task 125, v10)** |
+| `polymer_fde` | mag7 receiver+tail, m249 ammo box+stock | **Task 124, accepted 2026-10-26 (Task 125, v10)** |
+
+Generation pipeline (fully reproducible, no third-party assets):
+
+```bash
+bash scripts/texgen/gen.sh        # z-ai image CLI, 1024² albedo per family -> raw/
+python3 scripts/texgen/process.py # mirror-tile + sobel normal + roughness -> OUT
+# process.py takes optional family names + OUT=<dir> override (staging per
+# acceptance policy v3) — raw/ prompts live in gen.sh
+```
+
 ## Files
 
 | File | Purpose |

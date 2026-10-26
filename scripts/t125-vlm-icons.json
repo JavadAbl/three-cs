@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Yes, the weapon silhouette icons are rendering correctly with clear shapes and no broken images. The icons look like recognizable pistols from a 3/4 side view with magazines pointing down.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793001346,
+  "id": "202610261555446a0a717d6f454e92",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610261555446a0a717d6f454e92",
+  "usage": {
+    "completion_tokens": 37,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 939,
+    "prompt_tokens_details": {
+      "cached_tokens": 5
+    },
+    "total_tokens": 976
+  }
+}

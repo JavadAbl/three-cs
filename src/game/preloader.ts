@@ -38,7 +38,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v9'   // Task 120: re-shipped the 4 /assets/sounds/announce_*.ogg bodies (Task-98 TTS -> REAL CS radio announcer from sourcesounds/csgo, same filenames) — existing browsers must refetch them. (v8 was the Task-117 human acceptance: staged->committed rotation for /api/assets/human. The BUMP RULE + no-cache wrapper from Task 104 is what makes this re-ship reachable.)
+export const ASSET_CACHE_VERSION = 'v10'   // Task 125 acceptance: (1) rotated the 43 /assets/icons/*.png bodies (chamfered-geometry regen, Task 124) same filenames; (2) promoted the 3 new PBR families /assets/textures/weapons/{steel_stainless,wood_walnut,polymer_fde}*.jpg — these URLs were neg-cached 404s under v9 while staged, so the bump sweep is what makes them resolve as 200s. (v9 was Task 120's announce_*.ogg re-ship; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
@@ -327,8 +327,8 @@ interface Candidate { url: string; init?: RequestInit }
 interface Item { chain: Candidate[] }   // try in order; first 200 wins (mirrors every loader's fallback chain)
 
 /** 10 weapon material sets × albedo/normal/roughness (weaponmodels getTex).
- * Task 124: chain /assets → /staging — new families live in staging until
- * accepted, and getTex probes exactly this order. */
+ * Chain /assets → /staging (policy v3 — generic path for staged families;
+ * the Task-124 trio was accepted into /assets in Task 125). */
 function weaponTextureItems(): Item[] {
   const items: Item[] = []
   for (const k of WEAPON_TEX_KEYS) {

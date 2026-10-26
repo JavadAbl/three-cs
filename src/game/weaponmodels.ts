@@ -12,8 +12,9 @@
 //  - Task 124 quality pass: box() returns chamfered RoundedBoxGeometry (edge
 //    highlights = manufactured look; auto radius 0.5-3 mm by part size) and
 //    10 material families — the Task-124 trio (steel_stainless / wood_walnut /
-//    polymer_fde) ships from public/staging until accepted, with getTex +
-//    preloader chaining /assets -> /staging.
+//    polymer_fde) was ACCEPTED into public/assets in Task 125 (v10 bump); the
+//    getTex + preloader /assets -> /staging chaining stays as the generic
+//    policy path for the NEXT staged family.
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import type { TeamId, WeaponId } from './weapons'

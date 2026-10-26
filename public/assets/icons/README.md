@@ -7,7 +7,10 @@ grenades, kevlar / kevlar+helmet / defuse kit) — light-neutral weapon
 silhouettes in the CS 1.6 buy-menu spirit. **Accepted (policy v3 batch
 acceptance, 2026-10), including the user-feedback fix that rolled the gun
 class 180° so magazines hang down** (the first render pass projected them
-upside-down).
+upside-down). **All 43 bodies rotated again 2026-10-26 (Tasks 124/125):
+regenerated from the chamfered RoundedBoxGeometry quality pass so the
+silhouettes match the in-game manufactured-part look; accepted with the
+v10 cache bump.**
 
 They are **procedural, not hand-drawn**: `scripts/gen-buy-icons.ts` builds
 each entry's real viewmodel (the exact same `src/game/weaponmodels.ts`
@@ -25,9 +28,10 @@ bun scripts/gen-buy-icons.ts   # -> public/staging/icons/<id>.png
 
 Currently empty — the accepted set lives in this directory. The one
 non-generated file is `ak74.png` (Task 66/67): a byte-copy of `ak47.png`
-staged as a stand-in and accepted with the weapon — faithful, because the
-ak74's procedural fallback reuses the exact buildAK geometry the ak47
-icon was rendered from (regenerating it would produce the same silhouette).
+stood in as the original acceptance — faithful, because the ak74's
+procedural fallback reuses the exact buildAK geometry the ak47 icon was
+rendered from. **The 2026-10-26 regen (Task 124) confirms this: the fresh
+ak74.png came out byte-identical to ak47.png again (md5 f60a24d8…).**
 The HUD `BuyIcon` component tries `/assets/icons/<id>.png` first and falls
 back to `/staging/icons/<id>.png` (asset-acceptance policy v3), hiding
 itself only if neither exists — so regenerated icons are live before

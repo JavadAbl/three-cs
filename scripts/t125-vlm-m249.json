@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "The M249 features a distinct FDE tan polymer for the ammo box and stock, which contrasts with the darker, matte black metal of the receiver and barrel assembly. The model's edges appear mostly flat-shaded and blocky, lacking detailed chamfering or complex machined bevels typical of higher-fidelity renders. There are no obvious rendering glitches like missing textures or z-fighting, though the weapon model has a simplified, slightly low-poly aesthetic.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793001344,
+  "id": "202610261555001b0bc3db5a7c40eb",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610261555001b0bc3db5a7c40eb",
+  "usage": {
+    "completion_tokens": 95,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 973,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1068
+  }
+}
