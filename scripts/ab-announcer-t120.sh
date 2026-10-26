@@ -10,7 +10,7 @@
 set -u
 
 agent-browser set viewport 1280 720 >/dev/null 2>&1 || true
-agent-browser open http://localhost:3000/ >/dev/null 2>&1
+agent-browser open http://localhost:81/ >/dev/null 2>&1
 for _ in $(seq 1 45); do agent-browser snapshot -i 2>/dev/null | rg -q "QUICK PLAY" && break; sleep 1; done
 sleep 1
 
