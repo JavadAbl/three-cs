@@ -326,3 +326,19 @@ Work Log:
 
 Stage Summary:
 - Workspace fully recovered from the 3rd rollback; local HEAD 301d736+7948c8e (map-tar.py). cs_office is LIVE again on :81 with the regenerated staging payload — STILL PENDING USER ACCEPTANCE per policy v3 (mv staging->assets, flip map-office.ts geomUrl, bump ASSET_CACHE_VERSION v10->v11 on 'accept'). Next push needs a fresh PAT (fetch is anonymous; the old session PAT should be revoked — 4th reminder).
+---
+Task ID: 130
+Agent: main (Z.ai)
+Task: user ACCEPTED cs_office as v1 ("now i accept if for v1 of office, but later we should improve it well. (it has many issues)") + provided the session PAT for push.
+
+Work Log:
+- ACCEPTANCE per policy v3: mv public/staging/maps/office/geom.json -> public/assets/maps/office/ (2,453,648 B, sha1 c75b3b981935) + public/staging/textures/maps/office -> public/assets/textures/maps/office (21 jpgs 3,436 KB + sources.json, ambientCG CC0 provenance). staging/ now EMPTY. Converter debug byproducts (debug-top.ppm/png) deleted — regenerable, not payload.
+- Code: src/game/map-office.ts bsp.geomUrl /staging -> /assets/maps/office/. ASSET_CACHE_VERSION v10 -> v11 (the /assets URLs were neg-cached 404s under v10's store while staged; bump sweep makes them resolve + GCs v10). scripts/test-rebel-model-t115.ts assertion v10 -> v11 (Task-130 added to the bump-chain note). worklog state snapshot refreshed (4->5 maps; it had been stale since Task 122's v9 line). test-office.ts untouched — its chainFetch was written to pass in both staged and accepted phases; now reports 'geom.json served from /assets'.
+- REGRESSIONS: office 11/11, rebel-t115 37/37 (v11 assertion), cache-t111 28/28, buymenu 235/235, tsc src+shared 0 (only the 31 pre-existing examples/bsp lines).
+- ROUTE VERIFY: /assets/maps/office/geom.json 200 served sha1 == disk; 21/21 textures + sources.json 200 from /assets; staging URLs now 404.
+- LIVE :81 (fresh browser): lobby -> solo office -> engine {map:office}; caches.keys() == ['three-cs-assets-v11'] exactly (bump sweep GC'd v10); office 21-file payload 200s from /assets; shared families (sand/wall/concrete/metal/crate/dark) fall through the office-path 404s to map-root 200s as designed. Spawned alive at garage (pos -20,6,44.8 y=6 onGround phase live). VLM record shots: spawn-facing read 'overexposed' (known camera-yaw effect, snow-yard doorway — same read as Task 129's exoneration), 180-degree interior read 'correct dim garage with baked lightmap shading, blue-tinted GoldSrc aesthetic, no missing-texture checkerboards, no broken rendering'. Diagnostic pngs/vlm dumps purged after recording (Task-122 hygiene).
+- OPS NOTE: spawning in a solo match requires a canvas click when the warmup doesn't auto-advance — the spectator free-cam (pos 0,0,40) screenshots read as 'inverted geometry/white void'; that is the UN-SPAWNED view, not a broken map (burned 3 VLM reads before re-learning this).
+- USER DIRECTION RECORDED: office v1 accepted WITH known issues to improve later (user: "it has many issues"): 40m+ distance moire on regular-grid textures (brick courses/tile grout/ceiling perforation), coplanar BSP z-fight (stairs), flat per-vertex GoldSrc lighting, plus the spawn-facing overexposure read. Improvement task queued for a later session.
+
+Stage Summary:
+- Commit 83a9306 (acceptance: binaries + geomUrl flip + v11 + tests + snapshot). cs_office is the 5th committed map; store v11 live. Pushed the 4-commit backlog (map-tar.py 7948c8e, Task-129 worklog e1d0d84, acceptance 83a9306, this entry) with the PAT inline-only. PAT: user re-sent the SAME token as the previous session — apparently never revoked; revoke reminder now at 5.
