@@ -2253,3 +2253,17 @@ Work Log:
 
 Stage Summary:
 - The 4 announcer lines are now the genuine CS radio announcer (sourcesounds/csgo sound/radio/), replacing the Task-98 TTS stopgap per explicit user request; same filenames, zero gameplay-code changes, ASSET_CACHE_VERSION v9. New files: ct_win 18,132 B/1.877 s, t_win 15,694 B/1.645 s, planted 16,073 B/1.509 s, defused 17,930 B/1.776 s. All suites green; live round-end announcer confirmed played:true. Raw clone kept gitignored at assets/packs/sourcesounds-csgo/ for future grabs (10,223 CS:GO sounds available).
+
+---
+Task ID: 121
+Agent: main (Z.ai)
+Task: user supplied a fresh PAT — push Task 120 upstream
+
+Work Log:
+- Container had restarted again since Task 120 (dev pid 1575->1080, game 1552->1244): a snapshot restore flipped +x bits on 502 tracked files (all content byte-identical — verified git hash-object == HEAD blob for binaries incl. human.glb cdd14b1d). Modes reset to match the index; tree clean.
+- Pushed with the user's fresh PAT, inline in the URL only (never stored in git config, env files or logs; echoed output scrubbed): f8772fd..fbcd98f main->main.
+- Verified: origin/main == local HEAD fbcd98f; remote contents API returns the new real-announcer file (announce_ct_win.ogg HTTP 200). Served-through-:81 spot check also green (announcer 965bfc53…, human.glb cdd14b1d…, cache v9).
+- REMINDER for the user: this PAT was exposed in chat too — revoke after use; next push = same protocol with a new token.
+
+Stage Summary:
+- Remote now holds the full chain through Task 120 (real CS radio announcer). Local == remote, tree clean, nothing pending.
