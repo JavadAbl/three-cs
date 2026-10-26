@@ -155,8 +155,8 @@ check('route: /api/assets/rebel serves staging-first with per-request stat (Task
   /staging', 'models', 'rebel\.glb'/.test(routeSrc) && /assets', 'models', 'rebel\.glb'/.test(routeSrc) && /cache\.mtimeMs === st\.mtimeMs/.test(routeSrc))
 check('preloader: rebel route cached (ROUTE_RE) + manifest item',
   /\(weapon\|human\|rebel\)/.test(preloaderSrc) && /url: '\/api\/assets\/rebel'/.test(preloaderSrc))
-check('preloader: acceptance bump applied (rebel v6→v7, human v7→v8 in Task 117, announcer re-ship v8→v9 in Task 120, Task-124 materials+icons acceptance v9→v10 in Task 125 — the store tracks the latest bump)',
-  /ASSET_CACHE_VERSION = 'v10'/.test(preloaderSrc))
+check('preloader: acceptance bump applied (rebel v6→v7, human v7→v8 in Task 117, announcer re-ship v8→v9 in Task 120, Task-124 materials+icons acceptance v9→v10 in Task 125, office map acceptance v10→v11 in Task 130 — the store tracks the latest bump)',
+  /ASSET_CACHE_VERSION = 'v11'/.test(preloaderSrc))
 check('engine: glbTeams probe exposed',
   /glbTeams: \(\) => userModelStates\(\)/.test(readFileSync('src/game/engine.ts', 'utf8')))
 

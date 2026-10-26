@@ -5,10 +5,11 @@
 > in git: `git show 67e81f6:worklog.md`. This file keeps the live state
 > snapshot, the standing rules/protocols, and a one-line ledger of every task.
 
-## Current state snapshot (as of Task 122)
+## Current state snapshot (as of Task 130)
 
-- **Game**: CS-style web FPS. 4 maps (dust, dust2, aim_headshot CS 1.6 BSP import,
-  aimdepot night). Full 42-entry weapon roster (CS 1.6 category buy menu,
+- **Game**: CS-style web FPS. 5 maps (dust, dust2, aim_headshot + cs_office CS 1.6
+  BSP imports, aimdepot night). cs_office accepted as v1 in Task 130 (user: many
+  issues to improve later — see Task-127 known-limitations list). Full 42-entry weapon roster (CS 1.6 category buy menu,
   team-filtered), 6 grenades, C4 defusal, 5v5 bot fill (easy/normal/hard),
   economy + kill rewards, CS-style recoil, quick-switch/reload-cancel, directional
   damage indicators, outline crosshair.
@@ -21,8 +22,9 @@
   from sourcesounds/csgo (Task 120). User's own fire recordings kept for
   ak74_fire + m4_fire. Raw sourcesounds clone (10,223 CS:GO sounds, gitignored)
   at `assets/packs/sourcesounds-csgo/` for future grabs.
-- **Git**: local == origin/main. Asset cache `ASSET_CACHE_VERSION = 'v9'`
-  (`src/game/preloader.ts`). `public/staging/` empty — nothing pending.
+- **Git**: local == origin/main. Asset cache `ASSET_CACHE_VERSION = 'v11'`
+  (`src/game/preloader.ts`; v11 = Task-130 office acceptance). `public/staging/`
+  empty — nothing pending.
 - **Servers**: web `bun run dev` :3000, game server `mini-services/game-server`
   (bun --hot) :3003, platform proxy :81 (**live multiplayer/verification must
   enter via http://localhost:81/ — the socket uses the XTransformPort=3003

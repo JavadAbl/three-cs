@@ -1,0 +1,86 @@
+{
+ "carpet": {
+  "asset": "Fabric005",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Fabric005",
+  "task": "126 \u2014 cs_office BSP import; candidates VLM A/B (sheets in scripts/.tmp/ambientcg-raw/office/)",
+  "files": {
+   "carpet.jpg": 453332,
+   "carpet_bump.jpg": 70136,
+   "carpet_normal.jpg": 424691
+  }
+ },
+ "offwall": {
+  "asset": "PaintedPlaster006",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=PaintedPlaster006",
+  "task": "126 \u2014 cs_office BSP import; candidates VLM A/B (sheets in scripts/.tmp/ambientcg-raw/office/)",
+  "files": {
+   "offwall.jpg": 299328,
+   "offwall_bump.jpg": 43376,
+   "offwall_normal.jpg": 360959
+  }
+ },
+ "ceiling": {
+  "asset": "Plaster005",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Plaster005",
+  "task": "126 \u2014 cs_office BSP import; candidates VLM A/B (sheets in scripts/.tmp/ambientcg-raw/office/)",
+  "files": {
+   "ceiling.jpg": 141899,
+   "ceiling_bump.jpg": 46881,
+   "ceiling_normal.jpg": 354144
+  }
+ },
+ "snow": {
+  "asset": "Snow002",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Snow002",
+  "task": "126 \u2014 cs_office BSP import; candidates VLM A/B (sheets in scripts/.tmp/ambientcg-raw/office/)",
+  "files": {
+   "snow.jpg": 70200,
+   "snow_bump.jpg": 20744,
+   "snow_normal.jpg": 173024
+  }
+ },
+ "tile": {
+  "asset": "Tiles012",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Tiles012",
+  "task": "126 \u2014 cs_office BSP import; candidates VLM A/B (sheets in scripts/.tmp/ambientcg-raw/office/)",
+  "files": {
+   "tile.jpg": 137417,
+   "tile_bump.jpg": 38119,
+   "tile_normal.jpg": 37606
+  }
+ },
+ "brick": {
+  "asset": "Bricks085",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Bricks085",
+  "task": "126 \u2014 cs_office BSP import; candidates VLM A/B (sheets in scripts/.tmp/ambientcg-raw/office/)",
+  "files": {
+   "brick.jpg": 200983,
+   "brick_bump.jpg": 24727,
+   "brick_normal.jpg": 168440
+  }
+ },
+ "plank": {
+  "asset": "Wood050",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Wood050",
+  "task": "126 \u2014 cs_office BSP import; candidates VLM A/B (sheets in scripts/.tmp/ambientcg-raw/office/)",
+  "files": {
+   "plank.jpg": 208556,
+   "plank_bump.jpg": 46873,
+   "plank_normal.jpg": 197119
+  }
+ }
+}
