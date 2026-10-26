@@ -924,7 +924,7 @@ export class Engine {
       mapId?: string; mapVersion: number; players: Array<Record<string, unknown>>; match: Record<string, unknown>
     }) => {
       // server is authoritative about the room's map — rebuild if we guessed wrong
-      if (d.mapId && d.mapId !== this.mapDef.id && (d.mapId === 'dust' || d.mapId === 'dust2' || d.mapId === 'aimhead' || d.mapId === 'aimdepot')) this.rebuildMap(d.mapId as MapId)
+      if (d.mapId && d.mapId !== this.mapDef.id && (d.mapId === 'dust' || d.mapId === 'dust2' || d.mapId === 'aimhead' || d.mapId === 'aimdepot' || d.mapId === 'office')) this.rebuildMap(d.mapId as MapId)
       this.myId = d.youId
       this.myTeam = d.team
       this.pm.setMyTeam(d.team)
@@ -2494,18 +2494,21 @@ export class Engine {
   private applyAtmosphere(mapId: MapId) {
     const aztec = mapId === 'aimhead'
     const night = mapId === 'aimdepot'
+    const winter = mapId === 'office'   // Task 126: bright overcast winter —
+    // cool diffuse light, snow-bounce ground, higher ambient fill so the
+    // baked-lightmap interiors stay readable under fog
     const a = this.atmo
     if (!a) return
-    a.fog.color.set(night ? 0x080d1a : aztec ? 0xcfe0e8 : 0xd9cfb4)
-    a.fog.near = night ? 42 : aztec ? 60 : 55
-    a.fog.far = night ? 190 : aztec ? 260 : 240
-    a.hemi.color.set(night ? 0x1d2742 : aztec ? 0xdce8f0 : 0xe6e2d2)
-    a.hemi.groundColor.set(night ? 0x0e121c : aztec ? 0x5e7a68 : 0x8a7a5e)
-    a.hemi.intensity = night ? 0.38 : 0.72
-    a.ambient.color.set(night ? 0x2c3654 : aztec ? 0xb6c4bd : 0xc9b896)
-    a.ambient.intensity = night ? 0.22 : 0.38
-    a.sun.color.set(night ? 0xb9c9ea : aztec ? 0xfff6e0 : 0xfff0d0)
-    a.sun.intensity = night ? 0.85 : 1.9
-    this.scene.environmentIntensity = night ? 0.24 : 0.55
+    a.fog.color.set(night ? 0x080d1a : winter ? 0xdfe4e8 : aztec ? 0xcfe0e8 : 0xd9cfb4)
+    a.fog.near = night ? 42 : winter ? 70 : aztec ? 60 : 55
+    a.fog.far = night ? 190 : winter ? 300 : aztec ? 260 : 240
+    a.hemi.color.set(night ? 0x1d2742 : winter ? 0xe2e8ee : aztec ? 0xdce8f0 : 0xe6e2d2)
+    a.hemi.groundColor.set(night ? 0x0e121c : winter ? 0xb9bfc6 : aztec ? 0x5e7a68 : 0x8a7a5e)
+    a.hemi.intensity = night ? 0.38 : winter ? 0.78 : 0.72
+    a.ambient.color.set(night ? 0x2c3654 : winter ? 0xd9dee3 : aztec ? 0xb6c4bd : 0xc9b896)
+    a.ambient.intensity = night ? 0.22 : winter ? 0.42 : 0.38
+    a.sun.color.set(night ? 0xb9c9ea : winter ? 0xfff6ec : aztec ? 0xfff6e0 : 0xfff0d0)
+    a.sun.intensity = night ? 0.85 : winter ? 1.5 : 1.9
+    this.scene.environmentIntensity = night ? 0.24 : winter ? 0.55 : 0.55
   }
 }

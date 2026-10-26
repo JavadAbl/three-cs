@@ -130,11 +130,13 @@ export function buildDetails(map: MapDef = MAPS.dust): DetailBuild {
   batches.clear()
   curScope = pbrMapScope(map.id)
 
-  if (map.id === 'aimhead' || map.id === 'aimdepot') {
+  if (map.id === 'aimhead' || map.id === 'aimdepot' || map.id === 'office') {
     // BSP-converted map (aimhead): real face geometry provides all visuals.
     // aimdepot: hand-built aim arena — boxes carry the whole look; the
     // generic dust prop builders are hard-positioned for the dust layout
     // and must NOT run here.
+    // office (Task 126): the BSP world + 175 func_wall props (desks, paper
+    // piles, trash cans, elevator doors) ARE the furniture — no extra props.
     return { group, raycastMeshes }
   }
 

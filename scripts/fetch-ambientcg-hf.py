@@ -225,6 +225,34 @@ TAR_HINT: dict[str, list[int]] = {
     "Wood087": [3, 0],
 }
 
+# Task 126 — cs_office identity candidates (VLM A/B picks after extraction):
+#   carpet   commercial office carpet (flecke loop pile)
+#   offwall  warm off-white painted drywall
+#   ceiling  mineral drop-ceiling tile (Plaster perforated candidates)
+#   snow     the snow courtyard
+#   tile     hallway ceramic floor
+#   brick    classic RED brick courses (shared set is desert sandstone)
+#   plank    clean oak desks/doors (shared set is dirt planks)
+OFFICE_TARGETS: dict[str, list[str]] = {
+    "carpet":  ["Fabric005", "Fabric011", "Fabric013"],
+    "offwall": ["PaintedPlaster002", "PaintedPlaster004", "PaintedPlaster006"],
+    "ceiling": ["Plaster004", "Plaster005"],
+    "snow":    ["Snow001", "Snow002"],
+    "tile":    ["Tiles010", "Tiles012", "Tiles089"],
+    "brick":   ["Bricks085"],
+    "plank":   ["Wood062", "Wood050"],
+}
+TAR_HINT_OFFICE: dict[str, list[int]] = {
+    # NB: Fabric* sorts BEFORE Facade* (F-a-b < F-a-c) → tar 04, not 05
+    "Fabric005": [4], "Fabric011": [4], "Fabric013": [4],
+    "PaintedPlaster002": [2, 1], "PaintedPlaster004": [2], "PaintedPlaster006": [2],
+    "Plaster004": [6], "Plaster005": [6],
+    "Snow001": [6], "Snow002": [6],
+    "Tiles010": [6], "Tiles012": [6], "Tiles089": [6],
+    "Bricks085": [0, 4],
+    "Wood062": [3], "Wood050": [3],
+}
+
 
 def main():
     ap = sys.argv[1:]
@@ -237,23 +265,49 @@ def main():
         return
 
     os.makedirs(RAW, exist_ok=True)
+    office_mode = "--office" in ap
+    targets = OFFICE_TARGETS if office_mode else TARGETS
+    hint = TAR_HINT_OFFICE if office_mode else TAR_HINT
+    raw_dir = os.path.join(RAW, "office") if office_mode else RAW
+    os.makedirs(raw_dir, exist_ok=True)
     plan = []
-    for surface, assets in TARGETS.items():
+    only = None
+    if "--only" in ap:
+        only = set(ap[ap.index("--only") + 1].split(","))
+    for surface, assets in targets.items():
         for a in assets:
+            if only and a not in only:
+                continue
             plan.append((surface, a))
 
+    # merge previously-extracted results so the run is resumable
+    prev_path = os.path.join(raw_dir, "extracted.json")
     results = {}
+    if os.path.exists(prev_path):
+        with open(prev_path) as f:
+            for k, v in json.load(f).items():
+                results[k] = {"asset": v["asset"], "tar": v["tar"],
+                              "files": {sk: os.path.join(raw_dir, v["asset"], sv)
+                                        for sk, sv in v["files"].items()}}
     for surface, asset in plan:
-        tars = TAR_HINT.get(asset, [0])
+        # skip assets whose wanted files are already on disk (resume support)
+        adir = os.path.join(raw_dir, asset)
+        if os.path.isdir(adir):
+            have = {n for n in os.listdir(adir) if os.path.isfile(os.path.join(adir, n))}
+            wanted = [f"{asset}_1K-JPG_{asset}_1K-JPG{s}" for s in WANT_SUFFIXES if s != ".json"]
+            if all(w in have for w in wanted) or (wanted and any(w in have for w in wanted) and "--force" not in ap):
+                print(f"  = {surface}: {asset} partially/fully extracted, skipping (use --force to redo)")
+                continue
+        tars = hint.get(asset, [0])
         for t in tars:
-            got = extract_asset(t, asset, RAW)
+            got = extract_asset(t, asset, os.path.join(raw_dir, asset))
             if got:
-                results[surface] = {"asset": asset, "tar": t, "files": got}
+                results[f"{surface}:{asset}"] = {"asset": asset, "tar": t, "files": got}
                 break
         else:
             print(f"  !! {surface}: {asset} NOT FOUND in hinted tars {tars}")
 
-    with open(os.path.join(RAW, "extracted.json"), "w") as f:
+    with open(os.path.join(raw_dir, "extracted.json"), "w") as f:
         json.dump({k: {"asset": v["asset"], "tar": v["tar"],
                        "files": {sk: os.path.basename(sv) for sk, sv in v["files"].items()}}
                    for k, v in results.items()}, f, indent=1)

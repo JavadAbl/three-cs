@@ -166,6 +166,26 @@ const GRAPHS: Record<string, MapGraph> = {
       tWL: [-4, -12], tER: [4, -12], midS: [0, -20], hSW: [5, -12], hSE: [-5, -12],
     },
   }),
+  office: buildGraph(MAPS.office, {
+    // Task 126 — cs_office BSP import (elimination, no hostages). CT spawn =
+    // the SW garage/courtyard side, T spawn = the E office wing. Holds sit at
+    // the spawn ledges, mid = the front-office/long-hall centroid. watch
+    // offsets face the ENEMY spawn (computed by convert-office.ts).
+    aHold: ["of124", "of125", "of155", "of156"],
+    bHold: ["of3989", "of4054", "of4055", "of3985"],
+    midHold: ["of3279", "of3247", "of3271", "of3275"],
+    aRoutes: [["of3989", "of3279"], ["of3279", "of124"]],
+    bRoutes: [["of124", "of3279"], ["of3279", "of3989"]],
+    tHoldA: "of3989",
+    tHoldB: "of124",
+    plantA: "of124",
+    plantB: "of3989",
+    watch: {
+      of124: [64.9, -54.0], of125: [64.9, -54.0], of155: [64.9, -52.0], of156: [64.9, -52.0],
+      of3989: [-64.5, 53.1], of4054: [-65.2, 52.7], of4055: [-64.3, 52.4], of3985: [-65.2, 52.4],
+      of3279: [-31.2, 28.0], of3247: [33.6, -28.0], of3271: [34.5, -26.6], of3275: [-32.1, 28.9],
+    },
+  }),
 }
 
 function graphFor(m: Match): MapGraph {

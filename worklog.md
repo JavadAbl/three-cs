@@ -273,3 +273,27 @@ Work Log:
 
 Stage Summary:
 - Remote synced 0c1d5c1..501b8b6. PAT exposed in chat — user reminded to revoke it and issue a new one for next session.
+---
+Task ID: 127
+Agent: main (Z.ai)
+Task: user: "i upload cs1.6 office map file. can add office map to our game too based on this file? we dont want hostages feature. get required textures from ambientcg.com, if u create some models or textures procedural, do them with high quality" (+ "status" ping mid-task)
+
+Work Log:
+- Session picked up the previous continuation's in-flight work (BSP conversion + integration were uncommitted in the worktree; worklog had no entry). Completed the remaining pipeline:
+- ambientCG FETCH (ambientcg.com TCP-blackholed from this box — used the nyuuzyou/ambientcg HuggingFace dataset mirror, CC0, provenance jsons preserved): batch-2 tars (04+) are NOT alphabetically sorted, which breaks the fetch script's tar binary search. Wrote scripts/bsp/hf-tar-scan.py (512B-sliding window header scanner — the original scan_window finds nothing when a window starts mid-file), hf-tar-index.py (sequential resumable full-tar indexer; all 8 tars indexed), extract-office-hf.py (exact-offset extraction of the 17 candidates). fetch-ambientcg-hf.py gained --office targets + resume + --only (background processes get reaped in this sandbox — must run foreground in chunks).
+- VLM A/B over 7 contact sheets picked: carpet Fabric005, offwall PaintedPlaster004->006 (004 avg RGB (200,166,65) is ORANGE — pixel-stats caught the bad pick), ceiling Plaster004->005 (brighter), snow Snow002, tile Tiles010->Tiles012 (010 std 9 = flat slab; 012 std 85 = real grout), brick Bricks085, plank Wood050.
+- bake-office-textures.py: albedo 1024 q82 / bump 512 q80 / normal 1024 q85 per repo convention + sources.json (CC0 provenance, aimdepot format). snow_postprocess(): 3-octave value-noise mottle + anisotropic wind striations (raw candidates are std-9 flat white → read as a blank void).
+- LIVE-VERIFICATION LOOP on :81 (agent-browser, __eng.teleport to per-family surface centroids; ~5 VLM rounds, each round driving a fix):
+  * screenshot hygiene: pause menu re-opens when eval/screenshot steals pointer lock → RESUME + hide overlay before shooting; round-end freezes the death-cam making teleports no-ops → HUMANS-ONLY solo match for scenic shots.
+  * FIX brightness: baked lightmaps multiply albedo AND scene lights apply on top — interiors double-dipped to ~30%. patchSurfaceShader now gamma-lifts vColor (pow 0.55, USE_COLOR-gated so box-maps untouched), cache key surface-var-2. Interior mean luminance 60→96-184, dark-pixel fraction 55-63%→6-35%.
+  * FIX sky: winter gradient's brightest stop sat at the NADIR — every world-shell leak below the horizon showed a stark white plane (HOM read). Brightest band moved to the horizon; below-horizon fades to muted grey. Upper sky deepened + cloud contrast up (was a 'white void').
+  * FIX world-shell leaks: 140m distant-city backdrop ring (office-only, hazy skyline canvas, renderOrder -5) — every leak sightline now reads as far buildings in winter haze.
+  * FIX fence 'checkerboard': 4x4 lattice aliased at distance into a B/W checkerboard ('missing texture' VLM read). Now 2x2 truss cells + heavy X braces + galvanized-steel bright bars + per-mesh world-coord UV remap in mapview (2m/repeat uniform density kills the moiré).
+  * FIX glass z-fight: coplanar double-sided BSP window panes — polygonOffset on glass.
+  * KNOWN LIMITATIONS (documented, not fixed — inherent to 1.6 BSP import): distant regular-grid textures (brick courses, tile grout, ceiling perforation) still moiré slightly at 40m+; some coplanar BSP faces (stairs) z-fight; interior lighting is flat per-vertex (GoldSrc look) — VLM scores converged to 5-8/10 per material with zero 'broken' reads on the final set.
+- OPS: HMR does not refresh the live Engine — every fix round needed a fresh :81 match; texture re-bakes need page reload (staging URLs are unversioned by design).
+- REGRESSIONS: office ALL PASS (11 checks incl. no-bomb/no-c4/no-plant — hostages were never in the CS2-style ruleset, bomb objective disabled for office), buymenu 235, cache 28, rebel 37, bots-ai 26, phase3 130, phase4 125, phase5 182, phase7 98, phase8 81, phase9 21, gunhold 24, aimdepot + aimhead ALL PASS. tsc src clean.
+- Evidence: scripts/t126/{office-carpet,office-tile,office-snow,office-plank,office-garage}.png + vlm-final.json (clean solo-match set).
+
+Stage Summary:
+- cs_office is the 5th map: 4192-waypoint nav graph, 175 func_wall props (desks/paper/trash/elevators), CT garage + T front-entrance spawns, hostage-free round flow, winter overcast atmosphere, lightmap-baked BSP faces, 7 new texture families (5 ambientCG photo-PBR + procedural glass/fence). PENDING ACCEPTANCE in public/staging/: maps/office/geom.json (2.4MB) + textures/maps/office/ (21 jpgs + sources.json). On user 'accept': mv staging->assets, flip map-office.ts geomUrl to /assets/maps/office/, bump ASSET_CACHE_VERSION v10->v11.
