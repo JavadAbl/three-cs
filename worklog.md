@@ -261,3 +261,15 @@ Work Log:
 
 Stage Summary:
 - The Task-124 quality pass is fully ACCEPTED and committed: 3 new PBR families (9 jpgs) + 43 chamfered buy icons now live from public/assets/ with cache v10. No push this session (no PAT provided — local commit only, ready to push when the user supplies a fresh token; the previously chat-exposed PAT should be revoked if not already).
+---
+Task ID: 126
+Agent: main (Z.ai)
+Task: user supplied a fresh PAT -> push the two unpushed local commits (b031dbc Task-124 quality pass, 501b8b6 Task-125 acceptance)
+
+Work Log:
+- Baseline probe: git clean, local 2 commits ahead of origin/main (0c1d5c1 was already remote).
+- Pushed with the PAT inline in the push URL only (policy: never written to git config, files, or logs).
+- Verified: origin/main == 501b8b6.
+
+Stage Summary:
+- Remote synced 0c1d5c1..501b8b6. PAT exposed in chat — user reminded to revoke it and issue a new one for next session.
