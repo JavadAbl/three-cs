@@ -308,3 +308,19 @@ Work Log:
 
 Stage Summary:
 - Remote synced. PAT again exposed in chat — user should revoke after the session (third reminder).
+---
+Task ID: 129
+Agent: main (Z.ai)
+Task: session-start "status" ping exposed ANOTHER container rollback (3rd incident, Task-119 failure mode) — recover the workspace, regenerate the lost office-map staging payload, and re-verify live.
+
+Work Log:
+- Health probe: HEAD at Task-120-era stray 6f023f0 (content-identical to remote fbcd98f — 502 diff files were exec-bit noise only); remote was AHEAD at 301d736 (Tasks 121-128 incl. the entire Task-127 office map import, pushed by the prior session). Anonymous fetch worked (no PAT needed for fetch).
+- Recovery per Task-119 protocol: git reset --hard 301d736; rm -rf .next; restart dev(:3000)+game(:3003) double-forked. Local == origin/main.
+- CASUALTIES of the rollback: ALL gitignored working state — public/staging/ (office geom.json 2.4MB + 21 jpgs + sources.json), scripts/.tmp/ambientcg-raw/ (HF extraction raws + all 8 tar indexes), scripts/bsp/map-tar.py (the shared helper BOTH committed pipeline scripts import — never committed in Task 127). BSP source survived (upload/ is a host mount): cs_office.bsp 4.68MB, BSP v30 header verified.
+- Regeneration: (1) convert-office.ts -> geom.json 2,453,648 B. (2) RECONSTRUCTED map-tar.py from the committed hf-tar-scan.py (same contract) + retry-hardened fetch_range. (3) Re-indexed all 8 HF dataset tars (~4.3GB ranged fetches, ~3MB/s, resumable chunked runs). (4) Re-extracted the 7 WINNER assets only (losers are recorded as DEFAULT_PICK in bake-office-textures.py — re-running the VLM A/B unnecessary). Fetch-script tar hints proved WRONG for 5/7: Fabric005=tar_02, Tiles012+PaintedPlaster006=tar_04, Bricks085+Wood050=tar_03, Plaster005=tar_05, Snow002=tar_06 (hint-correct). True provenance now on disk in scripts/.tmp/ambientcg-raw/index-0{0..7}.json. (5) bake-office-textures.py -> 21 jpgs (3,436 KB) + sources.json, byte-profile matches the documented payload.
+- REGRESSIONS: test-office 11/11 ALL PASS (map-served, identity-21 via assets->staging chain, geom, spawn garage y~6, round flow, bot nav, no-bomb/no-c4/no-plant). Staging URLs 200 via :3000.
+- LIVE via :81 (fresh browser profile): lobby OFFICE card present -> solo match -> engine {map:office} -> spawned alive at CT garage [-26.6,6,37.4] y=6 onGround. Loader initially stuck at 0% was a dev-mode first-visit Fast Refresh remount; reload ran clean (366-item full-set download for the fresh profile). Scenic VLM A/B vs the committed t126/office-garage.png reference (after hiding canvas-sibling overlays per the known pointer-lock/pause protocol — NOTE: agent-browser evals re-steal lock every command; 'canvas ~ * {display:none}' is the reliable clean-shot style): same geometry, same families, ZERO new defects (no checkerboard/void/z-fight/UI); a brightness read-difference was camera yaw (spawn faces the bright doorway; 180° shot reads the dim baked-lightmap garage exactly like the reference).
+- OPS: commit map-tar.py 7948c8e (closes the Task-127 pipeline gap). Kept: the 8 tar indexes + extracted raws (scripts/.tmp, gitignored) so future re-bakes need no re-fetch. Deleted the t129 diagnostic pngs/vlm dumps per Task-122 hygiene.
+
+Stage Summary:
+- Workspace fully recovered from the 3rd rollback; local HEAD 301d736+7948c8e (map-tar.py). cs_office is LIVE again on :81 with the regenerated staging payload — STILL PENDING USER ACCEPTANCE per policy v3 (mv staging->assets, flip map-office.ts geomUrl, bump ASSET_CACHE_VERSION v10->v11 on 'accept'). Next push needs a fresh PAT (fetch is anonymous; the old session PAT should be revoked — 4th reminder).
