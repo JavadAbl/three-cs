@@ -205,3 +205,20 @@ Work Log:
 
 Stage Summary:
 - Repo housekeeping only — game, assets and regressions untouched. worklog now maintains its compact structure going forward: state snapshot + protocols + one-line ledger, with full narratives in git history.
+123 | user: "when characters moves seems they run like Taking toddling steps" — ground-matched gait: stride amplitude now speed-scaled (fixed 0.55 rad was the toddle), cadence law fixed, knee drive + run bob added; live VLM + numeric bbox verified.
+
+---
+Task ID: 123 (detail)
+Agent: main (Z.ai)
+Task: user: "when characters moves seems they run like Taking toddling steps"
+
+Work Log:
+- DIAGNOSIS: both GLB characters (rebel/human, procedural bone drive in players.ts driveUser) ran with a FIXED 0.55 rad hip swing and linear cadence phase += speed*dt*1.9. At the 4.8-5.0 m/s run speed that is ~3.1 steps/s but only ~0.9 m visual stride — feet slid while the body glided = the "toddling" read. Walk speed had the opposite bug (0.85 steps/s = slow-mo marching).
+- FIX (players.ts, both the GLB driveUser and the procedural box fallback): (1) stride amplitude sa = min(0.85, 0.20*speed)*(1-0.55*ct) rad — ~0.29 walk / 0.85 sprint, crouch-faded like wa; (2) cadence cycles/s = 1.05 + 0.105*speed (walk 2.4 steps/s, run 3.1 — cadence saturates, stride grows); (3) knee drive 1.30*sa (heel-kick scales with the hip swing); (4) run bob (0.012+0.016*amp) replaces fixed 0.02 walk bob. Ground-match: ~0.5 m steps at 1.4 m/s, ~1.33 m steps at 4.9 m/s.
+- Cap 0.85 (not 0.95): first live pass at 0.95 gave "natural sprint stride" (VLM 3/4 frames) but flagged hip-band stretch at full extension; 0.85 keeps the sprint read without stressing the unrigged meshes' blend bands.
+- VERIFY: tsc clean; regressions gunhold 24, rebel 37 (incl. stale v8 cache assertion updated to v9 — leftover from Task 120, not gait), bots 26, buymenu 235, cache 28, audio-map 336. LIVE (:81, aim depot): VLM on spawn-rush side frames — "natural athletic sprint, dynamic wide stride, front knee lifted, rear leg extended" (earlier code pre-reload was a stale-HMR false alarm, recaptured after clean reload). NUMERIC deformation check via __eng.skinBBox over 40 samples: y-extent never exceeds 1.80 (target height 1.79) across all stride phases — no mesh stretch; apparent x-width growth at peak swing is the held RIFLE inside the model traverse (gunRig parents under HandR), not deformation. Thigh deflections measured hitting exactly the 0.85 cap.
+- OPS NOTE: Next dev HMR does NOT reliably update the running Engine instance (module closures) — always agent-browser reload before live-verifying a players.ts/engine change.
+- Evidence: scripts/t123-side-{1..4}.png + t123-vlm.json (kept per acceptance evidence; next cleanup sweep can purge).
+
+Stage Summary:
+- Characters now take ground-matched strides — walk looks like a walk, sprint like a sprint; feet no longer slide at run speed. Same skeleton/spec, zero asset changes; ASSET_CACHE_VERSION untouched (code-only change).

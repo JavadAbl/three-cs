@@ -530,13 +530,28 @@ export class PlayerManager {
       p.lastX = x; p.lastZ = z; p.lastT = renderT
 
       const amp = Math.min(1, p.speed / 5.2)
-      p.phase += p.speed * dt * 1.9
+      // Task 123 — GROUND-MATCHED GAIT (fixes the "toddling steps" look):
+      // the old law (phase += speed*dt*1.9) with a FIXED 0.55 rad hip swing
+      // produced ~3.1 steps/s but only ~0.9 m of visual stride at the 4.8-5.0
+      // m/s run speed — feet slid while the body glided = mincing/toddling.
+      // Human gait: cadence saturates with speed while stride keeps growing.
+      // New law: cycles/s = 1.05 + 0.105*speed → walk 1.4 m/s = 2.4 steps/s,
+      // run 4.9 m/s = 3.1 steps/s (cadence barely changes at run; it was the
+      // tiny fixed stride that read as toddling).
+      p.phase += (6.6 + 0.66 * p.speed) * dt
 
       // crouch blend (hitboxes follow the legacy 0.68 scale endpoints)
       const cTarget = (b.crouch && p.alive) ? 1 : 0
       p.crouchT += (cTarget - p.crouchT) * Math.min(1, dt * 9)
       const ct = p.crouchT
       const wa = amp * (1 - 0.55 * ct) // walk amplitude fades while crouched
+      // Task 123 stride amplitude (rad of hip swing), speed-scaled so the
+      // step length matches ground speed: ~0.29 rad walk / 0.85 rad sprint
+      // → step ~0.5 m at 1.4 m/s, ~1.33 m at 4.9 m/s (feet stop sliding);
+      // crouch fades it exactly like wa. Cap 0.85 not 0.95: VLM live check
+      // saw hip-band mesh stretch at the most extreme swing on the unrigged
+      // procedural-weight meshes — 0.85 keeps the sprint read without it.
+      const sa = Math.min(0.85, 0.20 * p.speed) * (1 - 0.55 * ct)
 
       if (p.alive) {
         // fall reset
@@ -547,15 +562,15 @@ export class PlayerManager {
           this.driveUser(g, p.weapon, p.speed, pitch, ct, p.phase, now, wa, amp)
         } else if (r) {
         // hips height + double-step bob
-        r.hips.position.y = lerp(HIPS_STAND, HIPS_CROUCH, ct) + Math.sin(p.phase * 2) * 0.024 * wa
+        r.hips.position.y = lerp(HIPS_STAND, HIPS_CROUCH, ct) + Math.sin(p.phase * 2) * (0.014 + 0.018 * amp) * (1 - 0.55 * ct)
 
-        // legs: base crouch pose + stride
+        // legs: base crouch pose + stride (Task 123: sa, not the fixed 0.55)
         const thighBase = 1.35 * ct
         const kneeBase = 2.30 * ct
-        r.thighR.rotation.x = thighBase + Math.sin(p.phase) * 0.55 * wa
-        r.thighL.rotation.x = thighBase + Math.sin(p.phase + Math.PI) * 0.55 * wa
-        r.calfR.rotation.x = -kneeBase - Math.max(0, Math.sin(p.phase + 2.5)) * 0.85 * wa
-        r.calfL.rotation.x = -kneeBase - Math.max(0, Math.sin(p.phase + Math.PI + 2.5)) * 0.85 * wa
+        r.thighR.rotation.x = thighBase + Math.sin(p.phase) * sa
+        r.thighL.rotation.x = thighBase + Math.sin(p.phase + Math.PI) * sa
+        r.calfR.rotation.x = -kneeBase - Math.max(0, Math.sin(p.phase + 2.5)) * (1.30 * sa)
+        r.calfL.rotation.x = -kneeBase - Math.max(0, Math.sin(p.phase + Math.PI + 2.5)) * (1.30 * sa)
         // boots stay near-flat
         r.bootR.rotation.x = -(r.thighR.rotation.x + r.calfR.rotation.x) * 0.55
         r.bootL.rotation.x = -(r.thighL.rotation.x + r.calfL.rotation.x) * 0.55
@@ -666,16 +681,22 @@ export class PlayerManager {
   private driveUser(g: UserInstance, weapon: string, speed: number, pitch: number, ct: number, phase: number, now: number, wa: number, amp: number) {
     const b = g.bones
 
-    // hips: crouch drop + double-step walk bob
-    b.hips.position.y = lerp(0.95, 0.55, ct) + Math.sin(phase * 2) * 0.02 * wa
+    // Task 123 stride amplitude: hip swing in rad, speed-scaled to match ground
+    // speed (walk ~0.29 / sprint ~0.85 — cap softened from 0.95 after the VLM
+    // live check saw hip-band stretch at full extension), crouch-faded like
+    // wa. The old fixed 0.55 read as "toddling" — quick mincing steps.
+    const sa = Math.min(0.85, 0.20 * speed) * (1 - 0.55 * ct)
 
-    // legs: crouch fold + stride
+    // hips: crouch drop + double-step walk bob (run bounces harder)
+    b.hips.position.y = lerp(0.95, 0.55, ct) + Math.sin(phase * 2) * (0.012 + 0.016 * amp) * (1 - 0.55 * ct)
+
+    // legs: crouch fold + stride (sa knee drive follows the hip swing)
     const thighBase = 1.30 * ct
     const kneeBase = 2.25 * ct
-    b.thighR.rotation.x = thighBase + Math.sin(phase) * 0.55 * wa
-    b.thighL.rotation.x = thighBase + Math.sin(phase + Math.PI) * 0.55 * wa
-    b.shinR.rotation.x = -kneeBase - Math.max(0, Math.sin(phase + 2.5)) * 0.85 * wa
-    b.shinL.rotation.x = -kneeBase - Math.max(0, Math.sin(phase + Math.PI + 2.5)) * 0.85 * wa
+    b.thighR.rotation.x = thighBase + Math.sin(phase) * sa
+    b.thighL.rotation.x = thighBase + Math.sin(phase + Math.PI) * sa
+    b.shinR.rotation.x = -kneeBase - Math.max(0, Math.sin(phase + 2.5)) * (1.30 * sa)
+    b.shinL.rotation.x = -kneeBase - Math.max(0, Math.sin(phase + Math.PI + 2.5)) * (1.30 * sa)
 
     // torso: forward lean w/ speed + crouch (negative x), counter-sway, breathing; aim leans back
     const breath = Math.sin(now * 0.0016) * 0.012
