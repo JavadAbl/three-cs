@@ -639,6 +639,30 @@ export function skyMesh(mapId?: string): THREE.Mesh {
   const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false })
   const m = new THREE.Mesh(geo, mat)
   m.renderOrder = -10
+  if (tropical) {
+    // Task 132: upgrade the procedural canvas dome to the ambientCG
+    // DaySkyHDRI017B equirect jpg the moment it ships (staging until
+    // accept — same assets-first policy as the surface textures). The
+    // image sun sits at lon 180 => +X on an unrotated dome; the engine
+    // sun vector (55,70,18) is atan2(18,55) = 18.1 deg from +X towards
+    // +Z, so yawing the dome -0.316 rad puts the image sun disc on the
+    // light's azimuth (38.4 deg image elevation vs 50.4 deg light is an
+    // accepted delta — the disc is small, shadows carry the perception).
+    // Canvas gradient stays as the no-network fallback.
+    const urls = ['/assets/maps/island/sky.jpg', '/staging/maps/island/sky.jpg']
+    const tryLoad = (i: number) => {
+      if (i >= urls.length) return
+      new THREE.TextureLoader().loadAsync(urls[i]).then(t => {
+        t.colorSpace = THREE.SRGBColorSpace
+        t.wrapS = THREE.RepeatWrapping   // seam-longitude interpolation
+        t.anisotropy = 4
+        mat.map = t
+        mat.needsUpdate = true
+        m.rotation.y = -0.316
+      }).catch(() => tryLoad(i + 1))
+    }
+    tryLoad(0)
+  }
   return m
 }
 
