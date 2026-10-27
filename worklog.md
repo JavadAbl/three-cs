@@ -342,3 +342,20 @@ Work Log:
 
 Stage Summary:
 - Commit 83a9306 (acceptance: binaries + geomUrl flip + v11 + tests + snapshot). cs_office is the 5th committed map; store v11 live. Pushed the 4-commit backlog (map-tar.py 7948c8e, Task-129 worklog e1d0d84, acceptance 83a9306, this entry) with the PAT inline-only. PAT: user re-sent the SAME token as the previous session — apparently never revoked; revoke reminder now at 5.
+
+---
+Task ID: 131
+Agent: main
+Task: PLAN new 6th map "island" (tropical island, daytime) — user: "add a map on an Island in day... i found good hdr textures [ambientCG water/beach HDRI lists]... grab other essential stuff from ambientcg if needed. craft beautiful procedural models if needed. plan for it"
+
+Work Log:
+- health: git e642af1 == origin/main (Task 130 pushed, nothing pending); tree clean except 228-file exec-bit noise (harmless rollback artifact)
+- discovered scripts/.tmp/ambientcg-raw/ GONE — 4th container wipe of gitignored caches (committed tooling + office assets unaffected; tar indexes must be re-generated for island asset work)
+- verified direct ambientcg.com downloads BLOCKED from sandbox (curl get/api both silent-dead; WebFetch proxy sees pages but no binaries) -> HF mirror huggingface.co/datasets/nyuuzyou/ambientcg dataset_{n}.tar remains the binary source per Task 127/129
+- read map system facts: MapDef = boxes[Box w/ tex family] + bsp.geomUrl + spawns/spawnYaw + sites{A,B} + bomb? (default true) + waypoints/edges + bounds; office geom.json schema = groups[{tex, pos triples}] arbitrary faces OK; builder helpers box/wall/stairs; engine collision = three raycast (face-based proven by office); per-map sky in mapdetails/nightsky pattern; NO ocean/water system exists yet (fx.ts only)
+- authored 6-phase plan: 131 HF re-index + catalog grep (hdri/sand/bark/leaves/grass/rock) + winner picks (+ polyhaven probe as HDRI fallback), 132 bake island texture set -> staging, 133 island generator -> geom.json (heightfield terrain + per-vertex sun-AO bake + waypoints/sites/spawns) + register both sides + lobby card, 134 engine features (island-ocean.ts fresnel+scroll-normals+sun-glint+shore-foam, day sky HDRI-dome w/ procedural fallback, palm/rock/hut/pier prop builders), 135 test-island.ts + :81 live + VLM A/B, 136 accept flow (staging->assets, v11->v12, regressions, PAT push)
+
+Stage Summary:
+- island design: ~170m island, de_ bomb defusal default (A = radar hill station, B = smuggler dock cove; user can veto to elimination), CT beach-landing spawn vs T village
+- texture plan: reuse office Wood050 (dock/hut planks) + PaintedPlaster006 (concrete tint); new candidates Sand007 (beach), Bark012 (palm trunk), Leaves003 (frond alpha), Grass001 (dune), 1 rock family, 1 clear-day HDRI (mirror grep decides exact picks); ocean surface = procedural shader (no texture dependency); sky = HDRI equirect dome baked to jpg via Python RGBE parser, fallback = procedural tropical gradient (winter-sky pattern)
+- risks logged: .tmp wipes recur (mitigate via one-command regen from committed scripts), HDRI availability in mirror unknown until grep, HDR decode = custom RGBE parser (no new deps)
