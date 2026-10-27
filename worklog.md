@@ -379,3 +379,16 @@ Stage Summary:
 - "Island" (6th map) is PLAYABLE first-cut on :81: lobby card -> FILL -> PLAY works; 34,992 tris; staged geom 4.39MB (office-caliber 2.45MB scale); 1,987 WPs / 3,767 edges / 1,684 boxes; bomb defusal (A radar hill 12.4m / B dock cove); CT beach landing north / T village south
 - determinism: single seed 20261027, byte-identical regen; regen = bun scripts/island/gen.ts; graph gate = bun scripts/island/graph-check.ts; live gate = bun scripts/island/test-island-live.ts
 - PENDING for Task 131 completion: HF tar re-index tars 02-07 (~4GB, chunked foreground), catalog grep (hdri/sand/bark/leaves/grass/rock), winner picks (VLM A/B like office), extraction -> scripts/.tmp (wipe-resilient: one-command regen from committed provenance), then Task 132 bake -> staging/textures/maps/island/
+
+---
+Task ID: 131 (addendum — catalog indexed, island LIVE confirmed on :81)
+Agent: main
+Task: complete the HF mirror re-index + catalog grep for island assets (main entry above)
+
+Work Log:
+- chunked-foreground indexing (timeout 550/tar) completed all 8 tars: 00-06 = 4000 files each (744-972MB), 07 = 404-file straggler (53MB); ~6GB total, 28,404 member files, 2,351 distinct asset ids on disk at scripts/.tmp/ambientcg-raw/index-0*.json
+- catalog findings for island picks: Bark001-014 (Bark012 = the palm-bark target), Grass001-008, Rock001-091, Leaf001-003 + LeafSet001-029, Gravel001-039 (fine-grained gravel = beach-sand candidates; true "Sand0xx" ids absent from this mirror — verify 'Grounded*' next pass), DaySkyHDRI001A/B-020A/B (40 packs) + DayEnvironmentHDRI001-084 (168 packs) — ALL HDRIs ship as 1K-TONEMAPPED.jpg (skydome-ready, no .hdr decode needed!)
+- next: extract 1K color jpgs for VLM A/B (Bark012 vs bark canvas, 2-3 grass/rock/gravel candidates, 4-6 tropical-looking DaySky/DayEnvironment HDRIs) -> winners -> bake albedo/bump/normal 1024/512/1024 -> public/staging/textures/maps/island/ + HDRI skydome swap (Task 132)
+
+Stage Summary:
+- Task 131 asset leg complete: catalog on disk, winners shortlistable; extraction script = scripts/bsp/extract-office-hf.py pattern (index-precise offsets, no binary search)
