@@ -1,0 +1,108 @@
+{
+ "isand": {
+  "asset": "Gravel038",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Gravel038",
+  "task": "132 \u2014 island PBR bake; VLM A/B (sheets in scripts/.tmp/ambientcg-raw/island/)",
+  "files": {
+   "isand.jpg": 426798,
+   "isand_bump.jpg": 70150,
+   "isand_normal.jpg": 465908
+  }
+ },
+ "igrass": {
+  "asset": "Grass007",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Grass007",
+  "task": "132 \u2014 island PBR bake; VLM A/B (sheets in scripts/.tmp/ambientcg-raw/island/)",
+  "files": {
+   "igrass.jpg": 295801,
+   "igrass_bump.jpg": 78314,
+   "igrass_normal.jpg": 362030
+  }
+ },
+ "irock": {
+  "asset": "Rock049",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Rock049",
+  "task": "132 \u2014 island PBR bake; VLM A/B (sheets in scripts/.tmp/ambientcg-raw/island/)",
+  "files": {
+   "irock.jpg": 394535,
+   "irock_bump.jpg": 25705,
+   "irock_normal.jpg": 472918
+  }
+ },
+ "bark": {
+  "asset": "Bark012",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Bark012",
+  "task": "132 \u2014 island PBR bake; VLM A/B (sheets in scripts/.tmp/ambientcg-raw/island/)",
+  "files": {
+   "bark.jpg": 414994,
+   "bark_bump.jpg": 57702,
+   "bark_normal.jpg": 471891
+  }
+ },
+ "leaf": {
+  "asset": "ThatchedRoof002B",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=ThatchedRoof002B",
+  "task": "132 \u2014 island PBR bake; VLM A/B (sheets in scripts/.tmp/ambientcg-raw/island/)",
+  "files": {
+   "leaf.jpg": 283630,
+   "leaf_bump.jpg": 62095,
+   "leaf_normal.jpg": 339347
+  }
+ },
+ "plank": {
+  "asset": "Planks006",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Planks006",
+  "task": "132 \u2014 island PBR bake; VLM A/B (sheets in scripts/.tmp/ambientcg-raw/island/)",
+  "files": {
+   "plank.jpg": 319073,
+   "plank_bump.jpg": 40452,
+   "plank_normal.jpg": 416248
+  }
+ },
+ "metal": {
+  "asset": "Metal031",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Metal031",
+  "task": "132 \u2014 island PBR bake; VLM A/B (sheets in scripts/.tmp/ambientcg-raw/island/)",
+  "files": {
+   "metal.jpg": 27866,
+   "metal_bump.jpg": 14789,
+   "metal_normal.jpg": 6496
+  }
+ },
+ "concrete": {
+  "asset": "Concrete034",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=Concrete034",
+  "task": "132 \u2014 island PBR bake; VLM A/B (sheets in scripts/.tmp/ambientcg-raw/island/)",
+  "files": {
+   "concrete.jpg": 101923,
+   "concrete_bump.jpg": 23948,
+   "concrete_normal.jpg": 156268
+  }
+ },
+ "sky": {
+  "asset": "DaySkyHDRI017B",
+  "site": "ambientcg.com",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/a?id=DaySkyHDRI017B",
+  "task": "132 \u2014 island equirect skydome (1K-TONEMAPPED jpg, no .hdr decode); sun lon 179.6 lat +38.4 (computed); engine sun azimuth aligned via dome rotation.y in textures.ts",
+  "files": {
+   "sky.jpg": 85918
+  }
+ }
+}

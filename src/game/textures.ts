@@ -1603,7 +1603,7 @@ const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, PbrSpec>>> = {
     // Task 131 — tropical island. Every family lit:true (geom carries the
     // per-vertex sun+AO bake, light.ts SUN == the engine sun position).
     // Terrain UVs are world-m/3, so tile k spans 3/k m (isand/igrass ~2.6 m).
-    // Photo-PBR jpgs ship in /staging/textures/maps/island/ until accept.
+    // Task 132: photo-PBR jpgs ACCEPTED — live in /assets/textures/maps/island/
     isand:    { tile: 1.15, bump: 0.50, normal: 0.55, lit: true },   // beach sand
     igrass:  { tile: 1.15, bump: 0.55, normal: 0.60, lit: true },   // dune grass
     irock:   { tile: 1.0,  bump: 0.75, normal: 0.70, lit: true },   // cliffs + boulders

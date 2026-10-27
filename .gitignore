@@ -91,3 +91,6 @@ scripts/.tmp/
 # extracted zips) — never enter git history; only staged/accepted copies count
 /staging/
 scripts/island/shots/
+
+# python bytecode caches (py_compile / imports of bsp scripts)
+__pycache__/

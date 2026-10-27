@@ -473,7 +473,7 @@ export const ISLAND: MapDef = {
   id: 'island',
   name: 'Island',
   version: 1,
-  bsp: { geomUrl: '/staging/maps/island/geom.json' },   // staging per acceptance policy — flip to /assets/maps/island/ on accept
+  bsp: { geomUrl: '/assets/maps/island/geom.json' },   // ACCEPTED (Task 132): island promoted staging->assets, same as office in Task 130
   boxes,
   losBoxes,
   spawns,

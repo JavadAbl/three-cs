@@ -38,7 +38,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v11'   // Task 130 acceptance: office map promoted staging->assets — geom.json now /assets/maps/office/ + 21 texture jpgs /assets/textures/maps/office/ (these URLs were served from /staging under v10, so the bump sweep makes the /assets URLs resolve everywhere). User accepted cs_office as v1 with known quality issues to improve later (distance moire, coplanar z-fight, flat per-vertex GoldSrc lighting). (v10 was Task 125's weapons PBR + icon rotation; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
+export const ASSET_CACHE_VERSION = 'v12'   // Task 132 acceptance: island map promoted staging->assets — geom.json now /assets/maps/island/ + sky.jpg /assets/maps/island/ + 25 texture jpgs /assets/textures/maps/island/ (these URLs were served from /staging under v11, so the bump sweep makes the /assets URLs resolve everywhere; also a 5th container wipe had emptied /staging, making the regen path — island-regen.sh — the live proof of the wipe-resilient provenance chain). User accepted Island as v1 (PBR + HDRI look, after 3 hotfixes: bot graph, fall-through, invisible walls). (v11 was Task 130's office acceptance; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
