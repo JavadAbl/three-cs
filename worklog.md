@@ -5,11 +5,14 @@
 > in git: `git show 67e81f6:worklog.md`. This file keeps the live state
 > snapshot, the standing rules/protocols, and a one-line ledger of every task.
 
-## Current state snapshot (as of Task 130)
+## Current state snapshot (as of Task 132)
 
-- **Game**: CS-style web FPS. 5 maps (dust, dust2, aim_headshot + cs_office CS 1.6
-  BSP imports, aimdepot night). cs_office accepted as v1 in Task 130 (user: many
-  issues to improve later — see Task-127 known-limitations list). Full 42-entry weapon roster (CS 1.6 category buy menu,
+- **Game**: CS-style web FPS. 6 maps (dust, dust2, aim_headshot + cs_office CS 1.6
+  BSP imports, aimdepot night, island tropical day). cs_office accepted as v1 in
+  Task 130 (user: many issues to improve later — see Task-127 known-limitations
+  list). island accepted as v1 in Task 132 (user: "island accepted" — PBR+HDRI
+  look; polish backlog queued: floating dock piece near B, palm frond polys,
+  grass macro variation, ocean shader pass Task 134). Full 42-entry weapon roster (CS 1.6 category buy menu,
   team-filtered), 6 grenades, C4 defusal, 5v5 bot fill (easy/normal/hard),
   economy + kill rewards, CS-style recoil, quick-switch/reload-cancel, directional
   damage indicators, outline crosshair.
@@ -22,9 +25,10 @@
   from sourcesounds/csgo (Task 120). User's own fire recordings kept for
   ak74_fire + m4_fire. Raw sourcesounds clone (10,223 CS:GO sounds, gitignored)
   at `assets/packs/sourcesounds-csgo/` for future grabs.
-- **Git**: local == origin/main. Asset cache `ASSET_CACHE_VERSION = 'v11'`
-  (`src/game/preloader.ts`; v11 = Task-130 office acceptance). `public/staging/`
-  empty — nothing pending.
+- **Git**: local == origin/main. Asset cache `ASSET_CACHE_VERSION = 'v12'`
+  (`src/game/preloader.ts`; v12 = Task-132 island acceptance, v11 = office).
+  `public/staging/` empty — nothing pending. PAT: user explicitly WAIVED
+  rotation ("forgot about token concerns") — reminders dropped permanently.
 - **Servers**: web `bun run dev` :3000, game server `mini-services/game-server`
   (bun --hot) :3003, platform proxy :81 (**live multiplayer/verification must
   enter via http://localhost:81/ — the socket uses the XTransformPort=3003
@@ -473,3 +477,25 @@ Stage Summary:
 - every island slope <= ~41 deg now walks smooth with no jumping; honest cliffs still block by design; office/BSP behavior byte-identical; server vision + grenades untouched (losBoxes proven bit-for-bit)
 - collider-probe.ts is now a triple launch gate for heightfield changes: ground coverage (VOID/PIT) + invisible walls (per-cell rises) + losBoxes tree integrity — plus the existing graph/live/office suites
 - still pending: island accept gate (user sign-off on PBR+HDRI look -> staging->assets mv + ASSET_CACHE_VERSION v11->v12 + regressions), polish backlog (floating dock piece near B, palm frond polys, grass macro variation, ocean shader Task 134), PAT rotation
+
+---
+Task ID: 132 (acceptance — island v1 promoted to /assets)
+Agent: main
+Task: user "island accepted (forgot about token concerns)" — run the full v12 acceptance flow: staging->assets promotion, ASSET_CACHE_VERSION bump, regressions, live verification, push
+
+Work Log:
+- discovered the 5th container wipe at flow start: public/staging/ AND scripts/.tmp/ gone -> island was UNPLAYABLE in the gap (geom.json 404 on :81/:3000); the committed provenance chain was the recovery path and regen was MANDATORY before any mv/flip
+- regen (scripts/bsp/island-regen.sh, NEW committed driver, ran as double-fork orphan ~39 min): gen.ts -> sha256 geom.json cbea66a6 == hotfix-3 record (byte-identical), data JSONs diff-clean vs HEAD (determinism gate held); hf-tar-index.py 0..7 (~6GB @ ~3.2MB/s sustained, resumable index-0N.json); extract-island-hf.py full (8 PBR winners, 21s); extract-island-sky.py (NEW — DaySkyHDRI017B 1K-TONEMAPPED only, avoids re-running VLM triage for one file); bake-island-textures.py -> 5.29MB staged, matches Task-132 record
+- flips: gen.ts:476 geomUrl /staging -> /assets AT THE GENERATOR (regen emits both wrappers — flipping the emitted file alone would be reverted by the next regen); preloader.ts ASSET_CACHE_VERSION v11 -> v12; textures.ts island comment; .gitignore += __pycache__/; live harness already accepted both geom URLs (no edit needed)
+- gates BEFORE the mv (staging state): collider-probe ALL PASS (0 VOID/0 PIT/0 invisible walls/0 blocked edges/losBoxes bit-for-bit/parity 19,001+5,008); graph-check + graph-cfg ALL PASS; scoped tsc src+shared clean (root tsc has 31 pre-existing lines in scripts/+skills/ one-offs — never shipped); island live harness ALL PASS pre-mv (bots-on-surface 0.04m/99); office regression ALL PASS
+- mv: public/staging/textures/maps/island -> assets; geom.json + sky.jpg -> assets/maps/island/; staging/ now GONE (rmdir clean — nothing pending, office-acceptance convention)
+- clean dev restart (kill by PID 1059/1061/1062/1083/1109, port verified free, setsid orphan relaunch; PID 1212 bun run dev = GAME-SERVER tree, do not kill); first GET recompiled 15.5s -> 200; game-server NOT restarted (data JSONs byte-identical, no need)
+- live gates AFTER mv: island harness ALL PASS with "geom.json served from /assets"; office regression ALL PASS; curl HEAD 200s on geom/sky/textures from /assets
+- in-browser verification (:81 — the ONLY route where the game socket connects; agent-browser): lobby ISLAND card -> PLAY (FILL default TRUE untouched) -> LOADING screen at shot time (first shot burned on the loader — wait for spawn, THEN shoot); canvas click spawned; __eng probe footgun: state/players are FUNCTIONS — __eng.state() => {phase:'live', map:'island'}, __eng.players()[0] fields = id/team/w/alive/pos/rot/...; resource timing = every island URL from /assets, ZERO /staging island traffic; VLM 3-shot review (t132-acc-01..04.png + vlm jsons): first-person confirmed, photographic PBR (sand/bark/fabric/wood grain), consistent photo-HDRI sky, verdict ACCEPT, defects only known-accepted backlog
+- commit 8598455 (amended over the platform's UUID auto-commit e99b7dd which held only exec-bit noise; 63 files, binaries ~9.8MB) pushed 24a0a9d..8598455; local == origin/main, tree clean
+- PAT: user explicitly waived rotation ("forgot about token concerns") — rotation reminders DROPPED permanently; recorded in snapshot so future sessions don't re-nag
+
+Stage Summary:
+- Island is the 6th committed map, v1 accepted, ASSET_CACHE_VERSION v12 live; assets/ = geom 4.4MB + sky 85KB + 24 PBR jpgs + sources.json; staging empty
+- provenance chain proven END-TO-END against a real wipe: 39-min one-command recovery, byte-identical outputs — island-regen.sh is now the canonical post-wipe entry point
+- island polish backlog carried (floating dock piece near B, palm frond polys, grass macro variation, ocean shader Task 134); no open blockers
