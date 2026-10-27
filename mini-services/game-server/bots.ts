@@ -90,6 +90,84 @@ function buildGraph(def: MapDef, cfg: Omit<MapGraph, 'def' | 'nodeById' | 'adj'>
   return { def, nodeById, adj, ...cfg }
 }
 
+/** Task 132 — derive a sane bot cfg from the MapDef alone (sites, spawns,
+ * waypoints): plant nodes = nearest WP on each site pad (y-banded so a
+ * hilltop site picks hilltop nodes, not the beach below); holds = 4 spread
+ * picks around each site + the A/B midpoint; T holders wait near their own
+ * spawn; escort routes = two perpendicular lane midpoints T-spawn->site;
+ * every holder faces the ENEMY spawn centroid (the office watch precedent).
+ * Deterministic, zero hand-typed ids — and the safety net that makes a
+ * missing GRAPHS entry degrade to "sane but untuned" instead of the
+ * island launch bug: bots walking the DUST waypoint cloud (dust2 XZ +
+ * dust2 floor heights) underneath island terrain. */
+export function deriveGraphCfg(def: MapDef): Omit<MapGraph, 'def' | 'nodeById' | 'adj'> {
+  const wps = def.waypoints
+  if (!wps.length || !def.sites?.A || !def.sites?.B || !def.spawns?.CT?.length || !def.spawns?.T?.length) {
+    throw new Error(`deriveGraphCfg(${def.id}): missing waypoints/sites/spawns`)
+  }
+  const A = def.sites.A, B = def.sites.B
+  const cen = (ps: Array<{ x: number; z: number }>) => {
+    let x = 0, z = 0
+    for (const p of ps) { x += p.x; z += p.z }
+    return { x: x / ps.length, z: z / ps.length }
+  }
+  const ctC = cen(def.spawns.CT), tC = cen(def.spawns.T)
+  const band = (w: WP, y: number, half: number) => w.y >= y - half && w.y <= y + half
+  const near = (x: number, z: number, y?: number): WP => {
+    let best: WP | null = null, bd = Infinity
+    for (const w of wps) {
+      if (y !== undefined && !band(w, y, 2.5)) continue
+      const d = (w.x - x) ** 2 + (w.z - z) ** 2
+      if (d < bd) { bd = d; best = w }
+    }
+    if (best) return best
+    return near(x, z)   // empty y-band: retry unfiltered
+  }
+  const spread = (x: number, z: number, count: number, spacing: number, y?: number): WP[] => {
+    const scored = wps
+      .filter(w => y === undefined || band(w, y, 2.5))
+      .map(w => ({ w, d: (w.x - x) ** 2 + (w.z - z) ** 2 }))
+      .sort((a, b) => a.d - b.d)
+    const out: WP[] = []
+    for (const s of scored) {
+      if (out.every(o => Math.hypot(o.x - s.w.x, o.z - s.w.z) >= spacing)) out.push(s.w)
+      if (out.length === count) break
+    }
+    if (out.length < count && y !== undefined) return spread(x, z, count, spacing)  // empty band
+    return out
+  }
+  const plantA = near(A.x, A.z, A.y), plantB = near(B.x, B.z, B.y)
+  const aHold = spread(A.x, A.z, 4, 3.5, A.y)
+  const bHold = spread(B.x, B.z, 4, 3.5, B.y)
+  const midHold = spread((A.x + B.x) / 2, (A.z + B.z) / 2, 4, 4)
+  const tHolds = spread(tC.x, tC.z, 2, 4)
+  const lane = (site: { x: number; z: number }, plant: WP): Array<[string, string]> => {
+    const mx = (tC.x + site.x) / 2, mz = (tC.z + site.z) / 2
+    const dx = site.x - tC.x, dz = site.z - tC.z
+    const l = Math.hypot(dx, dz) || 1
+    const px = -dz / l, pz = dx / l
+    return [
+      [near(mx + px * 11, mz + pz * 11).id, plant.id],
+      [near(mx - px * 11, mz - pz * 11).id, plant.id],
+    ]
+  }
+  const watch: Record<string, [number, number]> = {}
+  for (const w of [...aHold, ...bHold, ...midHold]) watch[w.id] = [tC.x, tC.z]   // CT holds face T spawn
+  for (const w of tHolds) watch[w.id] = [ctC.x, ctC.z]                          // T holders face CT spawn
+  return {
+    aHold: aHold.map(w => w.id),
+    bHold: bHold.map(w => w.id),
+    midHold: midHold.map(w => w.id),
+    aRoutes: lane(A, plantA),
+    bRoutes: lane(B, plantB),
+    tHoldA: tHolds[0]?.id ?? plantA.id,
+    tHoldB: tHolds[1]?.id ?? plantB.id,
+    plantA: plantA.id,
+    plantB: plantB.id,
+    watch,
+  }
+}
+
 const GRAPHS: Record<string, MapGraph> = {
   dust: buildGraph(MAPS.dust, {
     aHold: ['aDefault', 'aRampTop', 'aPit'],
@@ -186,10 +264,27 @@ const GRAPHS: Record<string, MapGraph> = {
       of3279: [-31.2, 28.0], of3247: [33.6, -28.0], of3271: [34.5, -26.6], of3275: [-32.1, 28.9],
     },
   }),
+  // Task 132 — island: derived from the generated MapDef (see deriveGraphCfg).
+  // The Task-131 launch forgot this entry and graphFor() silently served the
+  // DUST graph: island bots walked toward dust2 XZ with dust2 floor heights
+  // and sank 1.3-2.3 m under the village terrain on round start ("bots fall
+  // into the ground when they start moving"). Derive-at-boot keeps this
+  // regen-proof — new island geometry changes wp ids, never this line.
+  island: buildGraph(MAPS.island, deriveGraphCfg(MAPS.island)),
 }
 
 function graphFor(m: Match): MapGraph {
-  return GRAPHS[m.mapId] ?? GRAPHS.dust
+  const g = GRAPHS[m.mapId]
+  if (g) return g
+  // Task 132: NEVER borrow another map's graph. The silent `?? GRAPHS.dust`
+  // shipped the island launch with bots pathing the dust2 waypoint cloud —
+  // dust2 XZ targets + dust2 floor y under island terrain. Unknown maps now
+  // derive their own cfg from their own def (loudly), so a missing hand-tuned
+  // entry degrades to sane-but-untuned instead of wrong-map coordinates.
+  const def = (MAPS as Record<string, MapDef>)[m.mapId]
+  if (!def) throw new Error(`graphFor: unknown map '${m.mapId}'`)
+  console.error(`[bots] no hand-tuned graph for '${m.mapId}' — deriving from sites/spawns (add a GRAPHS entry to tune)`)
+  return buildGraph(def, deriveGraphCfg(def))
 }
 
 function bfs(from: string, to: string, g: MapGraph): string[] {

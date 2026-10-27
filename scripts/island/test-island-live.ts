@@ -5,11 +5,26 @@
 //   the island waypoint graph, a T bot CARRIES the C4 (island IS a bomb map —
 //   inverse of the office elimination trio)
 import { io } from 'socket.io-client'
+import wpData from '../../src/game/map-island-data.json'
 
 const URL = 'http://localhost:3003'
 const WEB = process.env.WEB_BASE ?? 'http://localhost:3000'   // Next dev/prod host
 const ROOM = 'island-test-' + Math.random().toString(36).slice(2, 6)
 const sock = io(URL, { path: '/' })
+const ISLAND_WPS = wpData.waypoints as Array<{ id: string; x: number; y: number; z: number }>
+
+/** Task 132 regression: nearest island waypoint's y at the bot's XZ — bots
+ * running a WRONG-MAP graph (the dust-fallback launch bug) lerp toward dust2
+ * floor heights and sink up to 2.3 m under the terrain within seconds of
+ * round start. Sampling every alive bot's |dy| during live catches it. */
+function nearestWpY(x: number, z: number): number {
+  let best = ISLAND_WPS[0], bd = Infinity
+  for (const w of ISLAND_WPS) {
+    const d = (w.x - x) ** 2 + (w.z - z) ** 2
+    if (d < bd) { bd = d; best = w }
+  }
+  return best.y
+}
 
 let myId = ''
 let phase = ''
@@ -18,6 +33,8 @@ let spawnCheck: string | null = null
 let botMoveCheck = false
 let lastBotPos = new Map<string, [number, number]>()
 let movedBots = 0
+let worstDy = 0            // Task 132: worst |bot.y - nearest island WP y| seen
+let dySamples = 0
 let results: Record<string, string> = {}
 let finished = false
 let bombCarrierId: string | null = null
@@ -29,7 +46,7 @@ function finish() {
   finished = true
   console.log('\n===== RESULTS =====')
   for (const [k, v] of Object.entries(results)) console.log(`${k.padEnd(22)} ${v}`)
-  const need = ['map-served', 'geom-served', 'spawn-standable', 'bots-move', 'round-flow', 'bomb-carrier-seen']
+  const need = ['map-served', 'geom-served', 'spawn-standable', 'bots-move', 'bots-on-surface', 'round-flow', 'bomb-carrier-seen']
   const allPass = need.every(k => results[k]?.startsWith('PASS'))
   console.log('=====', allPass ? 'ALL PASS' : 'INCOMPLETE/FAILED', '=====')
   sock.disconnect()
@@ -98,13 +115,25 @@ sock.on('snapshot', (d: { ps: unknown[][] }) => {
       } else if (phase === 'freeze') {
         lastBotPos.set(id, [x, z])
       }
+      // Task 132: bots must stay ON the island surface (wrong-graph bots sink)
+      if (phase === 'live') {
+        const dy = Math.abs(y - nearestWpY(x, z))
+        dySamples++
+        if (dy > worstDy) worstDy = dy
+      }
     }
   }
   if (movedBots >= 2 && !botMoveCheck) {
     botMoveCheck = true
     done('bots-move', true, `${movedBots} bots navigated island waypoints`)
   }
-  const need = ['map-served', 'geom-served', 'spawn-standable', 'bots-move', 'round-flow', 'bomb-carrier-seen']
+  // once two bots have walked, judge the surface adherence over what we saw
+  if (botMoveCheck && dySamples > 60 && !results['bots-on-surface']) {
+    const ok = worstDy <= 1.7
+    done('bots-on-surface', ok,
+      `worst |y - nearestWP.y| = ${worstDy.toFixed(2)}m over ${dySamples} samples ${ok ? '(on the terrain)' : '— SUNK INTO GROUND (wrong-map graph?)'}`)
+  }
+  const need = ['map-served', 'geom-served', 'spawn-standable', 'bots-move', 'bots-on-surface', 'round-flow', 'bomb-carrier-seen']
   if (need.every(k => results[k]?.startsWith('PASS')) && roundNo >= 1 && phase === 'live') finish()
 })
 
