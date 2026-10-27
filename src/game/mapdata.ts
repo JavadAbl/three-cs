@@ -24,6 +24,13 @@ export interface Box {
     // Photo-PBR jpgs land via PBR_BY_MAP.island when baked.
     | 'isand' | 'igrass' | 'irock' | 'bark' | 'leaf'
   decor?: boolean                   // visual skyline only — excluded from LOS
+  stair?: boolean                   // Task 131 island terrain staircase collider — the
+                                    // generator flags every terrain stair so the engine may
+                                    // auto-step up to STAIR_CLIMB (0.95) instead of STEP_UP
+                                    // (0.55): moderate slopes are staircases of <= 0.5 m
+                                    // steps, but variance-stopped cells can leave taller
+                                    // honest steps. Never set on props or BSP boxes —
+                                    // office crates keep the CS step (jump required).
 }
 
 export interface Vec3 { x: number; y: number; z: number }

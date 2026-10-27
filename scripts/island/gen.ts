@@ -232,7 +232,7 @@ rowboat(groups, propOut, PIER.x + PIER.dirX * 4, PIER.z + PIER.dirZ * 4 - 3.2, 0
 radar(groups, propOut, APAD.x, APAD.z, height(APAD.x, APAD.z), SEED + 81)
 
 // ---------------------------------------------------------------- terrain boxes
-// Task 131 hotfix ("i fall to the ground in some places"): v1 shipped ONLY
+// Task 131 hotfix #2 ("i fall to the ground in some places"): v1 shipped ONLY
 // the hMin > 1.25 stairs as colliders/LOS — the B dock pad (BPAD.y=1.2), the
 // whole beach ring and the CT->B shoreline corridor had NO boxes, so the
 // client player fell through the world there (failsafe y<-6 yanked them
@@ -252,34 +252,90 @@ radar(groups, propOut, APAD.x, APAD.z, height(APAD.x, APAD.z), SEED + 81)
 // worst-frame fall span (vel cap 35 * dt cap 0.1 = 3.5m) minus player
 // height (1.8m) => >= 1.7m; 9m leaves margin and the deep bottoms are
 // invisible (BSP maps render geom.json, boxes are collision-only).
+//
+// Task 131 hotfix #3 ("an invisible object blocks me — I have to jump to
+// bypass it, but there is nothing in my way"): colliders are STAIRCASES.
+// A slope is a ladder of flat-top boxes, so walking uphill walks into the
+// VERTICAL FACE of the next-higher cell; the client auto-steps rises <=
+// STEP_UP 0.55 (engine.ts), anything taller is a wall. With subdivision
+// stopping at corner variance 0.9, moderate slopes (12-36 deg — the A-hill
+// flanks ~13.5 deg, cove walls ~14.4 deg, pad shoulders, the wading ring)
+// kept their 2.5/1.25 m cells and left 0.55-0.9 m steps = invisible walls
+// on smooth-looking ground (step-study.ts measured 3914 blocked walkable
+// steps incl 1700 invisible ones and 202 BLOCKED NAVGRAPH EDGES — bots
+// path fine but players had to bunny-jump the routes). FIX, two parts:
+//   colBoxes: above chest depth the adaptive subdivision tightens from
+//     variance > 0.9 to > 0.5 — a variance-stopped cell's planar step is
+//     <= 0.5 < STEP_UP, so every slope <= ~41 deg walks smooth (navgraph
+//     terrain is <= 34 deg by the WP slope rule). Top-level cells whose
+//     min corner is <= -2.5 m (chest-deep sea; the failsafe yanks at feet
+//     -6 and nobody fights out there) FREEZE to the hotfix-2 variance-0.9
+//     tree — the `fine` flag is decided once at the 2.5 m parent so the
+//     deep band stays byte-identical to the verified state. Every terrain
+//     collider carries stair:true.
+//   engine.ts: the step-up limit is PER BOX — stair:true boxes climb up to
+//     STAIR_CLIMB 0.95 (variance-stopped cells cannot produce taller planar
+//     steps; the > 0.95 residue is the 60 deg SE-shore cliff band, which
+//     SHOULD block). Props and BSP maps carry no flag and keep the CS 0.55
+//     step — office crates still require a jump.
+// losBoxes STAY the hotfix-2 set BIT-FOR-BIT (same variance-0.9 tree, same
+// hMin > 0.95 membership, same order — collider-probe.ts re-derives the
+// tree and asserts this). The server's hasLOS is a brute-force ray loop
+// over the array (game-server/index.ts) and the committed set is
+// live-verified; finer members would only double server vision cost and
+// add new crouch-eye blockers (children of low parents can have tops > 1.03
+// = above crouch eye 1.08).
 const losBoxes: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }> = []
-const colBoxes: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }> = []
+const colBoxes: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string; stair?: true }> = []
 const step = RES_LOS
-// adaptive staircase: a 2.5 m cell on a steep face has min-corner tops up to
-// ~3 m under the VISUAL surface (players walk inside the hill — the second
-// half of the fall-through report). Cells with corner variance > 0.9 m
-// subdivide 2x2 down to 0.625 m, so the stair top stays within ~1.1 m of
-// the rendered face everywhere walkable. Flat cells never subdivide — they
-// emit byte-identical v1 boxes, so already-verified ground is untouched.
-const emitTerrainBox = (x: number, z: number, size: number): void => {
+const corners = (x: number, z: number, size: number): [number, number, number, number, number, number] => {
   const h0 = height(x, z), h1 = height(x + size, z), h2 = height(x, z + size), h3 = height(x + size, z + size)
-  const hMin = Math.min(h0, h1, h2, h3)
-  const hMax = Math.max(h0, h1, h2, h3)
+  return [h0, h1, h2, h3, Math.min(h0, h1, h2, h3), Math.max(h0, h1, h2, h3)]
+}
+// player-collider staircase — fine (variance > 0.5) above chest depth,
+// hotfix-2 tree (variance > 0.9) below; every box flagged stair:true so
+// engine.ts may auto-step up to 0.95 (see header). bot depth: the Y-sweep
+// landing test needs slabs thicker than the worst-frame fall span
+// (35 m/s * 0.1 dt = 3.5 m) minus player height => 9 m slabs below 1.25,
+// v1's top-7 above (byte-identical flat high cells).
+const emitColBox = (x: number, z: number, size: number, fine: boolean): void => {
+  const [h0, h1, h2, h3, hMin, hMax] = corners(x, z, size)
   if (hMax < -5.8) return                    // == terrainQuad deep-sea skip
-  if (hMax - hMin > 0.9 && size > 0.7) {
+  if (hMax - hMin > (fine ? 0.5 : 0.9) && size > 0.7) {
     const s2 = size / 2
-    emitTerrainBox(x, z, s2); emitTerrainBox(x + s2, z, s2); emitTerrainBox(x, z + s2, s2); emitTerrainBox(x + s2, z + s2, s2)
+    emitColBox(x, z, s2, fine); emitColBox(x + s2, z, s2, fine); emitColBox(x, z + s2, s2, fine); emitColBox(x + s2, z + s2, s2, fine)
     return
   }
   const top = hMin - 0.22
   const bot = hMin > 1.25 ? Math.max(0.2, top - 7) : top - 9
-  const b = { x: x + size / 2, y: (top + bot) / 2, z: z + size / 2, w: size + 0.05, h: top - bot, d: size + 0.05, tex: 'irock' }
-  colBoxes.push(b)
-  if (hMin > 0.95) losBoxes.push(b)
+  colBoxes.push({ x: x + size / 2, y: (top + bot) / 2, z: z + size / 2, w: size + 0.05, h: top - bot, d: size + 0.05, tex: 'irock', stair: true })
 }
 for (let x = BOUNDS.minX; x < BOUNDS.maxX; x += step) {
   for (let z = BOUNDS.minZ; z < BOUNDS.maxZ; z += step) {
-    emitTerrainBox(x, z, step)
+    const [h0, h1, h2, h3, , hMax] = corners(x, z, step)
+    if (hMax < -5.8) continue                // deep sea: no floor drawn, none to stand on
+    emitColBox(x, z, step, Math.min(h0, h1, h2, h3) > -2.5)
+  }
+}
+// server LOS + grenade-floor staircase — EXACT hotfix-2 emission (variance
+// 0.9 tree, hMin > 0.95 membership, traversal order preserved so the array
+// is byte-identical; collider-probe.ts asserts this after every regen).
+const emitLosBox = (x: number, z: number, size: number): void => {
+  const [, , , , hMin, hMax] = corners(x, z, size)
+  if (hMax < -5.8) return
+  if (hMax - hMin > 0.9 && size > 0.7) {
+    const s2 = size / 2
+    emitLosBox(x, z, s2); emitLosBox(x + s2, z, s2); emitLosBox(x, z + s2, s2); emitLosBox(x + s2, z + s2, s2)
+    return
+  }
+  if (hMin <= 0.95) return                  // committed walkable-band rule
+  const top = hMin - 0.22
+  const bot = hMin > 1.25 ? Math.max(0.2, top - 7) : top - 9
+  losBoxes.push({ x: x + size / 2, y: (top + bot) / 2, z: z + size / 2, w: size + 0.05, h: top - bot, d: size + 0.05, tex: 'irock' })
+}
+for (let x = BOUNDS.minX; x < BOUNDS.maxX; x += step) {
+  for (let z = BOUNDS.minZ; z < BOUNDS.maxZ; z += step) {
+    emitLosBox(x, z, step)
   }
 }
 
@@ -337,12 +393,12 @@ console.log(`waypoint purge: ${wps.length - wpFinal.length} isolated dropped (0 
 
 // ---------------------------------------------------------------- assemble + emit
 const propBoxes = propOut.boxes.map((b: PropBox) => ({ ...b, tex: 'plank' as string }))
-const allBoxes: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }> = [
-  ...colBoxes,   // player colliders (every rendered cell)
+const allBoxes: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string; stair?: true }> = [
+  ...colBoxes,   // player colliders (every rendered cell, stair:true — engine may step 0.95)
   ...propBoxes,
 ]
 const allLos: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }> = [
-  ...losBoxes,   // server LOS + grenade floors (hMin > 0.95 + props)
+  ...losBoxes,   // server LOS + grenade floors (hotfix-2 tree, hMin > 0.95 + props)
   ...propBoxes,
 ]
 const padH = (cx: number, cz: number) => height(cx, cz)
@@ -391,7 +447,7 @@ writeFileSync(`${OUT_DIR}/geom.json`, JSON.stringify(geom))
 // literals make tsc explode with TS2590 (union too complex; office's 9.6k
 // box literals pass and this 1.7k fails — checker budget is order-dependent,
 // not worth fighting). resolveJsonModule is on; Next bundles JSON natively.
-const boxOut = (bs: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }>) =>
+const boxOut = (bs: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string; stair?: true }>) =>
   bs.map(b => ({ ...b, x: R3(b.x), y: R3(b.y), z: R3(b.z), w: R3(b.w), h: R3(b.h), d: R3(b.d) }))
 writeFileSync('src/game/map-island-data.json', JSON.stringify({
   boxes: boxOut(allBoxes),
@@ -478,7 +534,9 @@ export const ISLAND: MapDef = {
 const grpStats = [...groups.values()].map(g => `${g.tex}(${(g.idx.length / 3).toFixed(0)})`).join(' ')
 console.log(`terrain+prop tris: ${tris + [...groups.values()].reduce((a, g) => a + g.idx.length / 3, 0) - tris}`)
 console.log(`groups: ${grpStats}`)
-console.log(`terrain collider boxes: ${colBoxes.length} (LOS subset ${losBoxes.length}), prop boxes: ${propOut.boxes.length}, total boxes: ${allBoxes.length}, losBoxes: ${allLos.length}`)
+const fineN = colBoxes.filter(b => b.stair).length
+const sizeN = (s: number) => colBoxes.filter(b => Math.abs(b.w - (s + 0.05)) < 0.001).length
+console.log(`terrain collider boxes: ${colBoxes.length} (all stair-flagged: 2.5m ${sizeN(2.5)}, 1.25m ${sizeN(1.25)}, 0.625m ${sizeN(0.625)}), losBoxes members: ${losBoxes.length} (hotfix-2 tree, unchanged), prop boxes: ${propOut.boxes.length}, total boxes: ${allBoxes.length}, losBoxes: ${allLos.length}`)
 console.log(`waypoints: ${wpFinal.length} (purged ${wps.length - wpFinal.length}), edges: ${edgeFinal.length}`)
 console.log(`palms: ${palmSpots.length}, rocks: ${rockN}`)
 console.log(`A site: ${JSON.stringify(siteA)}  B site: ${JSON.stringify(siteB)}`)
@@ -487,3 +545,6 @@ console.log(`geom.json: ${(JSON.stringify(geom).length / 1e6).toFixed(2)} MB`)
 // sanity: no NaN anywhere
 const bad = [...groups.values()].some(g => g.pos.some(v => !Number.isFinite(v))) || wps.some(w => !Number.isFinite(w.y))
 console.log(bad ? '!! NaN DETECTED !!' : 'sanity: all finite OK')
+// sanity: every emitted collider box must be finite + have sane extent
+const badBox = allBoxes.some(b => ![b.x, b.y, b.z, b.w, b.h, b.d].every(Number.isFinite) || b.w <= 0 || b.h <= 0 || b.d <= 0)
+console.log(badBox ? '!! BAD BOX DETECTED !!' : 'sanity: all boxes finite/positive OK')

@@ -114,6 +114,15 @@ const EYE_CROUCH = 1.08
 const GRAVITY = 22
 const JUMP_V = 7.4
 const STEP_UP = 0.55
+// Task 131 hotfix #3 (island "invisible walls"): terrain slopes are emitted
+// as staircase AABBs (map-island), so walking uphill walks into the vertical
+// face of the next-higher cell. STEP_UP alone is too short for moderate
+// hills — the generator's fine staircase caps planar steps at 0.5 m, but
+// variance-stopped cells (steep shoulders/cliff bases) can still stack a
+// step up to ~0.9 m where the visible terrain is plainly walkable. Terrain
+// colliders carry stair:true (mapdata Box) and may be auto-stepped up to
+// STAIR_CLIMB; props + BSP maps keep the CS 0.55 step (crates need a jump).
+const STAIR_CLIMB = 0.95
 const CROUCH_TUCK = 0.55   // airborne crouch raises virtual feet (CS-style crouch-jump)
 const FALL_SAFE_V = 12.5   // max safe landing speed (~2.8m drop); above this = fall damage
 
@@ -2046,7 +2055,8 @@ export class Engine {
         // try step up (grounded climbing only - never while crouch-tucked in air)
         const rise = c.max.y - this.pos.y
         if (rise <= 0.01) continue // feet level with this top (staircase-seam float) — not a horizontal blocker
-        if (this.tuck === 0 && rise <= STEP_UP && this.vel.y <= 0.1) {
+        const stepLim = c.box.stair ? STAIR_CLIMB : STEP_UP   // Task 131 hotfix #3 — see STAIR_CLIMB above
+        if (this.tuck === 0 && rise <= stepLim && this.vel.y <= 0.1) {
           if (!this.overlapsAt(this.pos.x, c.max.y + 0.02, this.pos.z)) {
             this.pos.y = c.max.y + 0.02
             this.onGround = true
