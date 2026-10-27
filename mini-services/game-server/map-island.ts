@@ -5,6 +5,7 @@ import type { MapDef, Box, WP, Vec3, SiteDef } from './mapdata'
 import data from './map-island-data.json'
 
 const boxes = data.boxes as unknown as Box[]
+const losBoxes = data.losBoxes as unknown as Box[]
 const waypoints = data.waypoints as unknown as WP[]
 const spawns = data.spawns as unknown as { CT: Vec3[]; T: Vec3[] }
 const sites = data.sites as unknown as { A: SiteDef; B: SiteDef }
@@ -15,7 +16,7 @@ export const ISLAND: MapDef = {
   name: 'Island',
   version: 1,
   boxes,
-  losBoxes: boxes,
+  losBoxes,
   spawns,
   spawnYaw: { CT: 3.141592653589793, T: 0 },
   sites,

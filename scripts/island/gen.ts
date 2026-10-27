@@ -231,16 +231,55 @@ rowboat(groups, propOut, PIER.x + PIER.dirX * 4, PIER.z + PIER.dirZ * 4 - 3.2, 0
 // radar station on the A pad
 radar(groups, propOut, APAD.x, APAD.z, height(APAD.x, APAD.z), SEED + 81)
 
-// ---------------------------------------------------------------- staircase LOS boxes
+// ---------------------------------------------------------------- terrain boxes
+// Task 131 hotfix ("i fall to the ground in some places"): v1 shipped ONLY
+// the hMin > 1.25 stairs as colliders/LOS — the B dock pad (BPAD.y=1.2), the
+// whole beach ring and the CT->B shoreline corridor had NO boxes, so the
+// client player fell through the world there (failsafe y<-6 yanked them
+// back to CT spawn) and server-sim grenades sank into the void at B.
+// Split the two consumers:
+//   colBoxes (client player colliders) — EVERY rendered cell; the skip is
+//     terrainQuad's own deep-sea rule (all 4 corners < -5.8 = no ground
+//     drawn = no ground to stand on). No collision where there is no floor.
+//   losBoxes (server LOS + grenade floors) — gains the 0.95-1.25 walkable
+//     band so nades get floors on B/beach. Vision-safe: band tops are
+//     <= 1.03 < crouch eye 1.08, and every hasLOS endpoint (hit validation,
+//     bot vision, HE/flash/defuse) sits at eye height or higher, so no
+//     standing/crouching eye-to-eye ray can be blocked by the new members.
+// hMin > 1.25 cells keep the EXACT v1 formula (byte-identical stairs);
+// new cells use bot = top - 9 — the Y-sweep landing test reads
+// feet+h > c.min.y at END of frame, so slabs must be thicker than the
+// worst-frame fall span (vel cap 35 * dt cap 0.1 = 3.5m) minus player
+// height (1.8m) => >= 1.7m; 9m leaves margin and the deep bottoms are
+// invisible (BSP maps render geom.json, boxes are collision-only).
 const losBoxes: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }> = []
+const colBoxes: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }> = []
 const step = RES_LOS
+// adaptive staircase: a 2.5 m cell on a steep face has min-corner tops up to
+// ~3 m under the VISUAL surface (players walk inside the hill — the second
+// half of the fall-through report). Cells with corner variance > 0.9 m
+// subdivide 2x2 down to 0.625 m, so the stair top stays within ~1.1 m of
+// the rendered face everywhere walkable. Flat cells never subdivide — they
+// emit byte-identical v1 boxes, so already-verified ground is untouched.
+const emitTerrainBox = (x: number, z: number, size: number): void => {
+  const h0 = height(x, z), h1 = height(x + size, z), h2 = height(x, z + size), h3 = height(x + size, z + size)
+  const hMin = Math.min(h0, h1, h2, h3)
+  const hMax = Math.max(h0, h1, h2, h3)
+  if (hMax < -5.8) return                    // == terrainQuad deep-sea skip
+  if (hMax - hMin > 0.9 && size > 0.7) {
+    const s2 = size / 2
+    emitTerrainBox(x, z, s2); emitTerrainBox(x + s2, z, s2); emitTerrainBox(x, z + s2, s2); emitTerrainBox(x + s2, z + s2, s2)
+    return
+  }
+  const top = hMin - 0.22
+  const bot = hMin > 1.25 ? Math.max(0.2, top - 7) : top - 9
+  const b = { x: x + size / 2, y: (top + bot) / 2, z: z + size / 2, w: size + 0.05, h: top - bot, d: size + 0.05, tex: 'irock' }
+  colBoxes.push(b)
+  if (hMin > 0.95) losBoxes.push(b)
+}
 for (let x = BOUNDS.minX; x < BOUNDS.maxX; x += step) {
   for (let z = BOUNDS.minZ; z < BOUNDS.maxZ; z += step) {
-    const hMin = Math.min(height(x, z), height(x + step, z), height(x, z + step), height(x + step, z + step))
-    if (hMin <= 1.25) continue
-    const top = hMin - 0.22
-    const bot = Math.max(0.2, top - 7)
-    losBoxes.push({ x: x + step / 2, y: (top + bot) / 2, z: z + step / 2, w: step + 0.05, h: top - bot, d: step + 0.05, tex: 'irock' })
+    emitTerrainBox(x, z, step)
   }
 }
 
@@ -297,9 +336,14 @@ const edgeFinal = edges.filter(([a, b]) => keep.has(a) && keep.has(b))
 console.log(`waypoint purge: ${wps.length - wpFinal.length} isolated dropped (0 edges)`)
 
 // ---------------------------------------------------------------- assemble + emit
+const propBoxes = propOut.boxes.map((b: PropBox) => ({ ...b, tex: 'plank' as string }))
 const allBoxes: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }> = [
-  ...losBoxes,
-  ...propOut.boxes.map((b: PropBox) => ({ ...b, tex: 'plank' as string })),
+  ...colBoxes,   // player colliders (every rendered cell)
+  ...propBoxes,
+]
+const allLos: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }> = [
+  ...losBoxes,   // server LOS + grenade floors (hMin > 0.95 + props)
+  ...propBoxes,
 ]
 const padH = (cx: number, cz: number) => height(cx, cz)
 const siteA = { x: APAD.x, z: APAD.z, r: 9, y: padH(APAD.x, APAD.z) }
@@ -347,8 +391,11 @@ writeFileSync(`${OUT_DIR}/geom.json`, JSON.stringify(geom))
 // literals make tsc explode with TS2590 (union too complex; office's 9.6k
 // box literals pass and this 1.7k fails — checker budget is order-dependent,
 // not worth fighting). resolveJsonModule is on; Next bundles JSON natively.
+const boxOut = (bs: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string }>) =>
+  bs.map(b => ({ ...b, x: R3(b.x), y: R3(b.y), z: R3(b.z), w: R3(b.w), h: R3(b.h), d: R3(b.d) }))
 writeFileSync('src/game/map-island-data.json', JSON.stringify({
-  boxes: allBoxes.map(b => ({ ...b, x: R3(b.x), y: R3(b.y), z: R3(b.z), w: R3(b.w), h: R3(b.h), d: R3(b.d) })),
+  boxes: boxOut(allBoxes),
+  losBoxes: boxOut(allLos),
   spawns: { CT: spawns.CT.map(s => ({ x: R3(s.x), y: R3(s.y), z: R3(s.z) })), T: spawns.T.map(s => ({ x: R3(s.x), y: R3(s.y), z: R3(s.z) })) },
   sites: { A: { x: R3(siteA.x), z: R3(siteA.z), r: siteA.r, y: R3(siteA.y) }, B: { x: R3(siteB.x), z: R3(siteB.z), r: siteB.r, y: R3(siteB.y) } },
   waypoints: wpFinal.map(w => ({ id: w.id, x: R3(w.x), z: R3(w.z), y: R3(w.y) })),
@@ -360,6 +407,7 @@ import type { MapDef, Box, WP, Vec3, SiteDef } from './mapdata'
 import data from './map-island-data.json'
 
 const boxes = data.boxes as unknown as Box[]
+const losBoxes = data.losBoxes as unknown as Box[]
 const waypoints = data.waypoints as unknown as WP[]
 const spawns = data.spawns as unknown as { CT: Vec3[]; T: Vec3[] }
 const sites = data.sites as unknown as { A: SiteDef; B: SiteDef }
@@ -371,7 +419,7 @@ export const ISLAND: MapDef = {
   version: 1,
   bsp: { geomUrl: '/staging/maps/island/geom.json' },   // staging per acceptance policy — flip to /assets/maps/island/ on accept
   boxes,
-  losBoxes: boxes,
+  losBoxes,
   spawns,
   spawnYaw: { CT: ${Math.PI}, T: 0 },
   sites,
@@ -389,7 +437,8 @@ export const ISLAND: MapDef = {
 // quirk not worth fighting; JSON imports widen to number/string and never
 // build the union). Bun loads JSON natively; resolveJsonModule is on.
 const srvData = {
-  boxes: allBoxes.map(b => ({ ...b, x: R3(b.x), y: R3(b.y), z: R3(b.z), w: R3(b.w), h: R3(b.h), d: R3(b.d) })),
+  boxes: boxOut(allBoxes),
+  losBoxes: boxOut(allLos),
   spawns: { CT: spawns.CT.map(s => ({ x: R3(s.x), y: R3(s.y), z: R3(s.z) })), T: spawns.T.map(s => ({ x: R3(s.x), y: R3(s.y), z: R3(s.z) })) },
   sites: { A: { x: R3(siteA.x), z: R3(siteA.z), r: siteA.r, y: R3(siteA.y) }, B: { x: R3(siteB.x), z: R3(siteB.z), r: siteB.r, y: R3(siteB.y) } },
   waypoints: wpFinal.map(w => ({ id: w.id, x: R3(w.x), z: R3(w.z), y: R3(w.y) })),
@@ -403,6 +452,7 @@ import type { MapDef, Box, WP, Vec3, SiteDef } from './mapdata'
 import data from './map-island-data.json'
 
 const boxes = data.boxes as unknown as Box[]
+const losBoxes = data.losBoxes as unknown as Box[]
 const waypoints = data.waypoints as unknown as WP[]
 const spawns = data.spawns as unknown as { CT: Vec3[]; T: Vec3[] }
 const sites = data.sites as unknown as { A: SiteDef; B: SiteDef }
@@ -413,7 +463,7 @@ export const ISLAND: MapDef = {
   name: 'Island',
   version: 1,
   boxes,
-  losBoxes: boxes,
+  losBoxes,
   spawns,
   spawnYaw: { CT: ${Math.PI}, T: 0 },
   sites,
@@ -428,7 +478,7 @@ export const ISLAND: MapDef = {
 const grpStats = [...groups.values()].map(g => `${g.tex}(${(g.idx.length / 3).toFixed(0)})`).join(' ')
 console.log(`terrain+prop tris: ${tris + [...groups.values()].reduce((a, g) => a + g.idx.length / 3, 0) - tris}`)
 console.log(`groups: ${grpStats}`)
-console.log(`staircase LOS boxes: ${losBoxes.length}, prop boxes: ${propOut.boxes.length}, total boxes: ${allBoxes.length}`)
+console.log(`terrain collider boxes: ${colBoxes.length} (LOS subset ${losBoxes.length}), prop boxes: ${propOut.boxes.length}, total boxes: ${allBoxes.length}, losBoxes: ${allLos.length}`)
 console.log(`waypoints: ${wpFinal.length} (purged ${wps.length - wpFinal.length}), edges: ${edgeFinal.length}`)
 console.log(`palms: ${palmSpots.length}, rocks: ${rockN}`)
 console.log(`A site: ${JSON.stringify(siteA)}  B site: ${JSON.stringify(siteB)}`)
