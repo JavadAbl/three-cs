@@ -392,3 +392,24 @@ Work Log:
 
 Stage Summary:
 - Task 131 asset leg complete: catalog on disk, winners shortlistable; extraction script = scripts/bsp/extract-office-hf.py pattern (index-precise offsets, no binary search)
+---
+Task ID: 132 (p1)
+Agent: main
+Task: island ambientCG bake — pick winners, bake PBR set + HDRI skydome, wire sky upgrade, live-verify
+
+Work Log:
+- indexes from 131 addendum survived the session; extraction via exact-offset range GETs (no local tars) — scripts/bsp/extract-island-hf.py (committed): triage round1 = 8 families x 4 candidates + 16 HDRI equirects; 31/32 + 16/16 fetched, 2 labeled sheets built
+- VLM r1: isand=Gravel038 igrass=Grass007 irock=Rock049 bark=Bark012 leaf=LeafSet001 plank=Planks006 metal=Metal031 concrete=Concrete034; HDRI best3 = DaySkyHDRI017B/005B/012B (sky-only packs won over DayEnvironment — environment HDRIs carry treelines)
+- verify pass caught LeafSet001 = CUTOUT ATLAS (VLM flagged E/F/L atlases in r2 too — Foliage/ScatteredLeaves unusable for tiling); metal Metal031 confirmed detailed (scratched dark metal — reads as radar dish paint)
+- triage round2 over ThatchedRoof/Foliage/grass runoff: leaf=ThatchedRoof002B ("clear bundled strands, warm golden-brown"); grass head-to-head full-res: Grass007 beats Grass004 ("distinct sandy patches + leafy macro-variation; 004 = manicured lawn")
+- HDRI full-res check: DaySkyHDRI017B clean horizon / visible sun / no artifacts / deep blue; sun position COMPUTED from brightest-pixel centroid: lon 179.6 lat +38.4 (005B same spot but 8x bloom, 012B low 16.9 — 017B kept)
+- bake (scripts/bake-island-textures.py, committed, office conventions): 8 families albedo1024/bump512/normal1024 -> public/staging/textures/maps/island/ + sky.jpg 2048x1024 -> public/staging/maps/island/ (5.3MB total, sources.json CC0 provenance; picks recorded in script header + island-picks.json)
+- textures.ts skyMesh tropical branch: async assets->staging sky.jpg upgrade swaps canvas dome -> HDRI (mat.map swap), dome rotation.y=-0.316 rad puts image sun (unrotated +X) onto engine-light azimuth atan2(18,55)=18.1deg from +X; 38.4 image vs 50.4 light elevation = accepted delta (canvas gradient stays as no-network fallback)
+- footguns this session: (a) "QUICK PLAY" lobby button only switches TABS — the match start is the separate orange PLAY button in the MATCH panel; (b) agent-browser screenshot paths resolve against the DAEMON cwd — absolute paths required (5 shots initially landed in repo root)
+- live :81 verification: resource timing shows full fallback chain (25x assets/* 404 probes -> 26x staging/* 200: 8x albedo+bump+normal + sky.jpg + map chunk); VLM 5-shot: photographic surfaces YES, sky=photo-hdri, defects only known backlog (floating dock piece near B, low-poly fronds, flat grass macro); island harness ALL PASS, graph-check ALL PASS, office regression ALL PASS
+- dev restart note: next-dev clean double-fork restart after the textures.ts edit (bun --hot warmup-stuck footgun); first GET recompiled 23s — reload the page once after any dev restart before judging the client
+
+Stage Summary:
+- island now renders photo-PBR everywhere + real HDRI sky on :81 (staging, gitignored per acceptance policy — commit bd02793 carries the regen path: extract triage/triage2 -> VLM picks (in script headers) -> full extract -> bake, all one command each, .tmp-wipe safe)
+- PENDING accept gate for v12 flip: user sign-off on the new look; then mv staging/textures/maps/island + staging/maps/island/sky.jpg -> assets/, map-island.ts geomUrl stays /staging -> /assets (it points at geom.json only; sky+textures ride the assets-first chain automatically), ASSET_CACHE_VERSION v11 -> v12, regressions, push (needs NEW PAT — old one exposed in chat, 6th reminder)
+- polish backlog carried: floating dock near B (gen.ts terrain align), palm frond poly count, grass macro variation (snow-postprocess-style mottle pass is the office precedent), ocean shader pass (fresnel/scroll/foam — Task 134 scope)
