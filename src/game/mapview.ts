@@ -133,12 +133,14 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
     // boxes are collision-only — real faces render instead (avoids double-draw/z-fight)
     const geomUrl = map.bsp.geomUrl
     fetch(geomUrl).then(r => r.json()).then((data: {
-      groups: Array<{ tex: string; pos: number[]; norm: number[]; uv: number[]; color?: number[]; idx: number[] }>
+      groups: Array<{ tex: string; pos: number[]; norm?: number[]; uv: number[]; color?: number[]; idx: number[] }>
     }) => {
       for (const grp of data.groups) {
         const g = new THREE.BufferGeometry()
         g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(grp.pos), 3))
-        g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(grp.norm), 3))
+        // Task 131 island: groups omit norm — unshared verts => flat normals
+        if (grp.norm && grp.norm.length) g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(grp.norm), 3))
+        else g.computeVertexNormals()
         g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(grp.uv), 2))
         // Task 126: office geom carries per-vertex baked GoldSrc lightmaps;
         // the material's vertexColors flag comes from the map's PBR lit:true
@@ -149,8 +151,10 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
         // 2 m, uniform density, cells never fall below the moire threshold.
         if (grp.tex === 'fence') {
           const pos = grp.pos, uv = grp.uv
+          // island groups omit norm — use the freshly computed attribute then
+          const nrm: ArrayLike<number> = grp.norm ?? (g.getAttribute('normal') as THREE.BufferAttribute).array
           for (let vi = 0; vi < pos.length / 3; vi++) {
-            const nx = grp.norm[vi * 3], ny = grp.norm[vi * 3 + 1]
+            const nx = nrm[vi * 3], ny = nrm[vi * 3 + 1]
             // dominant axis planar map (same choice the varTex shader makes)
             if (Math.abs(ny) > 0.5) { uv[vi * 2] = pos[vi * 3] / 2; uv[vi * 2 + 1] = pos[vi * 3 + 2] / 2 }
             else if (Math.abs(nx) > 0.5) { uv[vi * 2] = pos[vi * 3 + 2] / 2; uv[vi * 2 + 1] = pos[vi * 3 + 1] / 2 }

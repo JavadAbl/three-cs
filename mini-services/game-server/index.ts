@@ -21,7 +21,7 @@ const io = new Server(httpServer, {
 const PORT = 3003
 const matches = new Map<string, Match>()
 const BOT_TEAM_SIZE = 5
-const VALID_MAPS = ['dust', 'dust2', 'aimhead', 'aimdepot', 'office'] as const
+const VALID_MAPS = ['dust', 'dust2', 'aimhead', 'aimdepot', 'office', 'island'] as const   // Task 131: island (tropical bomb defusal)
 
 const now = () => Date.now()
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))

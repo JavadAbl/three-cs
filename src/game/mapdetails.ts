@@ -130,6 +130,27 @@ export function buildDetails(map: MapDef = MAPS.dust): DetailBuild {
   batches.clear()
   curScope = pbrMapScope(map.id)
 
+  if (map.id === 'island') {
+    // Task 131: island — geom.json carries terrain + every prop (palms,
+    // rocks, huts, pier, radar, boats); the details layer adds only the
+    // OCEAN. v1: one big transparent plane at sea level — the shader pass
+    // (scrolling normals, fresnel, sun glint, shore foam) comes with the
+    // quality iteration. Not raycast: bullets + players pass through the
+    // surface, the sand below is the collision floor.
+    const ocean = new THREE.Mesh(
+      new THREE.PlaneGeometry(700, 700, 1, 1),
+      new THREE.MeshLambertMaterial({
+        color: 0x157d9c, transparent: true, opacity: 0.6,
+        side: THREE.DoubleSide, depthWrite: false,
+      }),
+    )
+    ocean.rotation.x = -Math.PI / 2
+    ocean.position.y = 0.06
+    ocean.renderOrder = 2
+    group.add(ocean)
+    return { group, raycastMeshes }
+  }
+
   if (map.id === 'aimhead' || map.id === 'aimdepot' || map.id === 'office') {
     // BSP-converted map (aimhead): real face geometry provides all visuals.
     // aimdepot: hand-built aim arena — boxes carry the whole look; the

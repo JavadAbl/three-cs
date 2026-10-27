@@ -9,7 +9,7 @@
 //           mid doors + xbox, window room (mid -> B), upper/lower tunnels, B site
 // ============================================================
 
-export type MapId = 'dust' | 'dust2' | 'aimhead' | 'aimdepot' | 'office'
+export type MapId = 'dust' | 'dust2' | 'aimhead' | 'aimdepot' | 'office' | 'island'
 
 export interface Box {
   x: number; y: number; z: number   // center
@@ -19,6 +19,10 @@ export interface Box {
     // PBR-backed like the rest; glass renders transparent panes, fence is an
     // alphaTest lattice (railings/ladders — solid collision, see-through)
     | 'carpet' | 'offwall' | 'ceiling' | 'snow' | 'tile' | 'glass' | 'fence'
+    // Task 131 island families (procedural generator): isand/igrass/irock cover
+    // terrain + boulders, bark/leaf the palm trunks + fronds/thatch roofs.
+    // Photo-PBR jpgs land via PBR_BY_MAP.island when baked.
+    | 'isand' | 'igrass' | 'irock' | 'bark' | 'leaf'
   decor?: boolean                   // visual skyline only — excluded from LOS
 }
 
@@ -766,6 +770,7 @@ function buildAimDepot(): MapDef {
 // ============================================================
 import { AIMHEAD } from './map-aimhead'
 import { OFFICE } from './map-office'
+import { ISLAND } from './map-island'
 
 export const MAPS: Record<MapId, MapDef> = {
   dust: buildDust(),
@@ -775,6 +780,9 @@ export const MAPS: Record<MapId, MapDef> = {
   office: { ...OFFICE, bomb: false },   // Task 126: cs_office BSP import — elimination
                                         // rounds (user: no hostages feature; the map's
                                         // hostage entities/rescue zones were never imported)
+  island: { ...ISLAND },   // Task 131: tropical island — bomb defusal:
+                          // A = radar hill station, B = smuggler dock cove;
+                          // CT beach landing north, T village south
 }
 
 export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
@@ -783,4 +791,5 @@ export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
   { id: 'aimhead', name: 'Aim Headshot', desc: 'CS 1.6 BSP import · slit-wall aim arena' },
   { id: 'aimdepot', name: 'Aim Depot', desc: 'Crate-yard aim arena · low lane walls · moonlit night' },
   { id: 'office', name: 'Office', desc: 'CS 1.6 cs_office import · lightmap baked · snow courtyard' },
+  { id: 'island', name: 'Island', desc: 'Tropical island · day · bomb defusal · radar A / dock B' },
 ]

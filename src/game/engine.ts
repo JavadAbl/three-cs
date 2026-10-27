@@ -2497,18 +2497,28 @@ export class Engine {
     const winter = mapId === 'office'   // Task 126: bright overcast winter —
     // cool diffuse light, snow-bounce ground, higher ambient fill so the
     // baked-lightmap interiors stay readable under fog
+    const tropical = mapId === 'island'  // Task 131: bright tropical day —
+    // warm high sun, azure sky bounce, sand-warm ground, sea-blue distance fog
     const a = this.atmo
     if (!a) return
-    a.fog.color.set(night ? 0x080d1a : winter ? 0xdfe4e8 : aztec ? 0xcfe0e8 : 0xd9cfb4)
-    a.fog.near = night ? 42 : winter ? 70 : aztec ? 60 : 55
-    a.fog.far = night ? 190 : winter ? 300 : aztec ? 260 : 240
-    a.hemi.color.set(night ? 0x1d2742 : winter ? 0xe2e8ee : aztec ? 0xdce8f0 : 0xe6e2d2)
-    a.hemi.groundColor.set(night ? 0x0e121c : winter ? 0xb9bfc6 : aztec ? 0x5e7a68 : 0x8a7a5e)
-    a.hemi.intensity = night ? 0.38 : winter ? 0.78 : 0.72
-    a.ambient.color.set(night ? 0x2c3654 : winter ? 0xd9dee3 : aztec ? 0xb6c4bd : 0xc9b896)
-    a.ambient.intensity = night ? 0.22 : winter ? 0.42 : 0.38
-    a.sun.color.set(night ? 0xb9c9ea : winter ? 0xfff6ec : aztec ? 0xfff6e0 : 0xfff0d0)
-    a.sun.intensity = night ? 0.85 : winter ? 1.5 : 1.9
-    this.scene.environmentIntensity = night ? 0.24 : winter ? 0.55 : 0.55
+    a.fog.color.set(night ? 0x080d1a : winter ? 0xdfe4e8 : tropical ? 0xbfe0ee : aztec ? 0xcfe0e8 : 0xd9cfb4)
+    a.fog.near = night ? 42 : winter ? 70 : tropical ? 65 : aztec ? 60 : 55
+    a.fog.far = night ? 190 : winter ? 300 : tropical ? 290 : aztec ? 260 : 240
+    a.hemi.color.set(night ? 0x1d2742 : winter ? 0xe2e8ee : tropical ? 0x9ecbe8 : aztec ? 0xdce8f0 : 0xe6e2d2)
+    a.hemi.groundColor.set(night ? 0x0e121c : winter ? 0xb9bfc6 : tropical ? 0xc9b48c : aztec ? 0x5e7a68 : 0x8a7a5e)
+    a.hemi.intensity = night ? 0.38 : winter ? 0.78 : tropical ? 0.62 : 0.72
+    a.ambient.color.set(night ? 0x2c3654 : winter ? 0xd9dee3 : tropical ? 0xd6e2ea : aztec ? 0xb6c4bd : 0xc9b896)
+    a.ambient.intensity = night ? 0.22 : winter ? 0.42 : tropical ? 0.34 : 0.38
+    a.sun.color.set(night ? 0xb9c9ea : winter ? 0xfff6ec : tropical ? 0xfff2cc : aztec ? 0xfff6e0 : 0xfff0d0)
+    a.sun.intensity = night ? 0.85 : winter ? 1.5 : tropical ? 2.05 : 1.9
+    this.scene.environmentIntensity = night ? 0.24 : winter ? 0.55 : tropical ? 0.5 : 0.55
+    if (tropical) {
+      // island playspace spans ±95 m — the default ±62 shadow camera would
+      // clip every long shadow at the shoreline. Widen the ortho box (the
+      // 2048 map loses a little resolution per meter; acceptable for v1).
+      const c = a.sun.shadow.camera
+      c.left = -95; c.right = 95; c.top = 95; c.bottom = -95
+      c.updateProjectionMatrix()
+    }
   }
 }

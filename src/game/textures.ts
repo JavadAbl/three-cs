@@ -545,6 +545,7 @@ export function skyMesh(mapId?: string): THREE.Mesh {
   // indigo sky, star field, glowing moon disc (clear night, no clouds)
   const winter = mapId === 'office'   // Task 126: cs_office — overcast
   // winter sky: pale grey-blue, bright snow-bounce horizon, flat diffuse sun
+  const tropical = mapId === 'island'  // Task 131: vivid tropical day
   const g = ctx.createLinearGradient(0, 0, 0, H)
   if (night) {
     g.addColorStop(0, '#060a1c')      // zenith — deep indigo
@@ -565,6 +566,18 @@ export function skyMesh(mapId?: string): THREE.Mesh {
     g.addColorStop(0.62, '#adb8c1')   // below-horizon fade (leak reads as haze)
     g.addColorStop(0.8, '#7f8a94')
     g.addColorStop(1, '#626c76')      // nadir — dark muted grey, never white
+  } else if (tropical) {
+    // Task 131 island: deep azure zenith, bright haze band AT the horizon;
+    // the below-horizon nadir fades to sea grey-blue (the Task-126 winter
+    // HOM lesson: never leave a bright/white nadir for shell leaks to hit —
+    // here any leak past the ocean reads as distant sea haze)
+    g.addColorStop(0, '#2f74d6')
+    g.addColorStop(0.3, '#5b9fe2')
+    g.addColorStop(0.45, '#aad2ea')
+    g.addColorStop(0.5, '#d8ecf4')
+    g.addColorStop(0.56, '#b9d8e4')
+    g.addColorStop(0.75, '#8fb4c6')
+    g.addColorStop(1, '#7292a5')
   } else if (aztec) {
     g.addColorStop(0, '#5d8fc2')
     g.addColorStop(0.35, '#9dc0dc')
@@ -1167,9 +1180,62 @@ export function soldierFace(team: 'CT' | 'T'): THREE.Texture {
   return t
 }
 
+// ---------------- Task 131: island procedural fallbacks ----------------
+// Keep the map testable + pretty BEFORE the ambientCG photo bake lands
+// (PBR_BY_MAP.island upgrades these to jpgs the moment they exist — same
+// office pattern: canvas first, identity files later).
+function islandSpeckle(palette: string[], grain: number, blotch: number): THREE.CanvasTexture {
+  const S = 256
+  const [c, ctx] = makeCanvas(S, S)
+  ctx.fillStyle = palette[0]
+  ctx.fillRect(0, 0, S, S)
+  const rnd = mulberry32(131)
+  for (let i = 0; i < grain; i++) {
+    ctx.fillStyle = palette[1 + Math.floor(rnd() * (palette.length - 1))]
+    const w = 1 + rnd() * (blotch ? 13 : 2.2)
+    const h = 1 + rnd() * (blotch ? 8 : 2.2)
+    ctx.fillRect(rnd() * S, rnd() * S, w, h)
+  }
+  const t = new THREE.CanvasTexture(c)
+  t.wrapS = t.wrapT = THREE.RepeatWrapping
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+export function isandTexture(): THREE.Texture {
+  return islandSpeckle(['#dcc9a0', '#cdb98e', '#e6d8b4', '#c2ad7f'], 2600, 0)   // fine beach grain
+}
+export function igrassTexture(): THREE.Texture {
+  return islandSpeckle(['#74904f', '#668244', '#82a05e', '#577343'], 3400, 3)  // dune grass + blade clumps
+}
+export function irockTexture(): THREE.Texture {
+  return islandSpeckle(['#8a8578', '#767167', '#9c968b', '#655f57'], 1400, 8)   // coarse cliff blotches
+}
+export function barkTexture(): THREE.CanvasTexture {
+  // palm trunk: horizontal ring bands (the segmented bark read) + grit
+  const S = 256
+  const [c, ctx] = makeCanvas(S, S)
+  ctx.fillStyle = '#8c6f52'
+  ctx.fillRect(0, 0, S, S)
+  const rnd = mulberry32(77)
+  for (let y = 0; y < S; y += 9 + Math.floor(rnd() * 7)) {
+    ctx.fillStyle = rnd() > 0.5 ? '#75573c' : '#9d8266'
+    ctx.fillRect(0, y, S, 3 + rnd() * 5)
+  }
+  ctx.fillStyle = '#6a4f37'
+  for (let i = 0; i < 650; i++) ctx.fillRect(rnd() * S, rnd() * S, 2, 2)
+  const t = new THREE.CanvasTexture(c)
+  t.wrapS = t.wrapT = THREE.RepeatWrapping
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+export function leafTexture(): THREE.Texture {
+  return islandSpeckle(['#3f7032', '#356128', '#4d8040', '#2c5222'], 2200, 2)  // frond/thatch green
+}
+
 // ---------------- material factory (map + bump, shared by mapview/details) ----------------
 export type SurfaceTex = 'sand' | 'wall' | 'crate' | 'metal' | 'dark' | 'plank' | 'door' | 'doorBlue' | 'brick' | 'concrete'
   | 'carpet' | 'offwall' | 'ceiling' | 'snow' | 'tile' | 'glass' | 'fence'   // Task 126 office families
+  | 'isand' | 'igrass' | 'irock' | 'bark' | 'leaf'   // Task 131 island families
 
 /** fence bump: the lattice's own luminance — holes would poison bumpFrom's
  * grayscale copy (transparent canvas), so draw an opaque grayscale twin. */
@@ -1229,6 +1295,12 @@ export function surfaceMaterial(tex: SurfaceTex, mapId?: string): THREE.MeshLamb
     case 'tile': map = tileTexture(); bumpScale = 0.55; break
     case 'glass': map = glassTexture(); bumpScale = 0.12; break
     case 'fence': map = fenceTexture(); bumpScale = 0.7; break
+    // Task 131 island families (canvas fallbacks — see generators above)
+    case 'isand': map = isandTexture(); bumpScale = 0.5; break
+    case 'igrass': map = igrassTexture(); bumpScale = 0.5; break
+    case 'irock': map = irockTexture(); bumpScale = 0.6; break
+    case 'bark': map = barkTexture(); bumpScale = 0.4; break
+    case 'leaf': map = leafTexture(); bumpScale = 0.3; break
   }
   const src = map.image as HTMLCanvasElement
   const mat = new THREE.MeshLambertMaterial({
@@ -1388,6 +1460,14 @@ const PBR: Record<SurfaceTex, PbrSpec> = {
   tile:     { tile: 1.2, bump: 0.55 },
   glass:    { tile: 1.5, bump: 0.12 },
   fence:    { tile: 1.2, bump: 0.7  },
+  // Task 131 island families — conservative shared specs (island's real
+  // tiles live in PBR_BY_MAP.island, calibrated to world/3 UVs). No shared
+  // jpgs ship: the loader 404s and the procedural canvas look stays.
+  isand:    { tile: 1.15, bump: 0.5  },
+  igrass:   { tile: 1.15, bump: 0.55 },
+  irock:    { tile: 1.0,  bump: 0.75 },
+  bark:     { tile: 1.0,  bump: 0.45 },
+  leaf:     { tile: 1.4,  bump: 0.35 },
 }
 
 /** Task 77 — per-map texture identities. A map with an entry here renders its
@@ -1494,6 +1574,20 @@ const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, PbrSpec>>> = {
     crate:    { tile: 1.80, bump: 1.20, normal: 0.90, lit: true },
     glass:    { tile: 1.48, bump: 0.12,              lit: true },  // procedural only (no jpg by design)
     fence:    { tile: 1.42, bump: 0.70,              lit: true },  // procedural only (alphaTest lattice)
+  },
+  island: {
+    // Task 131 — tropical island. Every family lit:true (geom carries the
+    // per-vertex sun+AO bake, light.ts SUN == the engine sun position).
+    // Terrain UVs are world-m/3, so tile k spans 3/k m (isand/igrass ~2.6 m).
+    // Photo-PBR jpgs ship in /staging/textures/maps/island/ until accept.
+    isand:    { tile: 1.15, bump: 0.50, normal: 0.55, lit: true },   // beach sand
+    igrass:  { tile: 1.15, bump: 0.55, normal: 0.60, lit: true },   // dune grass
+    irock:   { tile: 1.0,  bump: 0.75, normal: 0.70, lit: true },   // cliffs + boulders
+    bark:    { tile: 1.0,  bump: 0.45, normal: 0.45, lit: true },   // palm trunks
+    leaf:    { tile: 1.4,  bump: 0.35, normal: 0.40, lit: true },   // fronds + thatch roofs
+    plank:   { tile: 2.0,  bump: 1.0,  normal: 0.85, lit: true },   // pier/hut planks (uv 0.5/m)
+    metal:   { tile: 2.0,  bump: 0.8,  normal: 0.8,  lit: true },   // radar mast/dish
+    concrete:{ tile: 2.0,  bump: 0.8,  normal: 0.7,  lit: true },   // radar foundation
   },
 }
 
