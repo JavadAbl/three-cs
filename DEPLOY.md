@@ -79,6 +79,13 @@ Put any reverse proxy in front that forwards:
 - everything else → `localhost:3000`
 - requests with query `?XTransformPort=3003` → `localhost:3003` (this is the WebSocket route the game client uses)
 
+> **Sandbox note (Task 137):** in the dev sandbox, `bun run dev` automatically calls
+> `scripts/ensure-game-server.sh` first — an idempotent guardian that double-fork-spawns
+> the `:3003` game server if (and only if) nothing is listening there. This makes the
+> server come back on every container boot. A platform cron job re-runs the same script
+> every 10 min as a mid-session self-heal. On a real deployment (above) you run both
+> services explicitly, so the guardian is a no-op if you also start the game server.
+
 Example nginx snippet:
 
 ```nginx
