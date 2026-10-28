@@ -52,6 +52,12 @@ export interface MapDef {
   waypointEdges: Array<[string, string]>
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number }
   bsp?: { geomUrl: string }         // BSP-converted render geometry (fetched at runtime)
+  /** Task 134: GLB prop models placed by the generator (island palms).
+   *  m = staged model name (/assets|/staging models/island/<m>.glb);
+   *  models are normalized to height 1 at pack time — h is the per-instance
+   *  target height in meters (the same 5.5–9 m draw the procedural palms
+   *  used). Visual-only: collision stays on boxes (trunk boxes in `boxes`). */
+  props?: Array<{ m: string; x: number; z: number; y: number; rotY: number; h: number }>
 }
 
 // ---------------- builder helpers ----------------

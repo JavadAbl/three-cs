@@ -25,6 +25,8 @@
 // /assets/, /staging/, /draco/ and the GLB API routes only, and request.cache
 // === 'no-cache' (the skins manifest's freshness policy) passes through.
 import { texChain, pbrMapScope, pbrHasNormal, PBR_SURFACES } from './textures'
+import { MAPS } from './mapdata'
+import type { MapDef } from './mapdata'
 import { WEAPON_GLB_IDS } from './weapongltf'
 import { WEAPON_TEX_KEYS } from './weaponmodels'
 import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '../../shared/weapons-audio'
@@ -381,6 +383,28 @@ function modelItems(): Item[] {
   return items
 }
 
+/** Task 134: per-map model payloads — the exact geom URL the map wrapper
+ *  fetches (read from the map def itself, so staging-preview vs accepted
+ *  /assets URLs are always warmed correctly), island sky.jpg, and the 4
+ *  packed palm models (chain /assets → /staging, policy v3). */
+function mapModelItems(mapId: string | undefined): Item[] {
+  const items: Item[] = []
+  const map = mapId ? (MAPS as Record<string, MapDef | undefined>)[mapId] : undefined
+  if (map?.bsp) items.push({ chain: [{ url: map.bsp.geomUrl }] })
+  if (mapId === 'island') {
+    items.push({ chain: [{ url: '/assets/maps/island/sky.jpg' }, { url: '/staging/maps/island/sky.jpg' }] })
+    for (const m of ['palm-hd', 'palm-low', 'palm-burned', 'palm-series']) {
+      items.push({
+        chain: [
+          { url: `/assets/models/island/${m}.glb` },
+          { url: `/staging/models/island/${m}.glb` },
+        ],
+      })
+    }
+  }
+  return items
+}
+
 /** The sound pack — mirrors audio.ts's FILES derivation exactly (same three
  * shared/weapons-audio sources), each with its assets→staging chain. */
 function soundItems(): Item[] {
@@ -421,7 +445,7 @@ export async function preloadGameAssets(mapId: string | undefined, onProgress?: 
   const HARD_CAP_MS = 120_000
   const stages: Array<{ stage: string; items: Item[] }> = [
     { stage: 'textures', items: [...mapTextureItems(mapId), ...weaponTextureItems()] },
-    { stage: 'models', items: modelItems() },
+    { stage: 'models', items: [...modelItems(), ...mapModelItems(mapId)] },
     { stage: 'sounds', items: soundItems() },
   ]
   const total = stages.reduce((a, s) => a + s.items.length, 0)

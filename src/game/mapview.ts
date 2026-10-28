@@ -4,6 +4,7 @@ import { MAPS } from './mapdata'
 import type { MapDef, Box } from './mapdata'
 import { skyMesh, siteDecal, surfaceMaterial, pbrMapScope } from './textures'
 import { attachNightSky } from './nightsky'
+import { sharedGLTFLoader } from './gltf'
 
 export interface MapBuild {
   group: THREE.Group
@@ -177,6 +178,40 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
         raycastMeshes.push(mesh)
       }
     }).catch(() => { /* boxes already render a playable fallback */ })
+  }
+
+  // Task 134: generator-placed GLB prop models (island palms — 4 user
+  // uploads, packed by scripts/island/pack-palm-models-t134.ts). One
+  // prototype per model via the shared loader (KHR_mesh_quantization —
+  // GLTFLoader decodes natively, no wasm decoder fetch), then a clone per
+  // placement sharing geometry+materials. Chain /assets -> /staging per
+  // policy v3. NOT added to raycastMeshes: CS leaves don't stop bullets —
+  // trunks block server LOS via their losBoxes members, visual impacts on
+  // fronds would double-draw against the terrain decals.
+  if (map.props?.length) {
+    const needed = [...new Set(map.props.map(p => p.m))]
+    const protos = new Map<string, THREE.Object3D>()
+    const tryUrls = (m: string, i: number): Promise<void> => {
+      const urls = [`/assets/models/island/${m}.glb`, `/staging/models/island/${m}.glb`]
+      if (i >= urls.length) return Promise.resolve()
+      return sharedGLTFLoader().loadAsync(urls[i])
+        .then(g => { protos.set(m, g.scene) })
+        .catch(() => tryUrls(m, i + 1))
+    }
+    Promise.all(needed.map(m => tryUrls(m, 0))).then(() => {
+      for (const p of map.props!) {
+        const proto = protos.get(p.m)
+        if (!proto) continue
+        const inst = proto.clone()
+        inst.scale.setScalar(p.h)          // models normalized to height 1 at pack time
+        inst.position.set(p.x, p.y, p.z)
+        inst.rotation.y = p.rotY
+        inst.traverse(o => {
+          if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; o.userData.isMap = true }
+        })
+        group.add(inst)
+      }
+    }).catch(() => { /* map still fully playable without props */ })
   }
 
   // sky (stored so engine can drift the clouds) — per-map palette (Task 77)

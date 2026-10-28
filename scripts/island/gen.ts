@@ -8,7 +8,7 @@
 import { writeFileSync, mkdirSync } from 'fs'
 import { mulberry32, setTerrain, SUN, terrainShadowed } from './light'
 import type { Group, Groups, PropBox } from './types'
-import { groupOf, palm, rock, hut, pier, radar, rowboat, type PropOut } from './props'
+import { groupOf, rock, hut, pier, radar, rowboat, type PropOut } from './props'
 
 // ---------------------------------------------------------------- constants
 const SEED = 20261027
@@ -172,7 +172,15 @@ for (let ix = 0; ix < NX - 1; ix++)
     terrainQuad(ix, iz)
 
 // ---------------------------------------------------------------- props
-// palms: beach ring + village clusters (avoid pads' centers + slope>0.5)
+// Task 134: palms are REAL GLB MODELS now (user upload: 4 Sketchfab palms,
+// packed by scripts/island/pack-palm-models-t134.ts -> /staging/models/island/).
+// gen.ts no longer emits palm triangle soup — it emits deterministic model
+// placements (mapdef.props, rendered by mapview via sharedGLTFLoader) and
+// the SAME trunk collider boxes the procedural palms shipped (hotfix-3
+// proven shape: 0.9-wide slim box, cover + nade bounce). The rnd() draw
+// pattern is kept EXACTLY IDENTICAL to the old palm() (h0, lean, dirA,
+// blades + 2/blade, nuts) so every downstream placement (rocks, huts,
+// pier, boats, radar) stays bit-for-bit identical.
 const palmSpots: Array<[number, number]> = []
 let guard = 0
 while (palmSpots.length < 34 && guard++ < 3000) {
@@ -189,7 +197,34 @@ while (palmSpots.length < 34 && guard++ < 3000) {
   if (palmSpots.some(([px, pz]) => Math.hypot(px - x, pz - z) < 4.2)) continue
   palmSpots.push([x, z])
 }
-for (const [x, z] of palmSpots) palm(groups, propOut, x, z, height(x, z), rnd)
+// variant mix over the 34 spots — deterministic from position hash:
+//  - palm-hd (34k tris) is the hero model: capped at 5, only near the
+//    village where players pass close (perf budget ~170k tris on props)
+//  - palm-burned (4): rocky/high spots — dead trees frame the cliffs
+//  - palm-series + palm-low: the beach-ring workhorses, coin-flipped
+const palmProps: Array<{ m: string; x: number; z: number; y: number; rotY: number; h: number }> = []
+let hdN = 0, burnN = 0
+for (const [x, z] of palmSpots) {
+  const h0 = 5.5 + rnd() * 3.5
+  const lean = 0.9 + rnd() * 1.4            // (draw kept for RNG parity)
+  const dirA = rnd() * Math.PI * 2
+  const blades = 11 + Math.floor(rnd() * 3)      // (draw kept for RNG parity)
+  for (let b = 0; b < blades; b++) { rnd(); rnd() }
+  const nuts = 4 + Math.floor(rnd() * 3)        // (draw kept for RNG parity)
+  for (let i = 0; i < nuts; i++) rnd()          // (the coconut angle draws — RNG parity)
+  void lean; void nuts
+  const gy = height(x, z)
+  const ph = hash2(x * 13.37 + 91, z * 7.77 + 37)   // spot hash — no rnd draws
+  const nearVil = Math.hypot(x - VIL.x, z - VIL.z) < 20
+  let m: string
+  if (nearVil && hdN < 5) { m = 'palm-hd'; hdN++ }                 // hero palms: the 5 closest-to-village spots
+  else if (gy > 5.5 && burnN < 4) { m = 'palm-burned'; burnN++ }   // dead trees frame the high cliffs
+  else m = ph < 0.5 ? 'palm-series' : 'palm-low'                  // beach-ring workhorses
+  palmProps.push({ m, x, z, y: gy, rotY: dirA, h: h0 })   // rounding deferred to the data-json emitter
+  // straight trunk collider (the GLB palms don't lean; the old lean-midpoint
+  // offset would sit up to 0.7 m off the visible trunk)
+  propOut.boxes.push({ x, y: gy + h0 / 2, z, w: 0.9, h: h0, d: 0.9 })
+}
 
 // rocks: cliff-line clusters + B-site breakwater
 let rg = 0
@@ -450,6 +485,7 @@ writeFileSync(`${OUT_DIR}/geom.json`, JSON.stringify(geom))
 const boxOut = (bs: Array<{ x: number; y: number; z: number; w: number; h: number; d: number; tex: string; stair?: true }>) =>
   bs.map(b => ({ ...b, x: R3(b.x), y: R3(b.y), z: R3(b.z), w: R3(b.w), h: R3(b.h), d: R3(b.d) }))
 writeFileSync('src/game/map-island-data.json', JSON.stringify({
+  props: palmProps.map(p => ({ ...p, x: R3(p.x), z: R3(p.z), y: R3(p.y), rotY: R3(p.rotY), h: R3(p.h) })),   // Task 134: GLB palm model placements (visual-only; trunk colliders are in boxes)
   boxes: boxOut(allBoxes),
   losBoxes: boxOut(allLos),
   spawns: { CT: spawns.CT.map(s => ({ x: R3(s.x), y: R3(s.y), z: R3(s.z) })), T: spawns.T.map(s => ({ x: R3(s.x), y: R3(s.y), z: R3(s.z) })) },
@@ -468,14 +504,16 @@ const waypoints = data.waypoints as unknown as WP[]
 const spawns = data.spawns as unknown as { CT: Vec3[]; T: Vec3[] }
 const sites = data.sites as unknown as { A: SiteDef; B: SiteDef }
 const edges = data.waypointEdges as unknown as Array<[string, string]>
+const props = data.props as unknown as NonNullable<MapDef['props']>
 
 export const ISLAND: MapDef = {
   id: 'island',
   name: 'Island',
   version: 1,
-  bsp: { geomUrl: '/assets/maps/island/geom.json' },   // ACCEPTED (Task 132): island promoted staging->assets, same as office in Task 130
+  bsp: { geomUrl: '/staging/maps/island/geom.json' },   // Task 134 STAGING PREVIEW: real-GLB palms re-ship — geom no longer carries palm soup; on ACCEPT flip back to /assets + promote + ASSET_CACHE_VERSION v12->v13 (BUMP RULE)
   boxes,
   losBoxes,
+  props,
   spawns,
   spawnYaw: { CT: ${Math.PI}, T: 0 },
   sites,
