@@ -942,7 +942,7 @@ export class Engine {
       mapId?: string; mapVersion: number; players: Array<Record<string, unknown>>; match: Record<string, unknown>
     }) => {
       // server is authoritative about the room's map — rebuild if we guessed wrong
-      if (d.mapId && d.mapId !== this.mapDef.id && (d.mapId === 'dust' || d.mapId === 'dust2' || d.mapId === 'aimhead' || d.mapId === 'aimdepot' || d.mapId === 'office')) this.rebuildMap(d.mapId as MapId)
+      if (d.mapId && d.mapId !== this.mapDef.id && (d.mapId === 'dust' || d.mapId === 'dust2' || d.mapId === 'aimhead' || d.mapId === 'aimdepot' || d.mapId === 'office' || d.mapId === 'island')) this.rebuildMap(d.mapId as MapId)   // Task 138: 'island' was missing — server-initiated switches TO island never rebuilt
       this.myId = d.youId
       this.myTeam = d.team
       this.pm.setMyTeam(d.team)

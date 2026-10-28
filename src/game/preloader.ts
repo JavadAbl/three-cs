@@ -40,7 +40,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v12'   // Task 132 acceptance: island map promoted staging->assets — geom.json now /assets/maps/island/ + sky.jpg /assets/maps/island/ + 25 texture jpgs /assets/textures/maps/island/ (these URLs were served from /staging under v11, so the bump sweep makes the /assets URLs resolve everywhere; also a 5th container wipe had emptied /staging, making the regen path — island-regen.sh — the live proof of the wipe-resilient provenance chain). User accepted Island as v1 (PBR + HDRI look, after 3 hotfixes: bot graph, fall-through, invisible walls). (v11 was Task 130's office acceptance; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
+export const ASSET_CACHE_VERSION = 'v13'   // Task 138: island palm GLBs re-packed byte-exact — the Task-134 batch was double-corrupted (Bun `Buffer.from(Float32Array)` wrote 4x-short zero-filled geometry views, then gltf-transform prune/quantize piled garbage node scales 8.5e37 + mangled buffers on top), so every cached palm render-invisible ~10^38 units away ("no trees on island"). The bump flushes the poisoned GLB cache entries in existing browsers; the re-pack is gated NUMERICALLY now (scripts/island/verify-palm-glbs-t138.ts: transforms, view lengths, vertex samples, y-union — 86/86). (v12 was Task 132's island acceptance; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'

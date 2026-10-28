@@ -205,11 +205,15 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
             buf,
             '',
             (gltf) => { protos.set(m, gltf.scene); resolve() },
-            () => resolve(),   // parse fail -> this model stays absent, map keeps the rest
+            // Task 138 lesson — the Task-135 silent swallow hid a broken pack for
+            // days ("no trees on island"): parse failures must be VISIBLE in the
+            // console even though the map stays playable without the prop.
+            (err) => { console.error(`[island-prop] ${m}: parse FAILED (map renders without it):`, err); resolve() },
           )
         }))
-        .catch(() => { /* 404 / network fail -> map renders without this prop */ })
+        .catch((e) => { console.error(`[island-prop] ${m}: fetch FAILED (map renders without it):`, e) })
     Promise.all(needed.map(tryLoad)).then(() => {
+      const insts: THREE.Object3D[] = []
       for (const p of map.props!) {
         const proto = protos.get(p.m)
         if (!proto) continue
@@ -221,8 +225,10 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
           if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; o.userData.isMap = true }
         })
         group.add(inst)
+        insts.push(inst)
       }
-    }).catch(() => { /* map still fully playable without props */ })
+      console.info(`[island-prop] ${insts.length}/${map.props!.length} props placed (${[...protos.keys()].join(',')})`)
+    }).catch((e) => { console.error('[island-prop] placement FAILED', e) })
   }
 
   // sky (stored so engine can drift the clouds) — per-map palette (Task 77)
