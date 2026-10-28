@@ -27,6 +27,14 @@
 //      snow, tile, glass, fence) + shared reuse (concrete/brick/metal/plank/
 //      dark/crate). fence/glass are render-special (alphaTest lattice /
 //      transparent panes).
+//   6. Task 142 — interior DOOR LEAVES opened: the decompile baked the door
+//      leaves as static worldspawn faces (door_2/door_3/c1a1_dr2 textures),
+//      rendered closed WITH collision — every interior doorway was a solid
+//      wall ("all doors has a blocker and cant pass them"). The 8 real
+//      doorway leaves are skipped (see OPEN_DOOR_FACES below): render+
+//      collision+waypoint blocking all gone, doorway opens — same convention
+//      as the func_door roller door (delta 1). Decor doors on the perimeter
+//      (sky/brick/void behind) and door-textured wood skirting STAY closed.
 // ============================================================
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { ppm2png } from './ppm2png'
@@ -219,6 +227,33 @@ const tx = (x: number) => +(x * SCALE).toFixed(4)
 const ty = (z: number) => +((z + Z_REBASE) * SCALE).toFixed(4)
 const tz = (y: number) => +(-y * SCALE).toFixed(4)
 
+// ---------------- Task 142: interior door leaves to OPEN ----------------
+// Audit trail (scripts/t142-door-*.py, t142-faces-in-vol.py, t142-e2e.sh):
+// The decompile baked door leaves as static worldspawn faces (door_2 /
+// c1a1_dr2 textures) rendered closed WITH collision. Only faces whose
+// doorway has WALKABLE FLOOR ON BOTH SIDES are opened (live-teleport
+// verified: player stands stable in the doorway and on both sides):
+//   1278,1279  door_2    doorway at x=12.4, z -24..-22.5 (office wing S
+//                        door; carpet both sides; held at z-25.2/-23.2/-19.5)
+//   2424,2425  door_2    doorway at x=31.2, z 22.4 (paper room <-> east
+//                        hall; carpet west / dark floor east; held in-place)
+// KEPT CLOSED — verified decor (void / drop behind, opening = death pit):
+//   1668,1669  door_2    door at x=2.4, z=-9.2 — 3m leaf on the office-wing
+//                        S wall; floor only to the threshold, z -14.5..-9.4
+//                        probe is EMPTY behind (live: removed in v1 of this
+//                        fix, then restored after the E2E fall evidence)
+//   5842,5907  c1a1_dr2  door at x=-13.4, z=37.6 — closes a lightwell:
+//                        threshold floor ends at z=37.6, railing_3 wall at
+//                        z=43, void between (player fell y8.45→3.61 live)
+//   3608,3609  door_2    roof-deck wood skirting W of CT (railing_3 parapet
+//                        structure at x[-13.2,-3.2] z[43,50.6]) — not a door
+//   6405,6406  door_3    decor door closing the tunnel alcove at x=-45.6;
+//                        west probe is EMPTY (void) — removing opens a hole
+//   3075,3165,5038,5087,4213 c1a1_dr2 — perimeter decor doors (NE alcove,
+//                        NW sky wall, brick exit) — void/sky right behind
+const OPEN_DOOR_FACES = new Set([1278, 1279, 2424, 2425])
+let nDoorLeaves = 0
+
 // ---------------- validated geometry faces (all included models) ----------------
 interface GFace { fi: number; tex: string; n: number[]; vs: number[][]; aabb: number[]; role: 'world' | 'solid' | 'render' }
 const gfaces: GFace[] = []
@@ -234,6 +269,7 @@ let skipped = 0
       const rawName = miptexs[texinfos[f.texinfo].miptex]?.name ?? ''
       const tex = ourTex(rawName)
       if (tex === 'SKIP') { skipped++; continue }
+      if (OPEN_DOOR_FACES.has(fi)) { nDoorLeaves++; continue }   // Task 142: open the doorway
       const vs = faceVerts(f)
       if (!vs.length) { skipped++; continue }
       const pl = planeOf(f.planenum)
@@ -245,7 +281,7 @@ let skipped = 0
     }
   }
   console.log(`models: world=1 solid=${perRole.solid} render=${perRole.render} skipped=${perRole.skip} entities`)
-  console.log(`geometry faces: ${gfaces.length} (skipped sky/trigger/invalid: ${skipped})`)
+  console.log(`geometry faces: ${gfaces.length} (skipped sky/trigger/invalid: ${skipped}, door leaves opened: ${nDoorLeaves})`)
 }
 
 // ---------------- lightmap bake (GoldSrc grayscale, 16u samples, 1 style) ----------------
@@ -714,7 +750,7 @@ export const OFFICE: MapDef = {
   id: 'office',
   name: 'Office',
   version: 1,
-${withBsp ? `  bsp: { geomUrl: '/assets/maps/office/geom.json' },   // ACCEPTED Task 130 (v1) — was /staging per policy v3; regenerated Task 141 (railing walls fence->concrete)
+${withBsp ? `  bsp: { geomUrl: '/assets/maps/office/geom.json' },   // ACCEPTED Task 130 (v1) — was /staging per policy v3; regenerated Task 141 (railing walls fence->concrete), Task 142 (door leaves opened — doorways passable)
 ` : ''}  boxes: ${JSON.stringify(boxOut)},
   losBoxes: ${JSON.stringify(boxOut)},
   spawns: {
