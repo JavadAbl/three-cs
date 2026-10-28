@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) Yes, they have a dark outline and look thin/hairline.\n2) Yes, it is symmetric and readable.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792829071,
+  "id": "20261024160429d4cebfba2c0e4c10",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261024160429d4cebfba2c0e4c10",
+  "usage": {
+    "completion_tokens": 27,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1115,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1142
+  }
+}

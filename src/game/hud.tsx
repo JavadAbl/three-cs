@@ -355,8 +355,8 @@ export function Hud({ s, cb, settings, open }: {
           <span className="text-xs tracking-widest" style={{ color: ctColor }}>CT</span>
           <span className="text-xl font-bold" style={{ color: ctColor }}>{s.scores.CT}</span>
         </div>
-        <div className={`rounded-md bg-black/70 px-4 py-1.5 font-bold tabular-nums backdrop-blur-sm ${s.bombPlanted && s.phase === 'live' ? 'text-red-400' : 'text-white'}`}>
-          {s.phase === 'over' ? 'GG' : s.phase === 'warmup' ? 'WARMUP' : fmtTime(s.timer)}
+        <div className={`rounded-md bg-black/70 px-4 py-1.5 font-bold tabular-nums backdrop-blur-sm ${s.serverDown ? 'text-red-400 animate-pulse' : s.bombPlanted && s.phase === 'live' ? 'text-red-400' : 'text-white'}`}>
+          {s.serverDown ? 'OFFLINE' : s.phase === 'over' ? 'GG' : s.phase === 'warmup' ? 'WARMUP' : fmtTime(s.timer)}
         </div>
         <div className="flex items-center gap-2 rounded-r-md bg-black/60 px-3 py-1.5 backdrop-blur-sm" style={{ borderBottom: `2px solid ${tColor}` }}>
           <span className="text-xl font-bold" style={{ color: tColor }}>{s.scores.T}</span>
@@ -368,9 +368,18 @@ export function Hud({ s, cb, settings, open }: {
       </div>
 
       {/* bomb planted indicator */}
-      {s.bombPlanted && s.phase === 'live' && (
+      {s.bombPlanted && s.phase === 'live' && !s.serverDown && (
         <div className="absolute top-12 left-1/2 z-20 -translate-x-1/2 animate-pulse text-xs font-bold tracking-widest text-red-400">
           ⏱ BOMB PLANTED
+        </div>
+      )}
+
+      {/* Task 136: game server unreachable — no silent 'warmup' park */}
+      {s.serverDown && (
+        <div className="absolute left-1/2 top-1/4 z-30 w-[26rem] max-w-[90vw] -translate-x-1/2 rounded-lg border border-red-500/40 bg-black/75 px-6 py-4 text-center backdrop-blur-sm">
+          <div className="text-lg font-bold tracking-wide text-red-400">GAME SERVER UNREACHABLE</div>
+          <div className="mt-1.5 text-sm text-white/70">The match can't start — this sandbox's game server is not running.</div>
+          <div className="mt-1 text-sm text-white/70">Restart the sandbox, then re-enter the map. Reconnecting automatically…</div>
         </div>
       )}
 

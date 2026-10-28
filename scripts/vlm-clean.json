@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the screenshot provided, here are the verifications:\n\n1.  **Bomb Timer HUD:** **Yes**, there is a red bomb-timer HUD element in the center of the top bar. It reads **0:26** (indicating 26 seconds remaining until detonation).\n2.  **Planting Progress Bar:** **No**, there is no \"PLANTING THE BOMB\" progress bar visible. The planting action has been completed.\n3.  **Bottom Weapon Slot Strip:** The labels read **2 Glock** and **3 Knife**.\n4.  **C4 Device on Ground:** **No**, there is no red C4 device visible on the ground in the player's immediate vicinity or field of view in this specific screenshot. The player appears to be looking away from the bombsite or the bomb model is not rendered within this camera angle.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792690982,
+  "id": "20261023014256ec36a6b4999e45a1",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261023014256ec36a6b4999e45a1",
+  "usage": {
+    "completion_tokens": 177,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1164,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1341
+  }
+}

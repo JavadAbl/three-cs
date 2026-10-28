@@ -9,14 +9,16 @@ const waypoints = data.waypoints as unknown as WP[]
 const spawns = data.spawns as unknown as { CT: Vec3[]; T: Vec3[] }
 const sites = data.sites as unknown as { A: SiteDef; B: SiteDef }
 const edges = data.waypointEdges as unknown as Array<[string, string]>
+const props = data.props as unknown as NonNullable<MapDef['props']>
 
 export const ISLAND: MapDef = {
   id: 'island',
   name: 'Island',
   version: 1,
-  bsp: { geomUrl: '/assets/maps/island/geom.json' },   // ACCEPTED (Task 132): island promoted staging->assets, same as office in Task 130
+  bsp: { geomUrl: '/staging/maps/island/geom.json' },   // Task 134 STAGING PREVIEW: real-GLB palms re-ship — geom no longer carries palm soup; on ACCEPT flip back to /assets + promote + ASSET_CACHE_VERSION v12->v13 (BUMP RULE)
   boxes,
   losBoxes,
+  props,
   spawns,
   spawnYaw: { CT: 3.141592653589793, T: 0 },
   sites,

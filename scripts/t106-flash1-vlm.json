@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Yes, there is a visible muzzle flash (a bright, glowing fire effect) at the gun's muzzle. Yes, the weapon is an AUG-style bullpup rifle pointing forward. No, there are no visible rendering glitches like black textures, inverted models, or z-fighting.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792840258,
+  "id": "202610241910579cde087a1ca24a34",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610241910579cde087a1ca24a34",
+  "usage": {
+    "completion_tokens": 58,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1112,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1170
+  }
+}

@@ -25,6 +25,8 @@
 // /assets/, /staging/, /draco/ and the GLB API routes only, and request.cache
 // === 'no-cache' (the skins manifest's freshness policy) passes through.
 import { texChain, pbrMapScope, pbrHasNormal, PBR_SURFACES } from './textures'
+import { MAPS } from './mapdata'
+import type { MapDef } from './mapdata'
 import { WEAPON_GLB_IDS } from './weapongltf'
 import { WEAPON_TEX_KEYS } from './weaponmodels'
 import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '../../shared/weapons-audio'
@@ -43,7 +45,7 @@ export const ASSET_CACHE_VERSION = 'v12'   // Task 132 acceptance: island map pr
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
 const PREFIXES = ['/assets/', '/staging/', '/draco/']
-const ROUTE_RE = /^\/api\/assets\/(weapon|human|rebel)\//
+const ROUTE_RE = /^\/api\/assets\/(weapon|human|rebel|island)\//
 
 export interface CacheStats { hits: number; net: number; stored: number; bypass: number; bytesNet: number; neg: number }
 export const cacheStats: CacheStats = { hits: 0, net: 0, stored: 0, bypass: 0, bytesNet: 0, neg: 0 }
@@ -267,7 +269,17 @@ export function installAssetCache(): boolean {
             : { ...init, cache: 'no-cache' }
           const r = await netGuard(rf(input, init2))
           const type = r.headers.get('Content-Type') ?? 'application/octet-stream'
-          const blob = await r.blob()
+          // Task 135 BODY GUARD: a download-manager extension that captures a
+          // response can let the fetch RESOLVE (headers served) but never
+          // deliver the body stream — an unguarded r.blob() then hangs
+          // forever, which wedged this pending promise, leaked its network-gate
+          // slot (finally never ran), and froze the whole loading bar with the
+          // room stuck in server 'warmup' (the user's IDM report). The same
+          // netGuard that bounds the header phase bounds the body phase: on
+          // timeout the candidate rejects like any network hiccup, the pool
+          // falls through to the next candidate, the gate slot is released,
+          // and the bar always lifts.
+          const blob = await netGuard(r.blob())
           if (r.status === 200) cacheStats.bytesNet += blob.size   // Task 111: real-download bytes for the loading-bar display
           if (r.status === 200) {
             memCache.set(key, { status: 200, blob, type })
@@ -381,6 +393,28 @@ function modelItems(): Item[] {
   return items
 }
 
+/** Task 134: per-map model payloads — the exact geom URL the map wrapper
+ *  fetches (read from the map def itself, so staging-preview vs accepted
+ *  /assets URLs are always warmed correctly), island sky.jpg, and the 4
+ *  packed palm models (chain /assets → /staging, policy v3). */
+function mapModelItems(mapId: string | undefined): Item[] {
+  const items: Item[] = []
+  const map = mapId ? (MAPS as Record<string, MapDef | undefined>)[mapId] : undefined
+  if (map?.bsp) items.push({ chain: [{ url: map.bsp.geomUrl }] })
+  if (mapId === 'island') {
+    items.push({ chain: [{ url: '/assets/maps/island/sky.jpg' }, { url: '/staging/maps/island/sky.jpg' }] })
+    // Task 135: the 4 packed palm models go through the extensionless POST
+    // route /api/assets/island/<m> (staging-wins inside the route), like every
+    // other GLB — the direct /assets|/staging .glb GETs below were captured by
+    // the user's IDM extension and wedged the bar in 'warmup' forever. The
+    // route 404s on a fresh clone -> negative-cached -> map renders bare.
+    for (const m of ['palm-hd', 'palm-low', 'palm-burned', 'palm-series']) {
+      items.push({ chain: [{ url: `/api/assets/island/${m}`, init: { method: 'POST' } }] })
+    }
+  }
+  return items
+}
+
 /** The sound pack — mirrors audio.ts's FILES derivation exactly (same three
  * shared/weapons-audio sources), each with its assets→staging chain. */
 function soundItems(): Item[] {
@@ -421,7 +455,7 @@ export async function preloadGameAssets(mapId: string | undefined, onProgress?: 
   const HARD_CAP_MS = 120_000
   const stages: Array<{ stage: string; items: Item[] }> = [
     { stage: 'textures', items: [...mapTextureItems(mapId), ...weaponTextureItems()] },
-    { stage: 'models', items: modelItems() },
+    { stage: 'models', items: [...modelItems(), ...mapModelItems(mapId)] },
     { stage: 'sounds', items: soundItems() },
   ]
   const total = stages.reduce((a, s) => a + s.items.length, 0)

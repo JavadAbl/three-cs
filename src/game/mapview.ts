@@ -4,6 +4,7 @@ import { MAPS } from './mapdata'
 import type { MapDef, Box } from './mapdata'
 import { skyMesh, siteDecal, surfaceMaterial, pbrMapScope } from './textures'
 import { attachNightSky } from './nightsky'
+import { sharedGLTFLoader } from './gltf'
 
 export interface MapBuild {
   group: THREE.Group
@@ -177,6 +178,51 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
         raycastMeshes.push(mesh)
       }
     }).catch(() => { /* boxes already render a playable fallback */ })
+  }
+
+  // Task 134: generator-placed GLB prop models (island palms — 4 user
+  // uploads, packed by scripts/island/pack-palm-models-t134.ts). One
+  // prototype per model via the shared loader (KHR_mesh_quantization —
+  // GLTFLoader decodes natively, no wasm decoder fetch), then a clone per
+  // placement sharing geometry+materials. Task 135: bytes come from the
+  // extensionless POST route /api/assets/island/<m> (staging-wins inside
+  // the route) — the old direct /assets|/staging .glb GETs were captured by
+  // the user's IDM extension and the palms never arrived. NOT added to
+  // raycastMeshes: CS leaves don't stop bullets — trunks block server LOS
+  // via their losBoxes members, visual impacts on fronds would double-draw
+  // against the terrain decals.
+  if (map.props?.length) {
+    const needed = [...new Set(map.props.map(p => p.m))]
+    const protos = new Map<string, THREE.Object3D>()
+    const tryLoad = (m: string): Promise<void> =>
+      fetch(`/api/assets/island/${m}`, { method: 'POST' })
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`)
+          return r.arrayBuffer()
+        })
+        .then((buf) => new Promise<void>((resolve) => {
+          sharedGLTFLoader().parse(
+            buf,
+            '',
+            (gltf) => { protos.set(m, gltf.scene); resolve() },
+            () => resolve(),   // parse fail -> this model stays absent, map keeps the rest
+          )
+        }))
+        .catch(() => { /* 404 / network fail -> map renders without this prop */ })
+    Promise.all(needed.map(tryLoad)).then(() => {
+      for (const p of map.props!) {
+        const proto = protos.get(p.m)
+        if (!proto) continue
+        const inst = proto.clone()
+        inst.scale.setScalar(p.h)          // models normalized to height 1 at pack time
+        inst.position.set(p.x, p.y, p.z)
+        inst.rotation.y = p.rotY
+        inst.traverse(o => {
+          if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; o.userData.isMap = true }
+        })
+        group.add(inst)
+      }
+    }).catch(() => { /* map still fully playable without props */ })
   }
 
   // sky (stored so engine can drift the clouds) — per-map palette (Task 77)

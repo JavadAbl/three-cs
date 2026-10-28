@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the image provided, here are the precise answers:\n\n1)  **Weapon Slot Labels:** The labels visible in the bottom weapon strip are **\"2 Glock\"**, **\"3 Knife\"**, and **\"4 C4\"**. **Yes**, there is a slot showing **'4 C4'**.\n2)  **C4 Carrier Text:** **Yes**, the orange text **\"C4 CARRIER — press 4\"** is visible in the bottom right corner of the screen.\n3)  **Round Timer:** **Yes**, the round timer is visible at the top center of the screen, displaying **1:49**.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792695113,
+  "id": "20261023025150b0bd2f5c27e84176",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261023025150b0bd2f5c27e84176",
+  "usage": {
+    "completion_tokens": 135,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1150,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1285
+  }
+}

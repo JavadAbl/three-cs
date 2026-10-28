@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the screenshot, this shows a **live 3D game scene with a pause menu overlay**, not a loading screen.\n\nHere are the specific details visible:\n\n**Main Scene (Background):**\n*   **Live 3D Environment:** A first-person view of the \"DUST2\" map is visible in the background. You can see the sandy ground texture and a wooden post/structure characteristic of that map.\n*   **Weapon Model:** The barrel of a gun (likely a pistol or rifle) is visible in the bottom-right foreground.\n*   **No Loading Elements:** There is **no** \"LOADING\" text, progress bar, or spinner visible.\n\n**Overlay / Pause Menu:**\n*   **Title:** \"DUST2\" in orange text, with \"CS2-style web FPS • connected\" underneath.\n*   **Buttons:**\n    *   **RESUME** (large grey button)\n    *   **SETTINGS** (with a gear icon)\n    *   **QUIT TO LOBBY** (red button at the bottom)\n*   **Controls List:** A list of keybindings is displayed in the center (WASD move, SPACE jump, LMB fire, etc.).\n\n**Other UI:**\n*   **HUD Elements:** There are three blurred rectangular boxes at the very top center of the screen (likely where the round timer or team scores would normally appear).\n*   **Mini-map/Indicator:** There is a small circular icon with an \"N\" in the bottom-left corner.\n\nIn summary, the game has loaded and is running, but it is currently paused to show the settings and controls menu.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792681983,
+  "id": "202610222312560a27376d523e44fc",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610222312560a27376d523e44fc",
+  "usage": {
+    "completion_tokens": 335,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1110,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1445
+  }
+}
