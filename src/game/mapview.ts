@@ -184,21 +184,32 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
   // uploads, packed by scripts/island/pack-palm-models-t134.ts). One
   // prototype per model via the shared loader (KHR_mesh_quantization —
   // GLTFLoader decodes natively, no wasm decoder fetch), then a clone per
-  // placement sharing geometry+materials. Chain /assets -> /staging per
-  // policy v3. NOT added to raycastMeshes: CS leaves don't stop bullets —
-  // trunks block server LOS via their losBoxes members, visual impacts on
-  // fronds would double-draw against the terrain decals.
+  // placement sharing geometry+materials. Task 135: bytes come from the
+  // extensionless POST route /api/assets/island/<m> (staging-wins inside
+  // the route) — the old direct /assets|/staging .glb GETs were captured by
+  // the user's IDM extension and the palms never arrived. NOT added to
+  // raycastMeshes: CS leaves don't stop bullets — trunks block server LOS
+  // via their losBoxes members, visual impacts on fronds would double-draw
+  // against the terrain decals.
   if (map.props?.length) {
     const needed = [...new Set(map.props.map(p => p.m))]
     const protos = new Map<string, THREE.Object3D>()
-    const tryUrls = (m: string, i: number): Promise<void> => {
-      const urls = [`/assets/models/island/${m}.glb`, `/staging/models/island/${m}.glb`]
-      if (i >= urls.length) return Promise.resolve()
-      return sharedGLTFLoader().loadAsync(urls[i])
-        .then(g => { protos.set(m, g.scene) })
-        .catch(() => tryUrls(m, i + 1))
-    }
-    Promise.all(needed.map(m => tryUrls(m, 0))).then(() => {
+    const tryLoad = (m: string): Promise<void> =>
+      fetch(`/api/assets/island/${m}`, { method: 'POST' })
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`)
+          return r.arrayBuffer()
+        })
+        .then((buf) => new Promise<void>((resolve) => {
+          sharedGLTFLoader().parse(
+            buf,
+            '',
+            (gltf) => { protos.set(m, gltf.scene); resolve() },
+            () => resolve(),   // parse fail -> this model stays absent, map keeps the rest
+          )
+        }))
+        .catch(() => { /* 404 / network fail -> map renders without this prop */ })
+    Promise.all(needed.map(tryLoad)).then(() => {
       for (const p of map.props!) {
         const proto = protos.get(p.m)
         if (!proto) continue
