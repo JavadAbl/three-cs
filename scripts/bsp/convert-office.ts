@@ -32,7 +32,9 @@ import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { ppm2png } from './ppm2png'
 
 const SRC = '/home/z/my-project/upload/cs_office.bsp'
-const OUT_DIR = '/home/z/my-project/public/staging/maps/office'
+// Task 141: OUT_DIR moved staging -> assets (Task 130 accepted serving path;
+// the staging dir no longer exists — regenerate straight into /assets).
+const OUT_DIR = '/home/z/my-project/public/assets/maps/office'
 const SCALE = 0.025          // 1 bsp unit = 0.025 m (72u player = 1.8 m)
 const Z_REBASE = 576         // bsp z=-576 (below the -544 sump floor) → our y 0
 const THICK = 32             // collision extrusion depth (bsp units)
@@ -126,7 +128,17 @@ function ourTex(rawName: string): string {
   if (has('glass')) return 'glass'                // glass_bright, glass_med
   if (n === 'window_1') return 'glass'
   if (has('ceil', 'fifts_lght', 'fifties_lgt', 'light3c', 'c1a4i_c1a')) return 'ceiling' // drop-ceiling panels + fixtures
-  if (has('railing', 'rail1')) return 'fence'    // sphinx_railing_, railing_3
+  // Task 141: railing_3 + sphinx_railing_ are OPAQUE concrete walls, NOT
+  // see-through railings — VLM + palette audit of the embedded WAD data
+  // (mottled gray concrete, darker base course, zero transparent pixels) and
+  // the GoldSrc rule that ONLY '{'-prefixed textures render with transparency
+  // (neither name carries '{'). Mapping them to the alphaTest 'fence' lattice
+  // turned 2557 m2 of solid wall — the CT-entrance courtyard + map perimeter
+  // — into see-through scaffolding ("walls are Scaffolding, seems under
+  // construction"). They render as 'concrete', faithful to CS 1.6.
+  if (has('railing', 'rail1')) return 'concrete'  // sphinx_railing_, railing_3 — SOLID in CS1.6 (Task 141)
+  // (true-alpha '{rail1c/'{ladder2* were already returned 'fence' above — the
+  //  alpha check at line ~120 runs first, so only opaque names reach here)
   if (has('bricks_')) return 'brick'              // redbricks_12/13, brownbricks_1
   if (has('lab1_flr', 'tnnl_flr')) return 'tile'  // hallway tile floors
   if (has('asphalt', 'comp_', 'lab1_comp', 'black', 'fade')) return 'dark'  // parking lot + screens
@@ -702,7 +714,7 @@ export const OFFICE: MapDef = {
   id: 'office',
   name: 'Office',
   version: 1,
-${withBsp ? `  bsp: { geomUrl: '/staging/maps/office/geom.json' },   // staging per acceptance policy — flip to /assets/maps/office/ on accept
+${withBsp ? `  bsp: { geomUrl: '/assets/maps/office/geom.json' },   // ACCEPTED Task 130 (v1) — was /staging per policy v3; regenerated Task 141 (railing walls fence->concrete)
 ` : ''}  boxes: ${JSON.stringify(boxOut)},
   losBoxes: ${JSON.stringify(boxOut)},
   spawns: {

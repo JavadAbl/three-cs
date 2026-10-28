@@ -40,7 +40,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v13'   // Task 138: island palm GLBs re-packed byte-exact — the Task-134 batch was double-corrupted (Bun `Buffer.from(Float32Array)` wrote 4x-short zero-filled geometry views, then gltf-transform prune/quantize piled garbage node scales 8.5e37 + mangled buffers on top), so every cached palm render-invisible ~10^38 units away ("no trees on island"). The bump flushes the poisoned GLB cache entries in existing browsers; the re-pack is gated NUMERICALLY now (scripts/island/verify-palm-glbs-t138.ts: transforms, view lengths, vertex samples, y-union — 86/86). (v12 was Task 132's island acceptance; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
+export const ASSET_CACHE_VERSION = 'v14'   // Task 141: office geom.json re-shipped — railing_3/sphinx_railing_ (2557 m2) remapped fence->concrete (they are OPAQUE concrete walls in CS 1.6, only '{'-prefixed WAD textures render transparent; the alphaTest lattice made the CT-entrance courtyard + map perimeter look like see-through construction scaffolding). The bump flushes the cached v13 office geom in existing browsers. (v13 was Task 138's island palm re-pack; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
