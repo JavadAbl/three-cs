@@ -28,6 +28,11 @@ export interface ScoreRow { id: string; name: string; team: TeamId; kills: numbe
 
 export interface HudState {
   connected: boolean
+  /** Task 136: the game socket has never connected / keeps failing — the
+   *  sandbox's game server (:3003) is down. Rounds can't start server-side,
+   *  so the HUD shows an explicit OFFLINE panel instead of a silent,
+   *  forever-'warmup' park (the "all maps stuck on warmup" report). */
+  serverDown: boolean
   joined: boolean
   phase: string
   mapName: string
@@ -260,6 +265,9 @@ export class Engine {
 
   // match state (from server)
   private phase = 'warmup'
+  // Task 136: consecutive failed socket connect attempts (reset on 'connect').
+  // >= 3 with no live socket = the game server is unreachable → HUD banner.
+  private connFailures = 0
   private phaseEndsAt = 0
   private round = 0
   private scores = { CT: 0, T: 0 }
@@ -897,6 +905,7 @@ export class Engine {
     this.socket = socket
 
     socket.on('connect', () => {
+      this.connFailures = 0
       const emitJoin = () => {
         if (this.disposed) return
         socket.emit('join', {
@@ -1326,6 +1335,13 @@ export class Engine {
 
     socket.on('disconnect', () => {
       this.pushToast('Disconnected from server — reconnecting...')
+    })
+
+    // Task 136: failed connect attempts (server down / restarting). The 10 Hz
+    // HUD loop picks the counter up; >= 3 failures flips the HUD to OFFLINE so
+    // the player sees WHY nothing starts instead of a forever-'warmup' park.
+    socket.on('connect_error', () => {
+      this.connFailures++
     })
   }
 
@@ -2384,6 +2400,7 @@ export class Engine {
 
     const state: HudState = {
       connected: !!this.socket?.connected,
+      serverDown: !this.socket?.connected && this.connFailures >= 3,
       joined: !!this.myId,
       phase: this.phase,
       mapName: this.mapDef.name,
