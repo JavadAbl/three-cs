@@ -40,7 +40,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v12'   // Task 132 acceptance: island map promoted staging->assets — geom.json now /assets/maps/island/ + sky.jpg /assets/maps/island/ + 25 texture jpgs /assets/textures/maps/island/ (these URLs were served from /staging under v11, so the bump sweep makes the /assets URLs resolve everywhere; also a 5th container wipe had emptied /staging, making the regen path — island-regen.sh — the live proof of the wipe-resilient provenance chain). User accepted Island as v1 (PBR + HDRI look, after 3 hotfixes: bot graph, fall-through, invisible walls). (v11 was Task 130's office acceptance; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
+export const ASSET_CACHE_VERSION = 'v15'   // Task 142: office geom.json re-shipped — 4 interior door-leaf faces (door_2) removed from the plank group; the decompile had baked them as static closed doors WITH collision, walling off the two real office-wing doorways ("all doors has a blocker and cant pass them"). Those doorways are now open; decor doors on voids stay closed (same convention as the roller door). The bump flushes the cached v14 office geom in existing browsers. (v14 was Task 141's railing->concrete remap; the BUMP RULE + no-cache wrapper from Task 104 is what makes every re-ship reachable.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'

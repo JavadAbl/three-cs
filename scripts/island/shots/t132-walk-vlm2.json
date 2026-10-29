@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "```json\n{\n  \"shot1\": {\n    \"models\": 1,\n    \"sunk\": 0,\n    \"desc\": \"One soldier model is partially visible on the left, appearing to stand naturally.\"\n  },\n  \"shot2\": {\n    \"models\": 1,\n    \"sunk\": 0,\n    \"desc\": \"One soldier model is standing and walking naturally on the sandy beach surface.\"\n  },\n  \"verdict\": \"All visible soldier models in both screenshots are standing or walking naturally on the terrain surface.\"\n}\n```",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1793091222,
+  "id": "20261027165338a237b8d500754602",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261027165338a237b8d500754602",
+  "usage": {
+    "completion_tokens": 115,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 2233,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 2348
+  }
+}

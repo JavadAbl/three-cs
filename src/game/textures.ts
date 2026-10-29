@@ -1040,46 +1040,54 @@ export function glassTexture(rx = 1, ry = 1): THREE.Texture {
   return finish(c, rx, ry)
 }
 
-/** railing/fence lattice — ALPHA-CUTOUT canvas (alphaTest), 2x2 truss cells
- * in world. Steel bars + diagonal X per cell; holes are true transparency so
- * the alphaTest discard leaves see-through lattice. No PBR twin (jpgs have
- * no alpha) — this canvas IS the final look. */
+/** railing/fence — ALPHA-CUTOUT canvas (alphaTest), 2x2 cells per repeat.
+ * Task 141 (two-part fix):
+ *  (a) CONVERTER: railing_3 + sphinx_railing_ (2557 m2, the CT-entrance
+ *      courtyard + map perimeter) were mis-mapped to this family, but they
+ *      are OPAQUE CONCRETE walls — VLM + palette audit of the embedded WAD
+ *      data, and the GoldSrc rule that only '{'-prefixed textures render
+ *      with transparency. They now remap to 'concrete' at the geom level.
+ *  (b) THIS CANVAS: what legitimately remains in the fence family after (a)
+ *      is the true-alpha set ({rail1c rails, {ladder2/{ladder2b ladder
+ *      rungs, 378 m2 of small props). The old diagonal-X truss read as
+ *      CONSTRUCTION SCAFFOLDING there — replaced by horizontal rails +
+ *      vertical posts + one thin mid picket per 1 m cell, which reads as
+ *      proper railing/ladder work. Cells stay 2x2 per repeat (t126
+ *      anti-moire constraint: 4x4 cells aliased into a checkerboard at
+ *      distance). No PBR twin (jpgs have no alpha) — this canvas IS the
+ *      final look. */
 export function fenceTexture(): THREE.Texture {
   const [c, ctx] = makeCanvas()
-  // t126 live VLM: 4x4 cells alias into a 'checkerboard missing-texture' at
-  // distance. 2x2 truss cells with heavy X braces read as structural steel.
-  const N = 2, S = TEX / N, B = 11
+  const N = 2, S = TEX / N, B = 13        // cell 1 m, bar 13 px (~5 cm)
   ctx.clearRect(0, 0, TEX, TEX)
   for (let k = 0; k < N; k++) {
     const p = k * S
-    // horizontal rail at each cell row top
+    // horizontal rail at each cell row top (bottom rails = next row's top;
+    // the v=1 edge wraps onto the v=0 rail, so the pattern tiles seamlessly)
     // galvanized steel (t126 live: dark bars read as a 'corrupted black grid')
     const g = ctx.createLinearGradient(0, p, 0, p + B)
-    g.addColorStop(0, '#9aa3ad'); g.addColorStop(0.4, '#7a828d'); g.addColorStop(1, '#5c636d')
+    g.addColorStop(0, '#a8b0ba'); g.addColorStop(0.4, '#828a95'); g.addColorStop(1, '#5c636d')
     ctx.fillStyle = g
     ctx.fillRect(0, p, TEX, B)
-    ctx.fillStyle = 'rgba(230,236,242,0.55)'
+    ctx.fillStyle = 'rgba(235,241,247,0.6)'
     ctx.fillRect(0, p, TEX, 2)
-    // vertical bar at each cell column left
+    // vertical post at each cell column left
     const g2 = ctx.createLinearGradient(p, 0, p + B, 0)
-    g2.addColorStop(0, '#9aa3ad'); g2.addColorStop(0.4, '#7a828d'); g2.addColorStop(1, '#5c636d')
+    g2.addColorStop(0, '#a8b0ba'); g2.addColorStop(0.4, '#828a95'); g2.addColorStop(1, '#5c636d')
     ctx.fillStyle = g2
     ctx.fillRect(p, 0, B, TEX)
-    ctx.fillStyle = 'rgba(230,236,242,0.55)'
+    ctx.fillStyle = 'rgba(235,241,247,0.6)'
     ctx.fillRect(p, 0, 2, TEX)
   }
-  // diagonal lattice X per cell
+  // one thin mid picket per cell (0.5 m spacing — the thinnest feature that
+  // stays below the t126 moire threshold; fades to open air at distance
+  // instead of aliasing, rails+posts carry the silhouette)
   for (let cy = 0; cy < N; cy++) for (let cx = 0; cx < N; cx++) {
     const x0 = cx * S, y0 = cy * S
-    const g = ctx.createLinearGradient(x0, y0, x0 + S, y0 + S)
-    g.addColorStop(0, '#6d757f'); g.addColorStop(1, '#5c636d')
-    ctx.strokeStyle = g
-    ctx.lineWidth = 9
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + S, y0 + S); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(x0 + S, y0); ctx.lineTo(x0, y0 + S); ctx.stroke()
-    // light catch on the X center weld
-    ctx.fillStyle = 'rgba(200,208,216,0.3)'
-    ctx.fillRect(x0 + S / 2 - 3, y0 + S / 2 - 3, 6, 6)
+    const g = ctx.createLinearGradient(x0 + S / 2 - 3, 0, x0 + S / 2 + 4, 0)
+    g.addColorStop(0, '#767e88'); g.addColorStop(0.5, '#8d95a0'); g.addColorStop(1, '#5f666f')
+    ctx.fillStyle = g
+    ctx.fillRect(x0 + S / 2 - 3, y0 + B, 7, S - B)
   }
   const t = new THREE.CanvasTexture(c)
   t.wrapS = t.wrapT = THREE.RepeatWrapping
@@ -1261,27 +1269,27 @@ export type SurfaceTex = 'sand' | 'wall' | 'crate' | 'metal' | 'dark' | 'plank' 
   | 'carpet' | 'offwall' | 'ceiling' | 'snow' | 'tile' | 'glass' | 'fence'   // Task 126 office families
   | 'isand' | 'igrass' | 'irock' | 'bark' | 'leaf'   // Task 131 island families
 
-/** fence bump: the lattice's own luminance — holes would poison bumpFrom's
- * grayscale copy (transparent canvas), so draw an opaque grayscale twin. */
+/** fence bump: the railing's own relief — holes would poison bumpFrom's
+ * grayscale copy (transparent canvas), so draw an opaque grayscale twin.
+ * Task 141: bars only (rails/posts/pickets) — the old diagonal-X truss
+ * relief is gone with the scaffolding look. */
 let fenceBumpCache: THREE.Texture | null = null
 function fenceBump(): THREE.Texture {
   if (fenceBumpCache) return fenceBumpCache
   const [c, ctx] = makeCanvas(128, 128)
   ctx.fillStyle = '#20242a'   // hole depth
   ctx.fillRect(0, 0, 128, 128)
+  // rails + posts every 64 px (= 1 m at the 2 m repeat)
   ctx.fillStyle = '#b8bec6'   // bar relief
-  for (let k = 0; k < 4; k++) {
-    const p = k * 32
+  for (let k = 0; k < 2; k++) {
+    const p = k * 64
     ctx.fillRect(0, p, 128, 7)
     ctx.fillRect(p, 0, 7, 128)
   }
-  ctx.strokeStyle = '#9aa0a8'
-  ctx.lineWidth = 5
-  for (let cy = 0; cy < 4; cy++) for (let cx = 0; cx < 4; cx++) {
-    const x0 = cx * 32, y0 = cy * 32
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + 32, y0 + 32); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(x0 + 32, y0); ctx.lineTo(x0, y0 + 32); ctx.stroke()
-  }
+  // thin mid picket per cell
+  ctx.fillStyle = '#9aa0a8'
+  ctx.fillRect(32, 0, 4, 128)
+  ctx.fillRect(96, 0, 4, 128)
   const t = new THREE.CanvasTexture(c)
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   fenceBumpCache = t

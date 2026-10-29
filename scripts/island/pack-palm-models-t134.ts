@@ -20,13 +20,14 @@
 //      (5.5-9 m, the SAME h0 draw the procedural palms used, so collider
 //      boxes keep matching the visual)
 //   4. write a minimal clean GLB (1 buffer; geometry rebuilt; materials/
-//      textures/images copied with remapped bufferViews)
-//   5. shells out to compress-glb.sh (weld + webp textures + draco)
+//      textures/images re-encoded to WebP in-process via sharp (Task 138:
+//      the gltf-transform CLI is banned in this sandbox — prune corrupts
+//      buffers, quantize writes 8.5e37 node scales, Draco crashes)
 //
 // Run:  bun scripts/island/pack-palm-models-t134.ts
 import { readFileSync, writeFileSync, mkdirSync, statSync } from 'fs'
-import { execSync } from 'child_process'
 import * as THREE from 'three'
+import sharp from 'sharp'
 
 // three BufferGeometryUtils.mergeGeometries — pure JS, DOM-free
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
@@ -216,10 +217,16 @@ for (const { src, out } of UPLOAD) {
   const meshesOut: any[] = []
   for (const mg of matGeoms) {
     const g = mg.geoms[0]
+    // Task 138 CRITICAL: `Buffer.from(Float32Array)` UNDER BUN yields ONE BYTE
+    // PER ELEMENT (Node copies the underlying bytes) — the Task-134 pack wrote
+    // 4x-short zero-filled geometry views with exactly this line. Byte-exact
+    // form: pass the ArrayBuffer + explicit byte length.
     const posArr = (g.getAttribute('position') as THREE.BufferAttribute).array as Float32Array
-    const posB = Buffer.from(posArr)
-    const nrmB = Buffer.from((g.getAttribute('normal') as THREE.BufferAttribute).array as Float32Array)
-    const uvB = Buffer.from((g.getAttribute('uv') as THREE.BufferAttribute).array as Float32Array)
+    const posB = Buffer.from(posArr.buffer, posArr.byteOffset, posArr.byteLength)
+    const nrmArr = (g.getAttribute('normal') as THREE.BufferAttribute).array as Float32Array
+    const nrmB = Buffer.from(nrmArr.buffer, nrmArr.byteOffset, nrmArr.byteLength)
+    const uvArr = (g.getAttribute('uv') as THREE.BufferAttribute).array as Float32Array
+    const uvB = Buffer.from(uvArr.buffer, uvArr.byteOffset, uvArr.byteLength)
     if (!g.getIndex()) { // non-indexed -> build sequential
       const n = g.getAttribute('position').count
       const seq = new Uint32Array(n); for (let i = 0; i < n; i++) seq[i] = i
@@ -256,14 +263,27 @@ for (const { src, out } of UPLOAD) {
       }],
     })
   }
-  // images: copy bytes + rebuild bufferViews; keep textures/samplers/materials verbatim
-  const imagesOut = (json.images || []).map((im: any) => {
+  // images: re-encode to WebP in-process (sharp) + rebuild bufferViews;
+  // keep textures/samplers/materials verbatim.
+  // Task 138: the ENTIRE gltf-transform CLI is banned in this sandbox —
+  // `prune` (the very first step) mangles the position buffers
+  // (accessor min/max -> [0,-1.7e38,0]), `quantize` writes node.scale
+  // = 8.5e37, and the Draco ENCODER crashes/corrupts (Task 134). The
+  // script's own intermediate (this writer) is verified-correct; sharp
+  // here is the ONLY compression step. Gate: verify-palm-glbs-t138.ts.
+  const imagesOut = await Promise.all((json.images || []).map(async (im: any) => {
     if (im.uri !== undefined) throw new Error('external image not supported: ' + im.uri)
     const bv = json.bufferViews[im.bufferView]
     const bytes = bin.slice(bv.byteOffset || 0, (bv.byteOffset || 0) + bv.byteLength)
-    const v = pushView(Buffer.from(bytes))
-    return { mimeType: im.mimeType, bufferView: v }
-  })
+    let outB = Buffer.from(bytes)
+    let mime = im.mimeType
+    if (mime === 'image/png' || mime === 'image/jpeg') {
+      outB = await sharp(bytes).webp({ quality: 86 }).toBuffer()
+      mime = 'image/webp'
+    }
+    const v = pushView(outB)
+    return { mimeType: mime, bufferView: v }
+  }))
   // build final bin
   const binBuf = Buffer.alloc(byteLen)
   for (let i = 0; i < views.length; i++) {
@@ -298,30 +318,13 @@ for (const { src, out } of UPLOAD) {
   glb.writeUInt32LE(0x004e4942, binHeaderOff + 4)
   binBuf.copy(glb, binHeaderOff + 8)
   const intermediate = `${TMP_DIR}/${out}.glb`
-  writeFileSync(intermediate, glb)
-
-  // ---------------------------------------------------------------- compress
-  // NOTE Task 134: the Draco ENCODER is BROKEN in this environment — it
-  // crashes ("Aborted") on palm-hd and, worse, SILENTLY CORRUPTS meshes
-  // where it "succeeds" (palm-low 2764 -> 829 tris, burned 9904 -> 3013,
-  // series bark 1600 -> 624; only ~30% survive, verified via
-  // gltf-transform inspect). Draco is therefore BANNED for this batch.
-  // We use quantize (KHR_mesh_quantization) instead — lossless-enough
-  // u16/i16n attribute packing that three's GLTFLoader decodes NATIVELY
-  // (no wasm decoder fetch, no DRACOLoader path), verified triangle-exact
-  // on palm-hd. Texture payload is handled by the webp step (4-8x).
   const finalPath = `${STAGE_DIR}/${out}.glb`
-  execSync(`bash -c '
-    set -euo pipefail
-    CLI=node_modules/.bin/gltf-transform
-    W=$(mktemp -d)
-    $CLI prune    "${intermediate}" "$W/1.glb"
-    $CLI dedup    "$W/1.glb" "$W/2.glb"
-    $CLI weld     "$W/2.glb" "$W/3.glb"
-    $CLI webp     "$W/3.glb" "$W/4.glb"
-    $CLI quantize "$W/4.glb" "${finalPath}"
-    rm -rf "$W"'`, { stdio: 'inherit' })
-  const compressor = 'quantize(KHR_mesh_quantization)'
+  writeFileSync(intermediate, glb)
+  // Task 138: ship the script's own output AS THE FINAL — no gltf-transform
+  // CLI steps (prune/dedup/weld/webp all banned: prune corrupts buffers,
+  // see header). Sharp already re-encoded textures to WebP above.
+  writeFileSync(finalPath, glb)
+  const compressor = 'in-script sharp webp textures + float32 geometry (gltf-transform CLI fully banned Task 138)'
   provenance.push({
     model: out,
     source_upload: src,
