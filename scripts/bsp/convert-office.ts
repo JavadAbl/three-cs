@@ -27,6 +27,13 @@
 //      snow, tile, glass, fence) + shared reuse (concrete/brick/metal/plank/
 //      dark/crate). fence/glass are render-special (alphaTest lattice /
 //      transparent panes).
+//   6. Task 139: BSP-named "railing" textures (railing_3, sphinx_railing_)
+//      are SOLID CONCRETE PARAPETS (VLM ground truth on extracted miptex:
+//      opaque concrete walls with rust streaks, 256x192/256x128), NOT
+//      lattice. Mapping them to fence alphaTest made the whole CT parking
+//      structure read as "construction scaffolding" (408 world faces,
+//      2557 m2). They now map to concrete; only '{'-prefixed GoldSrc
+//      transparent textures ({rail1c, {ladder2*) stay fence.
 // ============================================================
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { ppm2png } from './ppm2png'
@@ -126,7 +133,7 @@ function ourTex(rawName: string): string {
   if (has('glass')) return 'glass'                // glass_bright, glass_med
   if (n === 'window_1') return 'glass'
   if (has('ceil', 'fifts_lght', 'fifties_lgt', 'light3c', 'c1a4i_c1a')) return 'ceiling' // drop-ceiling panels + fixtures
-  if (has('railing', 'rail1')) return 'fence'    // sphinx_railing_, railing_3
+  if (has('railing', 'rail1')) return 'concrete' // Task 139: solid concrete parapets, NOT lattice (see header note 6)
   if (has('bricks_')) return 'brick'              // redbricks_12/13, brownbricks_1
   if (has('lab1_flr', 'tnnl_flr')) return 'tile'  // hallway tile floors
   if (has('asphalt', 'comp_', 'lab1_comp', 'black', 'fade')) return 'dark'  // parking lot + screens
