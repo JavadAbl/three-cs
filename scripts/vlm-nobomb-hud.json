@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the provided screenshot, here are the precise answers to your questions:\n\n1) **Weapon Slot Labels:** The labels visible in the bottom center weapon strip are **\"2 Glock\"** and **\"Knife\"**. There is **no slot mentioning C4 or a 4th slot**.\n2) **Orange Text:** **No**, there is no orange text saying \"C4 CARRIER — press 4\" anywhere on the screen.\n3) **Planting Text:** **No**, there is no text saying \"HOLD E TO PLANT\" or \"BOMB\".\n4) **Progress Bar:** **No**, there is no progress bar for planting.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792694451,
+  "id": "2026102302404786be2e90ae3b4b73",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102302404786be2e90ae3b4b73",
+  "usage": {
+    "completion_tokens": 137,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1174,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1311
+  }
+}

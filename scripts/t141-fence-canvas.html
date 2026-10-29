@@ -1,0 +1,113 @@
+<!doctype html>
+<!-- Task 141: standalone render of the NEW fenceTexture() + fenceBump()
+     drawing code (copied verbatim from src/game/textures.ts) to verify the
+     office CT-entrance railings no longer draw as construction scaffolding.
+     Shows: (1) the raw 512px albedo canvas, (2) a 4x3-tiled wall preview at
+     2 m per repeat (the BSP world-space UV remap), (3) the 128px bump twin. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: #2a2d31; font: 12px monospace; color: #ccd; }
+  .row { display: flex; gap: 16px; padding: 12px; align-items: flex-start; }
+  canvas { image-rendering: auto; border: 1px solid #555; }
+  .lbl { padding: 4px 0; }
+  #wall { width: 760px; height: 420px; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div>
+    <div class="lbl">albedo 512px (fenceTexture)</div>
+    <canvas id="albedo" width="512" height="512"></canvas>
+  </div>
+  <div>
+    <div class="lbl">bump 128px (fenceBump)</div>
+    <canvas id="bump" width="128" height="128" style="width:256px;height:256px"></canvas>
+  </div>
+</div>
+<div class="row">
+  <div>
+    <div class="lbl">tiled wall preview — 12 m wide x 6.6 m tall, one repeat = 2 m (BSP remap pos/2), eye-level view</div>
+    <canvas id="wall" width="760" height="420"></canvas>
+  </div>
+</div>
+<script>
+const TEX = 512
+function makeCanvas(w = TEX, h = TEX) {
+  const c = document.createElement('canvas')
+  c.width = w; c.height = h
+  return [c, c.getContext('2d')]
+}
+// ---- verbatim fenceTexture() drawing (minus THREE texture wrapper) ----
+function drawFence(ctx) {
+  const N = 2, S = TEX / N, B = 13
+  ctx.clearRect(0, 0, TEX, TEX)
+  for (let k = 0; k < N; k++) {
+    const p = k * S
+    const g = ctx.createLinearGradient(0, p, 0, p + B)
+    g.addColorStop(0, '#a8b0ba'); g.addColorStop(0.4, '#828a95'); g.addColorStop(1, '#5c636d')
+    ctx.fillStyle = g
+    ctx.fillRect(0, p, TEX, B)
+    ctx.fillStyle = 'rgba(235,241,247,0.6)'
+    ctx.fillRect(0, p, TEX, 2)
+    const g2 = ctx.createLinearGradient(p, 0, p + B, 0)
+    g2.addColorStop(0, '#a8b0ba'); g2.addColorStop(0.4, '#828a95'); g2.addColorStop(1, '#5c636d')
+    ctx.fillStyle = g2
+    ctx.fillRect(p, 0, B, TEX)
+    ctx.fillStyle = 'rgba(235,241,247,0.6)'
+    ctx.fillRect(p, 0, 2, TEX)
+  }
+  for (let cy = 0; cy < N; cy++) for (let cx = 0; cx < N; cx++) {
+    const x0 = cx * S, y0 = cy * S
+    const g = ctx.createLinearGradient(x0 + S / 2 - 3, 0, x0 + S / 2 + 4, 0)
+    g.addColorStop(0, '#767e88'); g.addColorStop(0.5, '#8d95a0'); g.addColorStop(1, '#5f666f')
+    ctx.fillStyle = g
+    ctx.fillRect(x0 + S / 2 - 3, y0 + B, 7, S - B)
+  }
+}
+// ---- verbatim fenceBump() drawing ----
+function drawBump(ctx) {
+  ctx.fillStyle = '#20242a'
+  ctx.fillRect(0, 0, 128, 128)
+  ctx.fillStyle = '#b8bec6'
+  for (let k = 0; k < 2; k++) {
+    const p = k * 64
+    ctx.fillRect(0, p, 128, 7)
+    ctx.fillRect(p, 0, 7, 128)
+  }
+  ctx.fillStyle = '#9aa0a8'
+  ctx.fillRect(32, 0, 4, 128)
+  ctx.fillRect(96, 0, 4, 128)
+}
+const [ac, actx] = makeCanvas()
+drawFence(actx)
+document.getElementById('albedo').getContext('2d').drawImage(ac, 0, 0)
+const [bc, bctx] = makeCanvas(128, 128)
+drawBump(bctx)
+const bctx2 = document.getElementById('bump').getContext('2d')
+bctx2.drawImage(bc, 0, 0)
+// ---- tiled wall: sky background behind (see-through check) ----
+const wall = document.getElementById('wall')
+const wctx = wall.getContext('2d')
+const sky = wctx.createLinearGradient(0, 0, 0, 420)
+sky.addColorStop(0, '#87929c'); sky.addColorStop(1, '#c3cbd2')
+wctx.fillStyle = sky; wctx.fillRect(0, 0, 760, 420)
+// ground strip
+wctx.fillStyle = '#e8ecef'; wctx.fillRect(0, 340, 760, 80)
+// tile the albedo at 2m per repeat: wall is 12m wide -> 6 repeats across
+// 760px / 6 = 126.7px per repeat; height: repeat covers 2m -> 126.7px too,
+// wall 6.6m -> 3.3 repeats vertically
+const rep = 760 / 6
+const pat = wctx.createPattern(ac, 'repeat')
+wctx.save()
+wctx.scale(rep / TEX, rep / TEX)
+wctx.fillStyle = pat
+wctx.fillRect(0, 0, (760 * TEX) / rep, (340 * TEX) / rep)
+wctx.restore()
+// dim overlay to emulate the office overcast lightmap (vertex colors darken)
+wctx.fillStyle = 'rgba(40,48,58,0.18)'
+wctx.fillRect(0, 0, 760, 420)
+</script>
+</body>
+</html>

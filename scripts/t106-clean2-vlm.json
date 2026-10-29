@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "**Buy Menu/Overlay Text:**\nNo buy menu is visible. There is a large center overlay stating \"TERRORISTS WIN\" with the final score (4:8). HUD elements are visible, including the timer, round count, team scores at the top, and ammo/money counters at the bottom right.\n\n**Rifle Viewmodel:**\n*   **Orientation:** The rifle (an AUG) is positioned in the lower right, angled diagonally with the barrel pointing towards the center-left.\n*   **Visibility:** The weapon is fully visible, showing the stock, receiver, scope, magazine, and barrel.\n*   **Clipping Issues:** Yes, there is noticeable clipping; the bottom of the magazine clips through the floor/ground plane.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792839820,
+  "id": "202610241903375078906d60ea42de",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610241903375078906d60ea42de",
+  "usage": {
+    "completion_tokens": 153,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1098,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1251
+  }
+}

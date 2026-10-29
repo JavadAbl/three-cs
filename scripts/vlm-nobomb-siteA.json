@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) No, there is no red/orange dashed square outline painted on the floor.\n2) No, there are no big red letters A or B painted on the floor or any wall.\n3) The floor in front of the camera is a flat, green surface with a mottled, mossy texture.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792695708,
+  "id": "2026102303014755058623bf7b480e",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102303014755058623bf7b480e",
+  "usage": {
+    "completion_tokens": 65,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1155,
+    "prompt_tokens_details": {
+      "cached_tokens": 5
+    },
+    "total_tokens": 1220
+  }
+}

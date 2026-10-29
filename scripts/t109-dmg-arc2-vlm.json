@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "(1) No, a red arc is not visible around or near the crosshair.\n(2) N/A\n(3) The player is on a pause/menu screen (not an active gameplay HUD), as indicated by the \"DUST2\" menu overlay with options like \"RESUME\", \"SETTINGS\", and \"QUIT TO LOBBY\".",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792847040,
+  "id": "20261024210358d5c2c5e0934147d2",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261024210358d5c2c5e0934147d2",
+  "usage": {
+    "completion_tokens": 72,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1158,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1230
+  }
+}

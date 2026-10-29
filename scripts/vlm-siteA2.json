@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the screenshot of the \"olive/aztec\" style arena:\n\n1.  **Bombsite Markings:** There are **no** painted letters (like 'A' or 'B') or specific bombsite decals visible on the floor or walls. The only markings on the floor are **red rectangular stripes** located in the bottom right corner of the view, near the base of the brick wall.\n2.  **Floor Area:** The immediate floor area consists of a **green, mossy/stone-textured surface**. It is not flat; it features a large **sloped ramp** (or incline) made of the same green material that runs diagonally across the center of the screen.\n3.  **C4 Device:** **No**, there is no red or green C4 bomb device visible in the scene.\n4.  **HUD Hints:** **Yes**, there is text at the bottom center of the screen that reads: **\"PRESS 'B' TO BUY\"**. Additionally, just below that, it shows weapon selection info: **\"1 USP-S   2 Knife\"**.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792690111,
+  "id": "2026102301282650b24d4128c64560",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026102301282650b24d4128c64560",
+  "usage": {
+    "completion_tokens": 234,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1160,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1394
+  }
+}

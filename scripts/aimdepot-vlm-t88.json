@@ -1,0 +1,35 @@
+{
+  "task": 88,
+  "subject": "aimdepot ambientCG identity — live in-game VLM verification (agent-browser, 1280x720)",
+  "shots": {
+    "aimdepot-t88-1-spawn.png": "T spawn view over the arena",
+    "aimdepot-t88-2-mid.png": "mid monolith closeup (hops held, Task-85 discipline)",
+    "aimdepot-t88-3-siteA.png": "north half ground + perimeter wall closeup"
+  },
+  "iteration1": {
+    "verdict": "retexture WORKING — 'surfaces show significant relief and grain detail... mortar lines depth, porous pitting in concrete, individual wood fibers, fine pebbles in the sand; normal maps working effectively to create 3D depth'",
+    "palette": "ground clean bright desert sand; window walls tan/sandstone brick; perimeter dark charcoal concrete; crates warm brown wood — all as designed",
+    "issues": [
+      "obvious horizontal tiling repetition on the long concrete perimeter walls",
+      "abrupt wall-top edge against the sky (no cap/trim)",
+      "crate texture slightly smeared/low-res vertically"
+    ],
+    "fixes_applied": [
+      "wall tile 3.0 -> 4.5 (Task-74 remedy for long-wall repetition)",
+      "crate tile 1.2 -> 1.5",
+      "4 decor parapet cap strips at y 5.75 (wall tex) on both mapdata copies"
+    ]
+  },
+  "iteration2": {
+    "verdict": "ALL THREE ISSUES FIXED — 'Wall Tiling: FIXED... reads as a continuous weathered surface; Wall-Top Edge: FIXED... cap trim clearly visible, completely solving the abrupt edge; Crate Smear: FIXED... wood grain now distinct and no longer smeared'",
+    "new_bugs": "none observed — 'Geometry is clean', crate-ground junction 'appears grounded'",
+    "summary": "'The environment now has a more finished, professional appearance with proper architectural detailing (caps) and texture scaling. No new regression bugs detected.'"
+  },
+  "probes": {
+    "__pbrState": "aimdepot:sand/brick/wall/crate all 'ready' (scoped upgrades ran; bare keys idle — aimdepot uses no shared-path surfaces)",
+    "http": "all 12 identity files 200 over /assets/textures/maps/aimdepot/",
+    "census": "iter2 45s bot fight: 350 shots, 4 kills, 0 bomb/plantProgress events",
+    "red_pixel": "site-A floor view 41 red px in HUD cluster only (Task-85 decal-free baseline 40-50; with-decal was 3399)"
+  },
+  "files": "download/aimdepot-t88*.png (gitignored evidence copies), scripts/aimdepot-t88*.json (state+census dumps)"
+}

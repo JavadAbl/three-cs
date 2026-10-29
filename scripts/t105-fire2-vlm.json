@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the image provided, here are the answers to your questions:\n\n1.  **Which rifle is shown?** It is a **bullpup FAMAS with a carry handle**. You can clearly see the distinctive bullpup layout (magazine behind the trigger) and the large integrated carry handle on top of the receiver.\n2.  **Is there a muzzle flash or smoke effect?** Yes, there is a very prominent, bright **muzzle flash** (glow effect) at the barrel tip.\n3.  **Any shells, tracers or firing effects visible?** Yes, there are bright white **tracer rounds** visible extending from the muzzle flash towards the crosshair.\n4.  **Does the skin/textures look complete?** Yes, the textures look complete. The \"colorful plasma skin\" (blue and black pattern) is fully rendered without any missing-texture checkerboards or black patches.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1792835488,
+  "id": "20261024175125021ecec693ab4740",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261024175125021ecec693ab4740",
+  "usage": {
+    "completion_tokens": 191,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1164,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1355
+  }
+}
