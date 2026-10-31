@@ -341,19 +341,29 @@ export function radar(g: Groups, out: PropOut, x: number, z: number, groundY: nu
   // foundation
   boxGeom(conc, sun, x, groundY + 0.25, z, 7.6, 0.5, 7.6, true)
   out.boxes.push({ x, y: groundY + 0.25, z, w: 7.6, h: 0.5, d: 7.6 })
-  // generator shed beside the mast (enterable, concrete)
+  // generator shed beside the mast (solid concrete block — no door)
   const shw = 3.4, shd = 2.8, shh = 2.3, sx = x - 3.4, sz = z + 2.4
   boxGeom(conc, sun, sx, groundY + 1.15, sz, shw, shh, shd, false)
+  // Task 144: the shed RENDERED solid but had NO collider — players and
+  // bullets walked/shot straight through a 2.3 m concrete block. Solid now.
+  out.boxes.push({ x: sx, y: groundY + shh / 2, z: sz, w: shw, h: shh, d: shd })
   // mast
   const mastH = 8.2
-  for (const [mx, mz] of [[x - 0.9, z - 0.9], [x + 0.9, z - 0.9], [x - 0.9, z + 0.9], [x + 0.9, z + 0.9]]) {
+  // Task 144: the mast collider used to be ONE SOLID 2.1×2.1×mastH box —
+  // an invisible wall 2 m wide around a thin lattice, sitting exactly on the
+  // A-site plant pad (the map's busiest spot): players/bots bounced off
+  // empty air between the visual legs ("hidden objects that block when
+  // moving"). Now 4 slim leg colliders matching the visual posts — the mast
+  // interior is walkable (and shootable — correct for a lattice).
+  const legs: Array<[number, number]> = [[x - 0.9, z - 0.9], [x + 0.9, z - 0.9], [x - 0.9, z + 0.9], [x + 0.9, z + 0.9]]
+  for (const [mx, mz] of legs) {
     boxGeom(metal, sun, mx, groundY + mastH / 2, mz, 0.2, mastH, 0.2, true)
+    out.boxes.push({ x: mx, y: groundY + mastH / 2, z: mz, w: 0.34, h: mastH, d: 0.34 })
   }
   for (let t = 1; t < mastH; t += 1.7) {
     boxGeom(metal, sun, x, groundY + t, z, 2.05, 0.12, 0.24, false)
     boxGeom(metal, sun, x, groundY + t + 0.85, z, 0.24, 0.12, 2.05, false)
   }
-  out.boxes.push({ x, y: groundY + mastH / 2, z, w: 2.1, h: mastH, d: 2.1 })
   // dish
   const cy = groundY + mastH + 0.3
   const tilt = Math.PI * 0.27

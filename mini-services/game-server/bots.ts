@@ -2,7 +2,7 @@ import { WEAPONS, ROUND } from './weapons'
 import type { WeaponId, TeamId, HitPart } from './weapons'
 import { pelletsOf } from '../../shared/weapons'
 import { MAPS } from './mapdata'
-import type { MapDef, WP } from './mapdata'
+import type { MapDef, WP, Box } from './mapdata'
 import type { PlayerState, Match, BotBrain } from './types'
 
 export const BOT_NAMES = [
@@ -354,6 +354,11 @@ export function resetBotForRound(m: Match, p: PlayerState) {
     const spot = pools[idx % pools.length]
     ai.site = spot === g.aHold ? 'A' : spot === g.bHold ? 'B' : 'MID'
     ai.goal = spot[Math.floor(Math.random() * spot.length)]
+    // Task 144: a goal WITHOUT a path is a TRAP — navigate() only computes a
+    // path when the goal is EMPTY/bomb:/def, so CT bots held at SPAWN until
+    // the 50 s round-pressure rotate (or a plant) freed them ("CT bots are
+    // stopped"). Path now, so they walk to their hold spot at round GO.
+    ai.path = bfs(nearestNode(p.x, p.z, g), ai.goal, g)
     if (spot === g.midHold) ai.role = 'hold'
     else ai.role = Math.random() < 0.3 ? 'hold' : 'rush'
   }
@@ -517,6 +522,12 @@ export function updateBots(m: Match, t: number) {
   for (const p of m.players.values()) {
     if (!p.bot || !p.ai) continue
     try { updateBot(m, p, t) } catch { /* keep server alive */ }
+    // Task 144 terrain-follow: correct altitude after ANY movement source
+    // (path-follow, engage strafe, closing-in, stuck teleports). No-op on
+    // flat maps — dy converges to 0 and stays there.
+    if (p.alive && (m.phase === 'live' || m.phase === 'freeze')) {
+      try { groundFollow(graphFor(m).def, p) } catch { /* keep server alive */ }
+    }
   }
 }
 
@@ -528,6 +539,47 @@ function angleDiff(a: number, b: number): number {
 }
 
 function eyeY(p: PlayerState) { return p.y + (p.crouch ? 1.1 : 1.5) }
+
+// ---------------- terrain-follow (Task 144) ----------------
+// Bots used to own their altitude by lerping toward the NEXT WAYPOINT's y
+// (exponential, 25%/tick) and never corrected during engage strafes/closing
+// — on sloped terrain (island hill/cove) they visibly hovered mid-air over
+// dips and climbed before reaching hills ("terror bots sometimes fly").
+// Ground-follow instead: every tick ease p.y toward the highest box top
+// under the bot's feet that is at most +1.25 m above it (wall/prop tops are
+// ignored — you can't teleport onto a wall while brushing it). Falls work
+// too (a floor below feet eases you down). Grid-cached per MapDef.
+const GROUND_CELL = 2.5
+const groundGrids = new WeakMap<MapDef, Map<string, Box[]>>()
+function groundAt(def: MapDef, x: number, z: number, feetY: number): number | null {
+  let grid = groundGrids.get(def)
+  if (!grid) {
+    grid = new Map()
+    for (const b of def.boxes) {
+      if (b.decor) continue
+      const x0 = Math.floor((b.x - b.w / 2) / GROUND_CELL), x1 = Math.floor((b.x + b.w / 2) / GROUND_CELL)
+      const z0 = Math.floor((b.z - b.d / 2) / GROUND_CELL), z1 = Math.floor((b.z + b.d / 2) / GROUND_CELL)
+      for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+        const k = cx + ',' + cz
+        if (!grid.has(k)) grid.set(k, [])
+        grid.get(k)!.push(b)
+      }
+    }
+    groundGrids.set(def, grid)
+  }
+  let top: number | null = null
+  for (const b of grid.get(Math.floor(x / GROUND_CELL) + ',' + Math.floor(z / GROUND_CELL)) ?? []) {
+    if (x >= b.x - b.w / 2 && x <= b.x + b.w / 2 && z >= b.z - b.d / 2 && z <= b.z + b.d / 2) {
+      const t = b.y + b.h / 2
+      if (t <= feetY + 1.25 && (top === null || t > top)) top = t
+    }
+  }
+  return top
+}
+function groundFollow(def: MapDef, p: PlayerState) {
+  const g = groundAt(def, p.x, p.z, p.y)
+  if (g !== null) p.y += (g - p.y) * 0.5
+}
 
 function updateBot(m: Match, p: PlayerState, t: number) {
   const ai = p.ai!
@@ -892,7 +944,10 @@ function navigate(m: Match, p: PlayerState, ai: BotBrain, t: number, diff: Diff)
     const step = Math.min(d, speed * 0.1)
     p.x += (dx / d) * step
     p.z += (dz / d) * step
-    p.y += (next.y - p.y) * 0.25
+    // Task 144: no more exponential y-lerp toward next.y (it lifted bots
+    // onto the next node's altitude early — visibly flying over dips).
+    // Altitude is now owned by groundFollow() every tick: actual ground
+    // under the bot's feet, wherever it came from.
     p.yaw = Math.atan2(-dx, -dz)
     p.moving = true
     // crouch-walk quiet sometimes

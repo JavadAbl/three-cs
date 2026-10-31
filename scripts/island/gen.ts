@@ -176,14 +176,25 @@ for (let ix = 0; ix < NX - 1; ix++)
 
 // ---------------------------------------------------------------- props
 // Task 134: palms are REAL GLB MODELS now (user upload: 4 Sketchfab palms,
-// packed by scripts/island/pack-palm-models-t134.ts -> /staging/models/island/).
+// packed by scripts/island/pack-palm-models-t134.ts -> /assets/models/island/).
 // gen.ts no longer emits palm triangle soup — it emits deterministic model
 // placements (mapdef.props, rendered by mapview via sharedGLTFLoader) and
-// the SAME trunk collider boxes the procedural palms shipped (hotfix-3
-// proven shape: 0.9-wide slim box, cover + nade bounce). The rnd() draw
-// pattern is kept EXACTLY IDENTICAL to the old palm() (h0, lean, dirA,
-// blades + 2/blade, nuts) so every downstream placement (rocks, huts,
-// pier, boats, radar) stays bit-for-bit identical.
+// trunk collider boxes (hotfix-3 proven shape: slim box, cover + nade
+// bounce). The rnd() draw pattern is kept EXACTLY IDENTICAL to the old
+// palm() (h0, lean, dirA, blades + 2/blade, nuts) so every downstream
+// placement (rocks, huts, pier, boats, radar) stays bit-for-bit identical.
+// Task 144: the collider is now sized PER MODEL — the old fixed 0.9 m box
+// put an invisible ~0.25 m ring of blocking air around every thin trunk
+// (palm-series' visual trunk is ~0.4 m at h7 — measured from the packed
+// GLBs, scripts/.tmp/trunk-p95.ts). D = measured trunk diameter at model
+// scale 1.0 (normalized height); real width = D × h0, clamped to a sane
+// [0.45, 1.3] so the fat windmill/burned bases stay cover-sized.
+const PALM_TRUNK_D: Record<string, number> = {
+  'palm-low': 0.15,     // chunky low-poly trunk (visual ~0.15×h)
+  'palm-series': 0.10,  // thin stick trunk (visual ~0.10×h)
+  'palm-hd': 0.55,      // windmill — persistent leaf bases make a fat column
+  'palm-burned': 0.60,  // charred snag, widest base
+}
 const palmSpots: Array<[number, number]> = []
 let guard = 0
 while (palmSpots.length < 34 && guard++ < 3000) {
@@ -225,8 +236,10 @@ for (const [x, z] of palmSpots) {
   else m = ph < 0.5 ? 'palm-series' : 'palm-low'                  // beach-ring workhorses
   palmProps.push({ m, x, z, y: gy, rotY: dirA, h: h0 })   // rounding deferred to the data-json emitter
   // straight trunk collider (the GLB palms don't lean; the old lean-midpoint
-  // offset would sit up to 0.7 m off the visible trunk)
-  propOut.boxes.push({ x, y: gy + h0 / 2, z, w: 0.9, h: h0, d: 0.9 })
+  // offset would sit up to 0.7 m off the visible trunk) — Task 144 per-model
+  // width (see PALM_TRUNK_D above)
+  const tw = Math.min(1.3, Math.max(0.45, (PALM_TRUNK_D[m] ?? 0.5) * h0))
+  propOut.boxes.push({ x, y: gy + h0 / 2, z, w: tw, h: h0, d: tw })
 }
 
 // rocks: cliff-line clusters + B-site breakwater
