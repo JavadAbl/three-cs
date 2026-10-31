@@ -18,7 +18,7 @@ import type { WorldFx } from './fx'
 import { buildViewModel, vmBase, preloadWeaponTextures } from './weaponmodels'
 import { pbrState } from './textures'
 import { preloadWeaponModels, buildGLBKnifeVM, buildGLBGunVM, weaponModelsState, GLB_VM_SCALE } from './weapongltf'
-import { userModelState, userModelStates } from './usermodel'
+import { userModelState, userModelStates, reloadUserModel } from './usermodel'
 import type { ViewModel } from './weaponmodels'
 import { audio } from './audio'
 
@@ -451,12 +451,15 @@ export class Engine {
           rot: [Math.round(p.root.rotation.x * 100) / 100, Math.round(p.root.rotation.z * 100) / 100],
           vis: p.root.visible,
           gunParts: p.gunStub.children.length,
-          glb: !!p.glb, anim: p.glb ? 'user' : null,
+          glb: !!p.glb, fb: p.glb ? p.glb.fallback : null, anim: p.glb ? 'user' : null,
         })),
         sock: () => this.socket,
         glb: () => userModelState(),
         // Task 115: which proto each team actually renders ('soldier' | 'rebel' | 'soldier-fallback' | state)
         glbTeams: () => userModelStates(),
+        // Task 147: re-attempt a failed team model (e.g. after the network
+        // comes back), then re-run the player re-skin pass over the fallbacks
+        glbKick: (t: 'CT' | 'T') => reloadUserModel(t).then(() => this.pm.upgradeAllGlb()),
         wglb: () => weaponModelsState(),
         upgrade: () => this.pm.upgradeAllNow(),
         meshWorld: (id: string) => {

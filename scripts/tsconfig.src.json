@@ -1,0 +1,10 @@
+{
+  "extends": "/home/z/my-project/tsconfig.json",
+  "include": [
+    "/home/z/my-project/next-env.d.ts",
+    "/home/z/my-project/src/**/*.ts",
+    "/home/z/my-project/src/**/*.tsx",
+    "/home/z/my-project/shared/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

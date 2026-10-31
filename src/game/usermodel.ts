@@ -124,6 +124,12 @@ export interface UserInstance {
   /** C4 charge parented to the upper back (torso bone) */
   c4: THREE.Group
   wasAlive: boolean
+  /** Task 147: TRUE when this instance was built from the OTHER team's slot
+   *  (a T player wearing the soldier while the 20.6 MB rebel is still
+   *  streaming). PlayerManager watches this flag and re-skins the player the
+   *  moment the real model lands — before it existed, fallback instances were
+   *  indistinguishable from real ones and were kept for the whole session. */
+  fallback: boolean
   /** Task 115: per-instance IK chains (the spec's proportions, not a global) */
   armR: ArmChain
   armL: ArmChain
@@ -338,34 +344,47 @@ const slots: Record<TeamId, Slot> = {
 
 function loadSlot(slot: Slot): Promise<void> {
   const a = slot.asset
-  return fetch(slot.spec.url, { method: 'POST' })
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      return r.arrayBuffer()
-    })
-    .then((buf) => new Promise<void>((resolve) => {
-      sharedGLTFLoader().parse(
-        buf,
-        '',
-        (gltf) => {
-          try {
-            const built = buildProto(gltf.scene, slot.spec)
-            a.proto = built.proto
-            a.teamMats = built.teamMats
-            a.state = 'ready'
-          } catch (e) {
-            console.warn(`[usermodel] auto-rig failed for ${slot.spec.url}, ${slot.spec.url.includes('rebel') ? 'T keeps the soldier fallback' : 'keeping procedural rig'}`, e)
+  // Task 147: ONE retry on FETCH-level failures (network hiccup, the asset
+  // cache's 45 s netGuard). No parse-level retry — a corrupt GLB stays
+  // corrupt. The retry matters most on the first cold load of the 20.6 MB
+  // rebel over a slow link: without it a single netGuard timeout marked the
+  // T slot 'failed' and every terrorist rendered as the CT soldier for the
+  // whole session. (From the second session on, the persistent cache serves
+  // this URL without touching the network — see preloader ROUTE_RE, Task 147.)
+  const attempt = (): Promise<void> =>
+    fetch(slot.spec.url, { method: 'POST' })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.arrayBuffer()
+      })
+      .then((buf) => new Promise<void>((resolve) => {
+        sharedGLTFLoader().parse(
+          buf,
+          '',
+          (gltf) => {
+            try {
+              const built = buildProto(gltf.scene, slot.spec)
+              a.proto = built.proto
+              a.teamMats = built.teamMats
+              a.state = 'ready'
+            } catch (e) {
+              console.warn(`[usermodel] auto-rig failed for ${slot.spec.url}, ${slot.spec.url.includes('rebel') ? 'T keeps the soldier fallback' : 'keeping procedural rig'}`, e)
+              a.state = 'failed'
+            }
+            resolve()
+          },
+          (err) => {
+            console.warn(`[usermodel] ${slot.spec.url} failed to load, ${slot.spec.url.includes('rebel') ? 'T keeps the soldier fallback' : 'keeping procedural rig'}`, err)
             a.state = 'failed'
-          }
-          resolve()
-        },
-        (err) => {
-          console.warn(`[usermodel] ${slot.spec.url} failed to load, ${slot.spec.url.includes('rebel') ? 'T keeps the soldier fallback' : 'keeping procedural rig'}`, err)
-          a.state = 'failed'
-          resolve()
-        },
-      )
-    }))
+            resolve()
+          },
+        )
+      }))
+  return attempt()
+    .catch((err) => {
+      console.warn(`[usermodel] ${slot.spec.url} fetch failed (${String(err?.message ?? err)}), retrying once…`)
+      return attempt()
+    })
     .catch((err) => {
       console.warn(`[usermodel] ${slot.spec.url} failed to load, ${slot.spec.url.includes('rebel') ? 'T keeps the soldier fallback' : 'keeping procedural rig'}`, err)
       a.state = 'failed'
@@ -385,11 +404,31 @@ export function preloadUserModel(team?: TeamId): Promise<void> {
   return Promise.all([preloadUserModel('CT'), preloadUserModel('T')]).then(() => { })
 }
 
+/** Task 147 debug/E2E (__eng.glbKick): re-attempt a team's model load. A slot
+ *  that settled as 'failed' (network died mid-rebel) stays failed by design —
+ *  no infinite retries — but the debug hook (and any future re-entry point)
+ *  can clear the memoized waiter and try again; PlayerManager's model-lands
+ *  pass then re-skins the fallback players automatically. */
+export function reloadUserModel(team: TeamId): Promise<void> {
+  const a = slots[team].asset
+  if (a.proto) return Promise.resolve()   // already good — nothing to re-load
+  a.waiter = null
+  a.state = 'loading'
+  return preloadUserModel(team)
+}
+
 /** true when this team has a usable proto (T counts the soldier fallback). */
 export function userModelReady(team?: TeamId): boolean {
   if (team === 'CT') return !!slots.CT.asset.proto
   if (team === 'T') return !!(slots.T.asset.proto || slots.CT.asset.proto)
   return userModelState() === 'ready'
+}
+
+/** Task 147: true when this team's OWN proto is still missing (for T this is
+ *  true even while the soldier fallback renders — the fallback doesn't count;
+ *  PlayerManager uses it to schedule slow-link retry backoff). */
+export function userModelMissing(team: TeamId): boolean {
+  return !slots[team].asset.proto
 }
 
 /** E2E/debug contract: 'ready' only once EVERY slot has settled and at least
@@ -563,9 +602,12 @@ function buildC4(): THREE.Group {
 /** create a per-player instance (only call when userModelReady(team)) */
 export function createUserModel(team: TeamId): UserInstance {
   // primary = this team's own slot; T falls back to the soldier proto (tan
-  // tint) when the rebel is unavailable — the exact pre-115 T rendering
+  // tint) when the rebel is unavailable — the exact pre-115 T rendering.
+  // Task 147: the instance records WHICH proto built it so PlayerManager can
+  // re-skin fallback instances once the real model lands (see UserInstance).
   let slot = slots[team]
-  if (!slot.asset.proto && team === 'T' && slots.CT.asset.proto) slot = slots.CT
+  let fallback = false
+  if (!slot.asset.proto && team === 'T' && slots.CT.asset.proto) { slot = slots.CT; fallback = true }
   const proto = slot.asset.proto
   const swapMap = slot.asset.teamMats[team]!
   if (!proto || !swapMap) throw new Error(`user model not ready for team ${team}`)
@@ -602,5 +644,5 @@ export function createUserModel(team: TeamId): UserInstance {
   const armR = mkChain(spec.armRig.right.S, spec.armRig.right.E, spec.armRig.right.F)
   const armL = mkChain(spec.armRig.left.S, spec.armRig.left.E, spec.armRig.left.F)
 
-  return { model, bones, gunRig, c4: c4 ?? buildC4(), wasAlive: true, armR, armL }
+  return { model, bones, gunRig, c4: c4 ?? buildC4(), wasAlive: true, fallback, armR, armL }
 }

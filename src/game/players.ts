@@ -4,7 +4,7 @@
 import * as THREE from 'three'
 import { soldierCamo, soldierVest, soldierFace } from './textures'
 import { buildRemoteGun } from './weaponmodels'
-import { preloadUserModel, userModelReady, createUserModel, type UserInstance, type ArmChain } from './usermodel'
+import { preloadUserModel, reloadUserModel, userModelReady, userModelMissing, createUserModel, type UserInstance, type ArmChain } from './usermodel'
 import { preloadWeaponModels, buildGLBRemoteGun } from './weapongltf'
 import { WEAPONS, type TeamId } from './weapons'
 
@@ -364,15 +364,43 @@ export class PlayerManager {
   preloadModels(): void {
     // per-team: each team upgrades the moment ITS model lands (the rebel is
     // 2× the soldier's bytes — CT players must not wait for it)
+    //
+    // Task 147: the pass now runs over BOTH conditions. userModelReady('T')
+    // is TRUE the moment the 9.7 MB soldier lands (the fallback counts), so
+    // T players created while the 20.6 MB rebel is still streaming get a
+    // SOLDIER-fallback glb instance (p.glb set, p.rig null) — and the old
+    // `!p.glb && p.rig` guard here then SKIPPED them forever when the rebel
+    // finally arrived: every terrorist kept the CT soldier's body for the
+    // whole session (the "terror characters become same as ct" report — on
+    // a real connection the rebel always loses the race to match start).
+    //
+    // Slow-link backoff: a slot that settles WITHOUT its own proto (rebel
+    // fetch died on a cold 20 MB download) gets two more timed retries
+    // (+30 s, +120 s); every success re-runs the re-skin pass. From the
+    // second session on the persistent asset cache serves the URL without
+    // touching the network, so this is cold-load insurance only.
     for (const team of ['CT', 'T'] as TeamId[]) {
-      void preloadUserModel(team).then(() => {
-        if (!userModelReady(team)) return
-        for (const p of this.players.values()) {
-          if (p.team === team && !p.glb && p.rig) this.upgradeToGlb(p)
+      const backoff = [30_000, 120_000]
+      const settle = (): void => {
+        if (userModelReady(team)) this.upgradeAllGlb()
+        const d = backoff.shift()
+        if (d !== undefined && userModelMissing(team)) {
+          setTimeout(() => { void reloadUserModel(team).then(settle) }, d)
         }
-      })
+      }
+      void preloadUserModel(team).then(settle)
     }
     void preloadWeaponModels().then(() => this.refreshGuns())
+  }
+
+  /** Task 147: one upgrade pass — procedural players get their team's best
+   *  GLB, and fallback-GLB players (T wearing the soldier) get the real rebel
+   * once it has landed. No-op swaps (rebel still not there) are guarded
+   * inside upgradeToGlb, so this is safe to run on every model-lands event. */
+  upgradeAllGlb(): void {
+    for (const p of this.players.values()) {
+      if ((!p.glb && p.rig) || (p.glb && p.glb.fallback)) this.upgradeToGlb(p)
+    }
   }
 
   /** rebuild every remote gun (GLB-first after the weapon preload lands) */
@@ -387,23 +415,33 @@ export class PlayerManager {
   }
 
   private upgradeToGlb(p: RemotePlayer) {
-    const rig = p.rig
-    if (!rig) return
     if (!userModelReady(p.team)) return   // Task 115: per-team readiness (T counts the soldier fallback)
     const glb = createUserModel(p.team)
+    // Task 147: don't swap a fallback for another fallback — if THIS player
+    // already shows a GLB and the best available instance for its team is
+    // STILL the other team's proto, the real model hasn't landed yet.
+    if (p.glb && glb.fallback) return
+    // swap source: the procedural rig (hips group) or a fallback GLB (Task 147)
+    const oldModel = p.rig ? p.rig.hips : p.glb!.model
+    const oldGunParent = p.rig ? p.rig.gunRig : p.glb!.gunRig
     p.rig = null
     p.glb = glb
-    p.root.remove(rig.hips)
-    rig.gunRig.remove(p.gunStub)
+    p.root.remove(oldModel)
+    oldGunParent.remove(p.gunStub)
     glb.gunRig.add(p.gunStub)
     p.root.add(glb.model)
+    // NOTE on corpses: if the swap lands mid-death, the death branch of
+    // update() re-eases the fresh bind-pose bones to the rest pose on the
+    // very next tick (k = 1 once the 0.55 s fall is over) and p.root keeps
+    // its tipped rotation — the body stays lying down, nothing pops upright.
   }
 
   /** debug/E2E: force-upgrade all procedural players now; returns per-player errors */
   upgradeAllNow(): Array<{ id: string; ok: boolean; err?: string }> {
     const out: Array<{ id: string; ok: boolean; err?: string }> = []
     for (const p of this.players.values()) {
-      if (p.glb || !p.rig) { out.push({ id: p.id, ok: true }); continue }
+      // Task 147: a NON-fallback glb is final; a fallback glb is upgradeable
+      if ((p.glb && !p.glb.fallback) || (!p.glb && !p.rig)) { out.push({ id: p.id, ok: true }); continue }
       try {
         this.upgradeToGlb(p)
         out.push({ id: p.id, ok: !!p.glb })

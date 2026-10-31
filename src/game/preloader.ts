@@ -45,7 +45,16 @@ export const ASSET_CACHE_VERSION = 'v16'   // Task 143: island ACCEPTED — palm
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
 const PREFIXES = ['/assets/', '/staging/', '/draco/']
-const ROUTE_RE = /^\/api\/assets\/(weapon|human|rebel|island)\//
+// Task 147: the extensionless human/rebel routes must match too — the old
+// `(weapon|human|rebel|island)\//` required a TRAILING SLASH, which the
+// weapon/island/<id> routes have but '/api/assets/human' and '/api/assets/rebel'
+// do NOT. Those two (30 MB of character models — the rebel alone is 20.6 MB)
+// therefore BYPASSED this whole cache layer: re-downloaded on EVERY page load,
+// ungated, un-netGuarded, un-negative-cached — and on a real connection the
+// 20 MB rebel reliably lost the race to match start, leaving every T player
+// on the soldier fallback (the "terror characters look like CT" report).
+// `(/|$)` matches both shapes; the synthetic-GET key scheme is unchanged.
+const ROUTE_RE = /^\/api\/assets\/(weapon|human|rebel|island)(\/|$)/
 
 export interface CacheStats { hits: number; net: number; stored: number; bypass: number; bytesNet: number; neg: number }
 export const cacheStats: CacheStats = { hits: 0, net: 0, stored: 0, bypass: 0, bytesNet: 0, neg: 0 }
