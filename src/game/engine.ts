@@ -1963,6 +1963,30 @@ export class Engine {
     return false
   }
 
+  /**
+   * Task 145 (island "problems when climbing the hill"): clearance test for
+   * stepping onto a TERRAIN STAIR cell. Identical to overlapsAt() except that
+   * stair-flagged boxes whose top is at most STAIR_CLIMB above the target
+   * feet height are NOT blockers: on a staircase slope the neighbouring cells
+   * always stand above any single step's top within the player's footprint,
+   * and each of them is a legal next step that this same resolve loop climbs
+   * in-turn (see resolveHorizontal). Stairs taller than STAIR_CLIMB (honest
+   * cliffs) and every non-stair box (props, hut walls, BSP maps) still block.
+   */
+  private stairClearAt(x: number, y: number, z: number): boolean {
+    const h = this.playerHeight()
+    const r = PLAYER_R
+    for (const c of this.map.colliders) {
+      if (x + r > c.min.x && x - r < c.max.x &&
+        y + h > c.min.y && y < c.max.y &&
+        z + r > c.min.z && z - r < c.max.z) {
+        if (c.box.stair && c.max.y <= y + STAIR_CLIMB) continue
+        return true
+      }
+    }
+    return false
+  }
+
   private movePlayer(dt: number) {
     const w = this.currentWeapon()
     const crouching = this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.keys.has('KeyC')
@@ -2073,7 +2097,19 @@ export class Engine {
         if (rise <= 0.01) continue // feet level with this top (staircase-seam float) — not a horizontal blocker
         const stepLim = c.box.stair ? STAIR_CLIMB : STEP_UP   // Task 131 hotfix #3 — see STAIR_CLIMB above
         if (this.tuck === 0 && rise <= stepLim && this.vel.y <= 0.1) {
-          if (!this.overlapsAt(this.pos.x, c.max.y + 0.02, this.pos.z)) {
+          // Task 145: on TERRAIN STAIRS the clearance test must ignore the
+          // neighbouring stair cells one step higher — a staircase slope's
+          // cells always poke above any single step's top inside the player's
+          // 0.8 m footprint, so the plain overlapsAt() denied virtually every
+          // diagonal-slope step-up and walkable hills (13-45 deg) turned into
+          // invisible walls ("problems when climbing the hill"). The exempt
+          // cells are exactly the ones this same loop steps onto next, each
+          // within STAIR_CLIMB; anything taller (the 60 deg shore cliffs) and
+          // every prop / hut wall (no stair flag) still blocks the step.
+          const clear = c.box.stair
+            ? this.stairClearAt(this.pos.x, c.max.y + 0.02, this.pos.z)
+            : this.overlapsAt(this.pos.x, c.max.y + 0.02, this.pos.z)
+          if (!clear) {
             this.pos.y = c.max.y + 0.02
             this.onGround = true
             continue

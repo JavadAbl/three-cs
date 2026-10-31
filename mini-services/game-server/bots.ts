@@ -574,6 +574,13 @@ function groundAt(def: MapDef, x: number, z: number, feetY: number): number | nu
       if (t <= feetY + 1.25 && (top === null || t > top)) top = t
     }
   }
+  // Task 145 (hill-climb follow-up): against a tall face (SE-shore cliff, hut
+  // wall) the only qualifying "ground" under the bot can be a deep sea slab
+  // 8-10 m below — groundFollow then eased the bot DOWN INTO the cliff
+  // (probe measured 10.18 m sink). A legit walk-off eases <= ~3.5 m/tick-band
+  // (pad edge to flank); anything deeper is a swallow, not a floor: keep the
+  // bot's altitude until horizontal movement brings real ground back.
+  if (top !== null && feetY - top > 3.5) return null
   return top
 }
 function groundFollow(def: MapDef, p: PlayerState) {
