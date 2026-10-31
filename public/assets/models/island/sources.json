@@ -1,0 +1,46 @@
+[
+ {
+  "model": "palm-hd",
+  "source_upload": "upload/realistic_hd_windmill_palm_125.glb",
+  "source_generator": "Sketchfab-16.14.0",
+  "license_note": "user upload for dev-only use (Task 63 waiver)",
+  "tris": 34164,
+  "materials": 7,
+  "normalized": "base at y=0, centered, height 1.0 (engine scales per instance)",
+  "original_bytes": 6105716,
+  "staged_bytes": 1966356
+ },
+ {
+  "model": "palm-low",
+  "source_upload": "upload/low_poly_palm_tree.glb",
+  "source_generator": "Sketchfab-16.15.0",
+  "license_note": "user upload for dev-only use (Task 63 waiver)",
+  "tris": 2764,
+  "materials": 1,
+  "normalized": "base at y=0, centered, height 1.0 (engine scales per instance)",
+  "original_bytes": 5145828,
+  "staged_bytes": 793600
+ },
+ {
+  "model": "palm-burned",
+  "source_upload": "upload/burned_palm_tree.glb",
+  "source_generator": "Sketchfab-12.68.0",
+  "license_note": "user upload for dev-only use (Task 63 waiver)",
+  "tris": 9904,
+  "materials": 1,
+  "normalized": "base at y=0, centered, height 1.0 (engine scales per instance)",
+  "original_bytes": 1304508,
+  "staged_bytes": 537036
+ },
+ {
+  "model": "palm-series",
+  "source_upload": "upload/plant_series__palm_tree.glb",
+  "source_generator": "Sketchfab-17.7.0",
+  "license_note": "user upload for dev-only use (Task 63 waiver)",
+  "tris": 3392,
+  "materials": 2,
+  "normalized": "base at y=0, centered, height 1.0 (engine scales per instance)",
+  "original_bytes": 2072260,
+  "staged_bytes": 421674
+ }
+]

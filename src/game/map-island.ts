@@ -15,7 +15,7 @@ export const ISLAND: MapDef = {
   id: 'island',
   name: 'Island',
   version: 1,
-  bsp: { geomUrl: '/staging/maps/island/geom.json' },   // Task 134 STAGING PREVIEW: real-GLB palms re-ship — geom no longer carries palm soup; on ACCEPT flip back to /assets + promote + ASSET_CACHE_VERSION v12->v13 (BUMP RULE)
+  bsp: { geomUrl: '/assets/maps/island/geom.json' },   // ACCEPTED (post-T138): palms live-gated 34/34 — geom ships committed in /assets, wipe-proof. Was /staging (Task 134 preview) until the 2nd staging wipe broke the map outright
   boxes,
   losBoxes,
   props,

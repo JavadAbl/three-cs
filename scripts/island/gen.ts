@@ -1,9 +1,12 @@
 // scripts/island/gen.ts — island map generator (Task 131).
-// Emits: public/staging/maps/island/geom.json  (terrain + prop triangle soup,
+// Emits: public/assets/maps/island/geom.json  (terrain + prop triangle soup,
 //        per-vertex baked sun/AO light — same schema office consumes)
 //        src/game/map-island.ts + mini-services/game-server/map-island.ts
 //        (MapDef: staircase LOS boxes + prop collision boxes + waypoint
-//        graph + sites/spawns/bounds; bsp.geomUrl -> staging per policy v3)
+//        graph + sites/spawns/bounds; bsp.geomUrl -> /assets — island ACCEPTED
+//        post-Task-138: palms live-gated 34/34; the old staging-preview mode
+//        was retired after the 2nd container wipe of gitignored /staging left
+//        the map 404-broken "completely")
 // Deterministic: fixed seeds, byte-identical output across runs.
 import { writeFileSync, mkdirSync } from 'fs'
 import { mulberry32, setTerrain, SUN, terrainShadowed } from './light'
@@ -12,7 +15,7 @@ import { groupOf, rock, hut, pier, radar, rowboat, type PropOut } from './props'
 
 // ---------------------------------------------------------------- constants
 const SEED = 20261027
-const OUT_DIR = 'public/staging/maps/island'
+const OUT_DIR = 'public/assets/maps/island'
 // island ellipse: rx=76, rz=60, sea level y=0
 const RX = 76, RZ = 60
 const HILL = { x: 14, z: 20, amp: 9.5, sig: 24 }        // A-site hill (radar on top)
@@ -510,7 +513,7 @@ export const ISLAND: MapDef = {
   id: 'island',
   name: 'Island',
   version: 1,
-  bsp: { geomUrl: '/staging/maps/island/geom.json' },   // Task 134 STAGING PREVIEW: real-GLB palms re-ship — geom no longer carries palm soup; on ACCEPT flip back to /assets + promote + ASSET_CACHE_VERSION v12->v13 (BUMP RULE)
+  bsp: { geomUrl: '/assets/maps/island/geom.json' },   // ACCEPTED (post-T138): palms live-gated 34/34 — geom ships committed in /assets, wipe-proof. Was /staging (Task 134 preview) until the 2nd staging wipe broke the map outright
   boxes,
   losBoxes,
   props,
