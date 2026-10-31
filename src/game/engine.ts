@@ -2077,6 +2077,45 @@ export class Engine {
       this.vel.set(0, 0, 0); this.eyeY = this.pos.y + 1.6
     }
 
+    // Task 148: character-vs-character collision. Everyone is solid —
+    // teammates and enemies alike (user report: "no object collision between
+    // characters"). Remote capsules sit on the 130 ms interp buffer (same
+    // netcode delay as their rendering — this is how CS bump-feel works);
+    // corpses and other levels (|dy| > 1.4 m: jump-overs, balconies) never
+    // block. Push SELF out only — every other client does the same locally,
+    // and the server separates the bots (see game-server separatePlayers), so
+    // overlapping pairs converge apart instead of oscillating. Wall fallback:
+    // full push → X-only → Z-only, so a cornered player slides along people
+    // instead of clipping through them into geometry.
+    if (this.alive) {
+      for (const q of this.pm.players.values()) {
+        if (q.id === this.myId || !q.alive || !q.buf.length) continue
+        const rp = q.root.position
+        if (Math.abs(rp.y - this.pos.y) > 1.4) continue
+        let dx = this.pos.x - rp.x, dz = this.pos.z - rp.z
+        const minD = PLAYER_R * 2
+        let d2 = dx * dx + dz * dz
+        if (d2 >= minD * minD) continue
+        if (d2 < 1e-4) {
+          // exactly inside each other (spawn pile frame): stable fan-out per id
+          let h = 0
+          for (let c = 0; c < q.id.length; c++) h = (h * 31 + q.id.charCodeAt(c)) | 0
+          const a = Math.abs(h) * 2.399963
+          dx = Math.cos(a); dz = Math.sin(a); d2 = 1
+        }
+        const d = Math.sqrt(d2), pen = minD - d
+        const fx = (dx / d) * pen, fz = (dz / d) * pen
+        const y = this.pos.y + 0.02
+        if (!this.overlapsAt(this.pos.x + fx, y, this.pos.z + fz)) {
+          this.pos.x += fx; this.pos.z += fz
+        } else if (!this.overlapsAt(this.pos.x + fx, y, this.pos.z)) {
+          this.pos.x += fx
+        } else if (!this.overlapsAt(this.pos.x, y, this.pos.z + fz)) {
+          this.pos.z += fz
+        }
+      }
+    }
+
     // footsteps
     const hSpeed = Math.hypot(this.vel.x, this.vel.z)
     if (this.onGround && hSpeed > 1.5 && !walking && this.crouchAmt < 0.3) {

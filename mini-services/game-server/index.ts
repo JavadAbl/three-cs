@@ -6,7 +6,7 @@ import { pelletDirs, angleDeg } from '../../shared/pellets'
 import { NADE, stepNade, toNadeBoxes, heDamage, flashBlindMs, smokeBlocksSeg, viewDirFromYawPitch } from '../../shared/grenades'
 import type { NadeEnt, NadeBox, GrenadeKind } from '../../shared/grenades'
 import { MAPS, MAP_LIST, rayHitsAABB } from './mapdata'
-import type { MapDef, MapId, Box } from './mapdata'
+import type { MapDef, MapId, Box, Vec3 } from './mapdata'
 import type { PlayerState, Match, Phase } from './types'
 import { updateBots, botBuy, BOT_NAMES, setBotContext, resetBotForRound, defaultBrain } from './bots'
 
@@ -216,6 +216,15 @@ function startRound(m: Match) {
     else if (ts.length) bombCarrier = ts[Math.floor(Math.random() * ts.length)]
   }
 
+  // Task 148: per-team spawn assignment. The old formula assigned each player
+  // INDEPENDENTLY via (round + hashId) % spawns.length — with 5 slots and a
+  // 5-player team the odds of all-distinct are 5!/5^5 ≈ 3.8%, i.e. ~96% of
+  // rounds opened with at least two characters stacked on the exact same
+  // spawn ("players overlapped at round start"). A running per-team index
+  // makes the assignment a bijection whenever team size ≤ spawn count (the
+  // normal case: 5v5 on dust/dust2/island, 10 spawns on aim/office) and
+  // still cycles + ring-offsets extras when a team overflows the spawn list.
+  const spawnIdx: Record<TeamId, number> = { CT: 0, T: 0 }
   for (const p of m.players.values()) {
     // CS rules: weapons and armor are lost on death — only survivors keep their loadout
     const survived = p.alive
@@ -234,8 +243,17 @@ function startRound(m: Match) {
     p.reloadEndsAt = 0; p.lastShotAt = 0; p.burstShots = 0; p.shot = undefined
     p.hasBomb = false
     const spawns = mapOf(m).spawns[p.team]
-    const sp = spawns[(m.round + hashId(p.id)) % spawns.length]
+    const i = spawnIdx[p.team]++
+    const sp = spawns[(m.round + i) % spawns.length]
     p.x = sp.x; p.y = sp.y; p.z = sp.z
+    // overflow beyond the spawn list (team > slots): fan the extras around the
+    // shared point on a golden-angle ring so they never stack inside each other
+    if (i >= spawns.length) {
+      const a = hashId(p.id) * 2.399963
+      const ring = 0.55 + 0.15 * Math.floor((i - spawns.length) / spawns.length)
+      p.x += Math.cos(a) * ring
+      p.z += Math.sin(a) * ring
+    }
     p.yaw = mapOf(m).spawnYaw?.[p.team] ?? (p.team === 'T' ? 0 : Math.PI)
     p.pitch = 0
     p.wIdx = 0
@@ -262,6 +280,58 @@ function hashId(s: string): number {
   let h = 0
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
   return Math.abs(h)
+}
+
+/**
+ * Task 148: spawn slot for a mid-round JOINER. The old hashId % len pick
+ * regularly landed the newcomer on top of a teammate already standing there;
+ * instead choose the slot with the most clearance from every living teammate.
+ */
+function pickJoinSpawn(m: Match, team: TeamId, excludeId: string): Vec3 {
+  const spawns = mapOf(m).spawns[team]
+  const mates = [...m.players.values()].filter(q => q.id !== excludeId && q.team === team && q.alive)
+  let best = spawns[0], bestD = -1
+  for (const sp of spawns) {
+    let dmin = Infinity
+    for (const q of mates) dmin = Math.min(dmin, Math.hypot(sp.x - q.x, sp.z - q.z))
+    if (dmin > bestD) { bestD = dmin; best = sp }
+  }
+  return best
+}
+
+/**
+ * Task 148: characters are solid to each other. Human clients own their
+ * position (each client pushes ITSELF out of other capsules locally — see
+ * engine movePlayer), so the server only separates BOT capsules: bot-vs-bot
+ * moves both half, bot-vs-human moves only the bot (a human shove would be
+ * overwritten by their next state packet anyway). Runs every BOT_MS tick.
+ */
+const CHAR_MIN = 0.8   // 2 × 0.4 m capsule radius
+function separatePlayers(m: Match) {
+  if (m.phase !== 'live' && m.phase !== 'freeze' && m.phase !== 'warmup') return
+  const ps = [...m.players.values()].filter(p => p.alive)
+  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+    const a = ps[i], b = ps[j]
+    if (Math.abs(a.y - b.y) > 1.4) continue          // different level — no XZ block
+    const dx = b.x - a.x, dz = b.z - a.z
+    const d2 = dx * dx + dz * dz
+    if (d2 >= CHAR_MIN * CHAR_MIN) continue
+    let d = Math.sqrt(d2), ux: number, uz: number
+    if (d < 0.01) {
+      // perfectly stacked (hash-collision legacy / overflow ring): deterministic fan-out
+      const a2 = hashId(a.id + b.id) * 2.399963
+      ux = Math.cos(a2); uz = Math.sin(a2); d = 0
+    } else { ux = dx / d; uz = dz / d }
+    // deep overlap (pen > 0.3) parts fast — a trailing bot walking single-file
+    // into its leader compresses ~0.45 m/tick, so a gentle ease loses ground;
+    // light brushes (0.5-0.8 m) still resolve gently.
+    const nudge = Math.min(0.35, (CHAR_MIN - d) * 0.7)
+    if (a.bot && b.bot) {
+      a.x -= ux * nudge / 2; a.z -= uz * nudge / 2
+      b.x += ux * nudge / 2; b.z += uz * nudge / 2
+    } else if (a.bot) { a.x -= ux * nudge; a.z -= uz * nudge }
+    else if (b.bot) { b.x += ux * nudge; b.z += uz * nudge }
+  }
 }
 
 function endRound(m: Match, winner: TeamId, reason: string) {
@@ -1008,7 +1078,11 @@ setInterval(() => {
 }, SNAPSHOT_MS)
 
 setInterval(() => {
-  for (const m of matches.values()) if (m.started && m.botFill) updateBots(m, now())
+  for (const m of matches.values()) {
+    if (!m.started) continue
+    if (m.botFill) updateBots(m, now())
+    separatePlayers(m)   // Task 148: characters solid to each other (bots nudged server-side)
+  }
 }, BOT_MS)
 
 // cleanup empty rooms
@@ -1055,15 +1129,13 @@ io.on('connection', (socket) => {
     if (m.phase === 'warmup') {
       // will start on next logic tick
     } else if (m.phase === 'freeze') {
-      const spawns = mapOf(m).spawns[team]
-      const sp = spawns[hashId(p.id) % spawns.length]
+      const sp = pickJoinSpawn(m, p.team, p.id)
       p.x = sp.x; p.y = sp.y; p.z = sp.z
       p.yaw = mapOf(m).spawnYaw?.[team] ?? (team === 'T' ? 0 : Math.PI)
       p.alive = true
     } else {
       p.alive = false
-      const spawns = mapOf(m).spawns[team]
-      const sp = spawns[hashId(p.id) % spawns.length]
+      const sp = pickJoinSpawn(m, p.team, p.id)
       p.x = sp.x; p.y = sp.y; p.z = sp.z
     }
 
