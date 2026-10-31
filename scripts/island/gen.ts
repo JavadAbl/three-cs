@@ -190,10 +190,12 @@ for (let ix = 0; ix < NX - 1; ix++)
 // scale 1.0 (normalized height); real width = D × h0, clamped to a sane
 // [0.45, 1.3] so the fat windmill/burned bases stay cover-sized.
 const PALM_TRUNK_D: Record<string, number> = {
-  'palm-low': 0.15,     // chunky low-poly trunk (visual ~0.15×h)
   'palm-series': 0.10,  // thin stick trunk (visual ~0.10×h)
   'palm-hd': 0.55,      // windmill — persistent leaf bases make a fat column
-  'palm-burned': 0.60,  // charred snag, widest base
+  // Task 146 RETIRED: 'palm-low' 0.15 + 'palm-burned' 0.60 — the low-poly
+  // source has 294 trunk faces UV-mapped INTO the texture's transparent
+  // frond-cutout blob (see-through trunk band from S/W angles) and the
+  // burned snag rendered as a dead stump; user: "replace them with trees".
 }
 const palmSpots: Array<[number, number]> = []
 let guard = 0
@@ -214,10 +216,14 @@ while (palmSpots.length < 34 && guard++ < 3000) {
 // variant mix over the 34 spots — deterministic from position hash:
 //  - palm-hd (34k tris) is the hero model: capped at 5, only near the
 //    village where players pass close (perf budget ~170k tris on props)
-//  - palm-burned (4): rocky/high spots — dead trees frame the cliffs
-//  - palm-series + palm-low: the beach-ring workhorses, coin-flipped
+//  - Task 146: palm-low + palm-burned are RETIRED (low-poly = see-through
+//    trunk UVs, burned = dead stump the user read as "broken tree models")
+//    — every non-hero spot is palm-series (2764→3392 tris each; total props
+//    drop 164.6k→146.1k tris, 18k UNDER the old budget). The rnd() draw
+//    pattern is UNCHANGED — only the m-label per spot differs, so heights,
+//    rotations and all downstream placements stay bit-for-bit identical.
 const palmProps: Array<{ m: string; x: number; z: number; y: number; rotY: number; h: number }> = []
-let hdN = 0, burnN = 0
+let hdN = 0
 for (const [x, z] of palmSpots) {
   const h0 = 5.5 + rnd() * 3.5
   const lean = 0.9 + rnd() * 1.4            // (draw kept for RNG parity)
@@ -228,12 +234,13 @@ for (const [x, z] of palmSpots) {
   for (let i = 0; i < nuts; i++) rnd()          // (the coconut angle draws — RNG parity)
   void lean; void nuts
   const gy = height(x, z)
-  const ph = hash2(x * 13.37 + 91, z * 7.77 + 37)   // spot hash — no rnd draws
   const nearVil = Math.hypot(x - VIL.x, z - VIL.z) < 20
+  // Task 146: healthy palms only — palm-hd hero near the village (unchanged
+  // rule), palm-series everywhere else. palm-low (see-through trunk UVs) and
+  // palm-burned (dead stump) retired per the user's "replace them with trees".
   let m: string
-  if (nearVil && hdN < 5) { m = 'palm-hd'; hdN++ }                 // hero palms: the 5 closest-to-village spots
-  else if (gy > 5.5 && burnN < 4) { m = 'palm-burned'; burnN++ }   // dead trees frame the high cliffs
-  else m = ph < 0.5 ? 'palm-series' : 'palm-low'                  // beach-ring workhorses
+  if (nearVil && hdN < 5) { m = 'palm-hd'; hdN++ }                 // hero palms: the spots closest to the village
+  else m = 'palm-series'
   palmProps.push({ m, x, z, y: gy, rotY: dirA, h: h0 })   // rounding deferred to the data-json emitter
   // straight trunk collider (the GLB palms don't lean; the old lean-midpoint
   // offset would sit up to 0.7 m off the visible trunk) — Task 144 per-model

@@ -25,6 +25,8 @@
 //      buffers, quantize writes 8.5e37 node scales, Draco crashes)
 //
 // Run:  bun scripts/island/pack-palm-models-t134.ts
+// Task 146: packs only the 2 LIVE models (palm-hd + palm-series) — see the
+// RETIRED note at UPLOAD below.
 import { readFileSync, writeFileSync, mkdirSync, statSync } from 'fs'
 import * as THREE from 'three'
 import sharp from 'sharp'
@@ -34,9 +36,14 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 const UPLOAD = [
   { src: 'upload/realistic_hd_windmill_palm_125.glb', out: 'palm-hd' },
-  { src: 'upload/low_poly_palm_tree.glb', out: 'palm-low' },
-  { src: 'upload/burned_palm_tree.glb', out: 'palm-burned' },
   { src: 'upload/plant_series__palm_tree.glb', out: 'palm-series' },
+  // Task 146 RETIRED — no longer packed or shipped:
+  //   low_poly_palm_tree.glb   -> palm-low: 294 trunk faces are UV-mapped INTO
+  //     the texture's transparent frond-cutout blob — see-through trunk band
+  //     from S/W angles (measured: 21% of band-zone texels land in the blob;
+  //     in-game pixel proof: teal background bleed only at rotY-visible angles)
+  //   burned_palm_tree.glb     -> palm-burned: a charred snag by design — read
+  //     as a "broken tree" (user Task 146: "replace them with trees")
 ]
 const TMP_DIR = 'scripts/.tmp/palm-pack'
 const STAGE_DIR = 'public/staging/models/island'

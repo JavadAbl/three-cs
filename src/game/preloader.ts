@@ -403,12 +403,15 @@ function mapModelItems(mapId: string | undefined): Item[] {
   if (map?.bsp) items.push({ chain: [{ url: map.bsp.geomUrl }] })
   if (mapId === 'island') {
     items.push({ chain: [{ url: '/assets/maps/island/sky.jpg' }, { url: '/staging/maps/island/sky.jpg' }] })
-    // Task 135: the 4 packed palm models go through the extensionless POST
+    // Task 135: the packed palm models go through the extensionless POST
     // route /api/assets/island/<m> (staging-wins inside the route), like every
     // other GLB — the direct /assets|/staging .glb GETs below were captured by
     // the user's IDM extension and wedged the bar in 'warmup' forever. The
     // route 404s on a fresh clone -> negative-cached -> map renders bare.
-    for (const m of ['palm-hd', 'palm-low', 'palm-burned', 'palm-series']) {
+    // Task 146: palm-low + palm-burned RETIRED (low-poly = see-through trunk
+    // UVs, burned = dead stump; user: "replace them with trees") — only the
+    // two healthy models warm now (saves ~1.3 MB of dead preload).
+    for (const m of ['palm-hd', 'palm-series']) {
       items.push({ chain: [{ url: `/api/assets/island/${m}`, init: { method: 'POST' } }] })
     }
   }
