@@ -404,7 +404,11 @@ function gridBands(lo: number, hi: number): number[] {
 function emitStaircase(gf: GFace, up: boolean) {
   const [nx, ny, nz] = gf.n
   const ax = Math.abs(nx) >= Math.abs(ny) ? 0 : 1
-  const lo = gf.aabb[ax], hi = gf.aabb[ax + 1]
+  // Task 151: BBox layout is [x0,x1,y0,y1,z0,z1] — the run-axis pair for
+  // axis `ax` is [2*ax .. 2*ax+1], NOT [ax .. ax+1] (the old code read
+  // (x1,y0) for axis 1, so any ±y-rising slope with y0 > x1 was cut into
+  // bogus bands along a phantom axis and emitted sliver boxes).
+  const lo = gf.aabb[2 * ax], hi = gf.aabb[2 * ax + 1]
   const gentle = Math.abs(nz) >= 0.55
   if (!gentle) {
     boxes.push({ x0: gf.aabb[0], x1: gf.aabb[1], y0: gf.aabb[2], y1: gf.aabb[3], z0: gf.aabb[4], z1: gf.aabb[5], tex: 'wall' })
@@ -433,14 +437,24 @@ function polyArea2(vs: number[][], axA: number, axB: number): number {
 }
 function emitWall(gf: GFace, runAxis: 0 | 1, solidLo: number, solidHi: number) {
   const a = gf.aabb
-  const aabbArea = (a[runAxis + 1] - a[runAxis]) * (a[5] - a[4])
+  // Task 151: run-axis extent is a[2*runAxis+1]-a[2*runAxis]. The old
+  // (a[runAxis+1]-a[runAxis]) read (y0-x1) for runAxis=1: whenever a
+  // ±x-facing wall face had y0 > x1 (the whole west half + north half of
+  // cs_office — office-wing walls, doorway-B wall segments, the tunnel
+  // door_3 decor leaf, parts of door D), aabbArea came out positive
+  // (and ~2x the true area), the 0.98*area test then failed for perfectly
+  // rectangular faces, and the grid-band fallback cut the face along the
+  // PHANTOM [x1,y0] range — emitting only a 0.01u sliver box per face.
+  // Result: whole walls (door frames included) rendered fine but had ZERO
+  // collision — "i can pass Door frames in office".
+  const aabbArea = (a[2 * runAxis + 1] - a[2 * runAxis]) * (a[5] - a[4])
   const rectangular = aabbArea <= 1e-6 || polyArea2(gf.vs, runAxis, 2) >= 0.98 * aabbArea
   if (rectangular) {
     if (runAxis === 0) boxes.push({ x0: a[0], x1: a[1], y0: solidLo, y1: solidHi, z0: a[4], z1: a[5], tex: 'brick' })
     else boxes.push({ x0: solidLo, x1: solidHi, y0: a[2], y1: a[3], z0: a[4], z1: a[5], tex: 'brick' })
     return
   }
-  const lo = a[runAxis], hi = a[runAxis + 1]
+  const lo = a[2 * runAxis], hi = a[2 * runAxis + 1]
   const cuts = gridBands(lo, hi)
   for (let bi = 0; bi < cuts.length - 1; bi++) {
     const s = cuts[bi], e = cuts[bi + 1]
