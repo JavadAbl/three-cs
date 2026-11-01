@@ -88,49 +88,6 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
 
   // BSP-converted map: real face geometry from geom.json (collision stays on boxes)
   if (map.bsp) {
-    // Task 126: office world-shell leaks — sightlines that escape the BSP
-    // decor shell (gaps between wings, above connectors) hit the sky sphere
-    // and read as a broken white void. A hazy distant-city backdrop ring
-    // catches every leak and reads as "far buildings in winter haze".
-    // (office only — aimhead's bsp arena keeps its clean-sky look)
-    if (map.id === 'office') {
-      const W = 2048, H = 256
-      const bc = document.createElement('canvas'); bc.width = W; bc.height = H
-      const bctx = bc.getContext('2d')!
-      // vertical haze: pale at horizon (matches the sky band) -> cool grey top
-      const bg = bctx.createLinearGradient(0, 0, 0, H)
-      bg.addColorStop(0, '#87929c'); bg.addColorStop(0.55, '#a7b1ba')
-      bg.addColorStop(0.8, '#c3cbd2'); bg.addColorStop(1, '#d8dee3')
-      bctx.fillStyle = bg; bctx.fillRect(0, 0, W, H)
-      // distant skyline: soft-edged blocks in two depth layers
-      let seed = 7
-      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 }
-      for (const layer of [
-        { col: '#6c7580', minH: 0.32, maxH: 0.62, y: 0.34 },   // far row (haze-dimmed)
-        { col: '#525b66', minH: 0.18, maxH: 0.45, y: 0.55 },   // near row (darker)
-      ]) {
-        let x = 0
-        while (x < W) {
-          const w = 60 + rnd() * 160
-          const h = layer.minH + rnd() * (layer.maxH - layer.minH)
-          bctx.fillStyle = layer.col
-          bctx.globalAlpha = 0.85
-          const top = (1 - layer.y - h) * H
-          bctx.fillRect(x, top, w - 6, H * (h + layer.y))
-          x += w
-        }
-      }
-      bctx.globalAlpha = 1
-      const btex = new THREE.CanvasTexture(bc)
-      btex.colorSpace = THREE.SRGBColorSpace
-      const ring = new THREE.Mesh(
-        new THREE.CylinderGeometry(140, 140, 90, 48, 1, true),
-        new THREE.MeshBasicMaterial({ map: btex, side: THREE.BackSide, fog: false, depthWrite: false })
-      )
-      ring.position.y = 22
-      ring.renderOrder = -5   // above the sky sphere (-10), below the world
-      group.add(ring)
-    }
     // boxes are collision-only — real faces render instead (avoids double-draw/z-fight)
     const geomUrl = map.bsp.geomUrl
     fetch(geomUrl).then(r => r.json()).then((data: {
@@ -143,26 +100,9 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
         if (grp.norm && grp.norm.length) g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(grp.norm), 3))
         else g.computeVertexNormals()
         g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(grp.uv), 2))
-        // Task 126: office geom carries per-vertex baked GoldSrc lightmaps;
+        // lit BSP maps (island): geom carries per-vertex baked light colors;
         // the material's vertexColors flag comes from the map's PBR lit:true
         if (grp.color) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(grp.color), 3))
-        // Task 126 fix: BSP fence UVs vary wildly in density — dense ones
-        // alias the 2x2 truss lattice into a 'checkerboard' at distance.
-        // Remap fence UVs straight from world coords: one canvas repeat per
-        // 2 m, uniform density, cells never fall below the moire threshold.
-        if (grp.tex === 'fence') {
-          const pos = grp.pos, uv = grp.uv
-          // island groups omit norm — use the freshly computed attribute then
-          const nrm: ArrayLike<number> = grp.norm ?? (g.getAttribute('normal') as THREE.BufferAttribute).array
-          for (let vi = 0; vi < pos.length / 3; vi++) {
-            const nx = nrm[vi * 3], ny = nrm[vi * 3 + 1]
-            // dominant axis planar map (same choice the varTex shader makes)
-            if (Math.abs(ny) > 0.5) { uv[vi * 2] = pos[vi * 3] / 2; uv[vi * 2 + 1] = pos[vi * 3 + 2] / 2 }
-            else if (Math.abs(nx) > 0.5) { uv[vi * 2] = pos[vi * 3 + 2] / 2; uv[vi * 2 + 1] = pos[vi * 3 + 1] / 2 }
-            else { uv[vi * 2] = pos[vi * 3] / 2; uv[vi * 2 + 1] = pos[vi * 3 + 1] / 2 }
-          }
-          g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv), 2))
-        }
         g.setIndex(new THREE.BufferAttribute(new Uint32Array(grp.idx), 1))
         g.computeBoundingSphere()
         const mat = surfaceMaterial(grp.tex as Box['tex'], scope)
@@ -170,9 +110,7 @@ export function buildMap(scene: THREE.Scene, map: MapDef = MAPS.dust): MapBuild 
         const mesh = new THREE.Mesh(g, mat)
         mesh.userData.isMap = true
         mesh.userData.surf = grp.tex
-        // glass panes / lattice fences cast SOLID shadows (depth material
-        // ignores alpha) — a window must not darken the room behind it
-        mesh.castShadow = grp.tex !== 'fence' && grp.tex !== 'glass'
+        mesh.castShadow = true
         mesh.receiveShadow = true
         group.add(mesh)
         raycastMeshes.push(mesh)

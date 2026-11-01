@@ -9,13 +9,12 @@
 //           mid doors + xbox, window room (mid -> B), upper/lower tunnels, B site
 // ============================================================
 
-export type MapId = 'dust' | 'dust2' | 'aimhead' | 'aimdepot' | 'office' | 'island'
+export type MapId = 'dust' | 'dust2' | 'aimhead' | 'aimdepot' | 'island'
 
 export interface Box {
   x: number; y: number; z: number   // center
   w: number; h: number; d: number   // full sizes (X, Y, Z)
   tex: 'sand' | 'wall' | 'crate' | 'metal' | 'dark' | 'plank' | 'door' | 'doorBlue' | 'brick' | 'concrete'
-    | 'carpet' | 'offwall' | 'ceiling' | 'snow' | 'tile' | 'glass' | 'fence'   // Task 126 office families
     | 'isand' | 'igrass' | 'irock' | 'bark' | 'leaf'   // Task 131 island families
   decor?: boolean                   // visual skyline only — excluded from LOS
 }
@@ -761,7 +760,6 @@ function buildAimDepot(): MapDef {
 // registry
 // ============================================================
 import { AIMHEAD } from './map-aimhead'
-import { OFFICE } from './map-office'
 import { ISLAND } from './map-island'
 
 export const MAPS: Record<MapId, MapDef> = {
@@ -769,7 +767,6 @@ export const MAPS: Record<MapId, MapDef> = {
   dust2: buildDust2(),
   aimhead: { ...AIMHEAD, bomb: false },   // aim map — pure aim duels, no bomb objective
   aimdepot: { ...buildAimDepot(), bomb: false },   // aim map — crate-yard arena, no bomb objective
-  office: { ...OFFICE, bomb: false },   // Task 126: cs_office BSP import — elimination rounds, no hostages
   island: { ...ISLAND },   // Task 131: tropical island — bomb defusal (A radar / B dock)
 }
 
@@ -778,6 +775,5 @@ export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
   { id: 'dust2', name: 'Dust II', desc: 'Long, mid, tunnels · catwalk · pit · window room' },
   { id: 'aimhead', name: 'Aim Headshot', desc: 'CS 1.6 BSP import · slit-wall aim arena' },
   { id: 'aimdepot', name: 'Aim Depot', desc: 'Crate-yard aim arena · low lane walls · moonlit night' },
-  { id: 'office', name: 'Office', desc: 'CS 1.6 cs_office import · lightmap baked · snow courtyard' },
   { id: 'island', name: 'Island', desc: 'Tropical island · day · bomb defusal · radar A / dock B' },
 ]

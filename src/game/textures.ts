@@ -543,8 +543,6 @@ export function skyMesh(mapId?: string): THREE.Mesh {
   // the horizon (no desert tan band), slightly deeper zenith
   const night = mapId === 'aimdepot'  // Task 100: moonlit depot — deep
   // indigo sky, star field, glowing moon disc (clear night, no clouds)
-  const winter = mapId === 'office'   // Task 126: cs_office — overcast
-  // winter sky: pale grey-blue, bright snow-bounce horizon, flat diffuse sun
   const tropical = mapId === 'island'  // Task 131: vivid tropical day
   const g = ctx.createLinearGradient(0, 0, 0, H)
   if (night) {
@@ -553,19 +551,6 @@ export function skyMesh(mapId?: string): THREE.Mesh {
     g.addColorStop(0.7, '#131f42')
     g.addColorStop(0.85, '#1a2a52')  // faint horizon lift
     g.addColorStop(1, '#22335e')     // horizon glow band
-  } else if (winter) {
-    // live VLM t126: (a) bright bands read as a 'white void' — deepen the
-    // upper sky; (b) the NADIR (canvas bottom) was the brightest stop
-    // (#eef1f3), so any sightline leaking past the world shell below the
-    // horizon hit a stark white plane (HOM read). Brightest band now sits
-    // AT the horizon, the below-horizon hemisphere fades to muted grey.
-    g.addColorStop(0, '#78899c')      // zenith — grey-blue overcast
-    g.addColorStop(0.32, '#9db0c0')
-    g.addColorStop(0.46, '#dfe5e9')   // bright haze band at the horizon
-    g.addColorStop(0.5, '#e7ebee')    // horizon line itself
-    g.addColorStop(0.62, '#adb8c1')   // below-horizon fade (leak reads as haze)
-    g.addColorStop(0.8, '#7f8a94')
-    g.addColorStop(1, '#626c76')      // nadir — dark muted grey, never white
   } else if (tropical) {
     // Task 131 island: deep azure zenith, bright haze band AT the horizon;
     // the below-horizon nadir fades to sea grey-blue (the Task-126 winter
@@ -602,15 +587,14 @@ export function skyMesh(mapId?: string): THREE.Mesh {
     // nightsky.ts placement constants (elevation ~24 deg = in-frame past
     // the 6 m walls at pitch 0; ~4.6-deg angular size = believable moon).
   } else {
-    // clouds (soft layered blobs) — aztec: whiter, denser jungle cover;
-    // winter: many wide flat low-contrast overcast sheets
-    const nClouds = winter ? 72 : aztec ? 44 : 34
+    // clouds (soft layered blobs) — aztec: whiter, denser jungle cover
+    const nClouds = aztec ? 44 : 34
     for (let i = 0; i < nClouds; i++) {
       const x = rnd() * W
-      const y = H * (0.08 + rnd() * (winter ? 0.52 : 0.4))
-      const rw = (winter ? 90 : 45) + rnd() * (winter ? 200 : 140)
-      const rh = rw * (winter ? 0.14 + rnd() * 0.1 : 0.22 + rnd() * 0.16)
-      const a = winter ? 0.14 + rnd() * 0.16 : 0.16 + rnd() * 0.2
+      const y = H * (0.08 + rnd() * 0.4)
+      const rw = 45 + rnd() * 140
+      const rh = rw * (0.22 + rnd() * 0.16)
+      const a = 0.16 + rnd() * 0.2
       const cg = ctx.createRadialGradient(x, y, 1, x, y, rw)
       cg.addColorStop(0, `rgba(255,252,245,${a})`)
       cg.addColorStop(0.6, `rgba(250,246,238,${a * 0.55})`)
@@ -621,17 +605,16 @@ export function skyMesh(mapId?: string): THREE.Mesh {
       ctx.beginPath(); ctx.arc(x, y, rw, 0, 7); ctx.fill()
       ctx.restore()
     }
-    // sun disc + glow (place away from mid lane sightlines — NE high sky);
-    // winter: soft diffuse silver disc behind the overcast
+    // sun disc + glow (place away from mid lane sightlines — NE high sky)
     const sx = W * 0.78, sy = H * 0.2
-    const glow = ctx.createRadialGradient(sx, sy, 2, sx, sy, winter ? 130 : 190)
-    glow.addColorStop(0, winter ? 'rgba(255,255,252,0.55)' : 'rgba(255,246,214,0.9)')
-    glow.addColorStop(0.25, winter ? 'rgba(244,247,250,0.22)' : 'rgba(255,238,190,0.35)')
+    const glow = ctx.createRadialGradient(sx, sy, 2, sx, sy, 190)
+    glow.addColorStop(0, 'rgba(255,246,214,0.9)')
+    glow.addColorStop(0.25, 'rgba(255,238,190,0.35)')
     glow.addColorStop(1, 'rgba(255,235,170,0)')
     ctx.fillStyle = glow
-    ctx.beginPath(); ctx.arc(sx, sy, winter ? 130 : 190, 0, 7); ctx.fill()
-    ctx.fillStyle = winter ? 'rgba(252,253,254,0.85)' : 'rgba(255,251,238,0.98)'
-    ctx.beginPath(); ctx.arc(sx, sy, winter ? 26 : 17, 0, 7); ctx.fill()
+    ctx.beginPath(); ctx.arc(sx, sy, 190, 0, 7); ctx.fill()
+    ctx.fillStyle = 'rgba(255,251,238,0.98)'
+    ctx.beginPath(); ctx.arc(sx, sy, 17, 0, 7); ctx.fill()
   }
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
@@ -847,254 +830,6 @@ export function siteDecal(letter: 'A' | 'B'): THREE.Mesh {
 }
 
 // ---------------- soldier (remote player) textures ----------------
-// ---------------- office families (Task 126 — cs_office BSP import) ----------------
-// Seven new procedural canvases, each designed at the BSP's measured world
-// scale (see scripts/bsp/office-uvdensity.ts): one canvas repeat covers the
-// family's m/UV span, so e.g. the ceiling grid lands at real 0.6 m tiles.
-// The ambientCG PBR hot-swap (PBR_BY_MAP.office) replaces albedo/relief for
-// the five photo families; glass (transparent) and fence (alphaTest lattice)
-// stay procedural by design — jpgs cannot carry alpha.
-
-/** commercial carpet — dense two-tone peppered pile with 0.5 m tile seams */
-export function carpetTexture(rx = 1, ry = 1): THREE.Texture {
-  const [c, ctx] = makeCanvas()
-  const rnd = mulberry32(301)
-  ctx.fillStyle = '#66705f'
-  ctx.fillRect(0, 0, TEX, TEX)
-  // worn-install tonal drift
-  for (let i = 0; i < 14; i++) {
-    const x = rnd() * TEX, y = rnd() * TEX, r = 60 + rnd() * 150
-    const g = ctx.createRadialGradient(x, y, 1, x, y, r)
-    g.addColorStop(0, rnd() < 0.5 ? 'rgba(94,106,86,0.18)' : 'rgba(128,136,116,0.15)')
-    g.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g
-    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill()
-  }
-  // the commercial-carpet signature: 3-tone fleck, dense enough to read as pile
-  for (let i = 0; i < 9000; i++) {
-    const x = rnd() * TEX, y = rnd() * TEX, v = rnd()
-    ctx.fillStyle = v < 0.42 ? 'rgba(72,82,68,0.5)' : v < 0.8 ? 'rgba(118,128,104,0.45)' : 'rgba(146,154,128,0.4)'
-    ctx.fillRect(x, y, 1 + rnd() * 2, 1 + rnd() * 2)
-  }
-  smoothNoise(ctx, TEX, 77, 96, 0.14)
-  smoothNoise(ctx, TEX, 78, 24, 0.10)
-  // carpet-tile seams (2 m span / 4 = 0.5 m tiles)
-  ctx.strokeStyle = 'rgba(48,54,44,0.32)'
-  ctx.lineWidth = 2
-  for (let k = 1; k < 4; k++) {
-    const p = (k * TEX) / 4
-    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, TEX); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(TEX, p); ctx.stroke()
-  }
-  grain(ctx, TEX, TEX, 79, 2400, 0.1, 1)
-  return finish(c, rx, ry)
-}
-
-/** office drywall — warm off-white paint with roller sheen + orange-peel */
-export function offwallTexture(rx = 1, ry = 1): THREE.Texture {
-  const [c, ctx] = makeCanvas()
-  const rnd = mulberry32(401)
-  ctx.fillStyle = '#dcd6c4'
-  ctx.fillRect(0, 0, TEX, TEX)
-  // vertical roller-applied sheen bands
-  for (let x = 0; x < TEX; x += 26) {
-    const l = 214 + rnd() * 16 | 0
-    ctx.fillStyle = `rgba(${l},${(l - 8) | 0},${(l - 28) | 0},0.22)`
-    ctx.fillRect(x, 0, 22, TEX)
-  }
-  // orange-peel surface
-  smoothNoise(ctx, TEX, 402, 160, 0.09)
-  smoothNoise(ctx, TEX, 403, 40, 0.07)
-  grain(ctx, TEX, TEX, 404, 4200, 0.06, 1)
-  // sparse scuffs / furniture knicks
-  for (let i = 0; i < 16; i++) {
-    const x = rnd() * TEX, y = rnd() * TEX, len = 6 + rnd() * 26
-    ctx.strokeStyle = `rgba(118,110,94,${0.1 + rnd() * 0.13})`
-    ctx.lineWidth = 1 + rnd() * 1.5
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len * (rnd() - 0.5), y + len * (rnd() - 0.5)); ctx.stroke()
-  }
-  return finish(c, rx, ry)
-}
-
-/** drop ceiling — mineral-fiber tiles, acoustic pinholes, T-bar grid seams */
-export function ceilingTexture(rx = 1, ry = 1): THREE.Texture {
-  const [c, ctx] = makeCanvas()
-  const rnd = mulberry32(501)
-  ctx.fillStyle = '#e9e7e0'
-  ctx.fillRect(0, 0, TEX, TEX)
-  // fiber speckle
-  for (let i = 0; i < 2600; i++) {
-    const v = 150 + rnd() * 100 | 0
-    ctx.fillStyle = `rgba(${v},${v},${(v - 8) | 0},0.26)`
-    ctx.fillRect(rnd() * TEX, rnd() * TEX, 1 + rnd() * 2, 1 + rnd() * 2)
-  }
-  // acoustic pinholes
-  for (let i = 0; i < 1400; i++) {
-    ctx.fillStyle = `rgba(112,110,102,${0.22 + rnd() * 0.3})`
-    ctx.beginPath(); ctx.arc(rnd() * TEX, rnd() * TEX, 0.7 + rnd() * 1.4, 0, 7); ctx.fill()
-  }
-  // T-bar grid: 4x4 tiles per canvas (0.6 m each) — seam shadow + rail highlight
-  for (let k = 0; k <= 4; k++) {
-    const p = Math.min(TEX, (k * TEX) / 4)
-    for (const [x0, y0, w, h] of [[0, p - 2, TEX, 5], [p - 2, 0, 5, TEX]] as Array<[number, number, number, number]>) {
-      ctx.fillStyle = 'rgba(122,120,112,0.75)'
-      ctx.fillRect(x0, y0, w, h)
-      ctx.fillStyle = 'rgba(255,255,255,0.4)'
-      ctx.fillRect(x0, y0, w, 1)
-      ctx.fillRect(x0, y0, 1, h)
-    }
-  }
-  grain(ctx, TEX, TEX, 504, 900, 0.05, 1)
-  return finish(c, rx, ry)
-}
-
-/** snow yard — blue-white drifts, wind striations, sparkle grains */
-export function snowTexture(rx = 1, ry = 1): THREE.Texture {
-  const [c, ctx] = makeCanvas()
-  const rnd = mulberry32(601)
-  ctx.fillStyle = '#edf1f7'
-  ctx.fillRect(0, 0, TEX, TEX)
-  // soft drift shading (bluish hollows / bright crowns)
-  for (let i = 0; i < 22; i++) {
-    const x = rnd() * TEX, y = rnd() * TEX, r = 50 + rnd() * 170
-    const g = ctx.createRadialGradient(x, y, 1, x, y, r)
-    g.addColorStop(0, rnd() < 0.6 ? 'rgba(192,205,226,0.2)' : 'rgba(255,255,255,0.2)')
-    g.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g
-    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill()
-  }
-  // wind striations — long faint curves
-  for (let i = 0; i < 9; i++) {
-    const y0 = rnd() * TEX
-    ctx.strokeStyle = 'rgba(184,198,220,0.13)'
-    ctx.lineWidth = 5 + rnd() * 9
-    ctx.beginPath()
-    for (let x = 0; x <= TEX; x += 32) ctx.lineTo(x, y0 + Math.sin((x + i * 60) * 0.011 + i * 2.1) * 16)
-    ctx.stroke()
-  }
-  // ice sparkles
-  for (let i = 0; i < 420; i++) {
-    ctx.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.9)' : 'rgba(226,238,252,0.6)'
-    ctx.fillRect(rnd() * TEX, rnd() * TEX, 1, 1)
-  }
-  smoothNoise(ctx, TEX, 603, 64, 0.07)
-  grain(ctx, TEX, TEX, 604, 2200, 0.05, 1)
-  return finish(c, rx, ry)
-}
-
-/** hallway floor — 0.3 m ceramic tiles, grout, per-tile mottle, corner wear */
-export function tileTexture(rx = 1, ry = 1): THREE.Texture {
-  const [c, ctx] = makeCanvas()
-  const rnd = mulberry32(701)
-  ctx.fillStyle = '#b9b2a0'   // grout
-  ctx.fillRect(0, 0, TEX, TEX)
-  const N = 4, S = TEX / N, G = 4
-  for (let ty = 0; ty < N; ty++) for (let txx = 0; txx < N; txx++) {
-    const x0 = txx * S, y0 = ty * S
-    const v = 198 + rnd() * 22 | 0
-    ctx.fillStyle = `rgb(${v},${(v - 10) | 0},${(v - 38) | 0})`
-    ctx.fillRect(x0 + G, y0 + G, S - G * 2, S - G * 2)
-    // per-tile mottle (subtle), clipped
-    ctx.save()
-    ctx.beginPath(); ctx.rect(x0 + G, y0 + G, S - G * 2, S - G * 2); ctx.clip()
-    for (let i = 0; i < 130; i++) {
-      const m = 160 + rnd() * 90 | 0
-      ctx.fillStyle = `rgba(${m},${(m - 10) | 0},${(m - 40) | 0},0.18)`
-      ctx.fillRect(x0 + rnd() * S, y0 + rnd() * S, 2 + rnd() * 4, 2 + rnd() * 4)
-    }
-    // scuffed tiles occasionally
-    if (rnd() < 0.22) {
-      ctx.fillStyle = 'rgba(120,112,96,0.1)'
-      ctx.fillRect(x0 + G, y0 + G, S - G * 2, S - G * 2)
-    }
-    ctx.restore()
-  }
-  // floor-sheen streaks over everything
-  smoothNoise(ctx, TEX, 702, 48, 0.06)
-  grain(ctx, TEX, TEX, 703, 1800, 0.05, 1)
-  return finish(c, rx, ry)
-}
-
-/** window glass — pale blue-green pane with wipe streaks (material is transparent) */
-export function glassTexture(rx = 1, ry = 1): THREE.Texture {
-  const [c, ctx] = makeCanvas()
-  const rnd = mulberry32(801)
-  const g = ctx.createLinearGradient(0, 0, TEX, TEX)
-  g.addColorStop(0, '#d9e5ec'); g.addColorStop(0.5, '#c6d5de'); g.addColorStop(1, '#d6e2e9')
-  ctx.fillStyle = g; ctx.fillRect(0, 0, TEX, TEX)
-  // diagonal wipe streaks
-  for (let i = 0; i < 20; i++) {
-    const x = rnd() * TEX
-    ctx.strokeStyle = `rgba(255,255,255,${0.05 + rnd() * 0.06})`
-    ctx.lineWidth = 4 + rnd() * 14
-    ctx.beginPath(); ctx.moveTo(x, -20); ctx.lineTo(x + TEX * 0.35, TEX + 20); ctx.stroke()
-  }
-  // dust specks + faint edge grime
-  for (let i = 0; i < 120; i++) {
-    ctx.fillStyle = 'rgba(150,165,176,0.22)'
-    ctx.fillRect(rnd() * TEX, rnd() * TEX, 1, 1)
-  }
-  ctx.strokeStyle = 'rgba(140,155,166,0.25)'
-  ctx.lineWidth = 10
-  ctx.strokeRect(0, 0, TEX, TEX)
-  return finish(c, rx, ry)
-}
-
-/** railing/fence — ALPHA-CUTOUT canvas (alphaTest), 2x2 cells per repeat.
- * Task 141 (two-part fix):
- *  (a) CONVERTER: railing_3 + sphinx_railing_ (2557 m2, the CT-entrance
- *      courtyard + map perimeter) were mis-mapped to this family, but they
- *      are OPAQUE CONCRETE walls — VLM + palette audit of the embedded WAD
- *      data, and the GoldSrc rule that only '{'-prefixed textures render
- *      with transparency. They now remap to 'concrete' at the geom level.
- *  (b) THIS CANVAS: what legitimately remains in the fence family after (a)
- *      is the true-alpha set ({rail1c rails, {ladder2/{ladder2b ladder
- *      rungs, 378 m2 of small props). The old diagonal-X truss read as
- *      CONSTRUCTION SCAFFOLDING there — replaced by horizontal rails +
- *      vertical posts + one thin mid picket per 1 m cell, which reads as
- *      proper railing/ladder work. Cells stay 2x2 per repeat (t126
- *      anti-moire constraint: 4x4 cells aliased into a checkerboard at
- *      distance). No PBR twin (jpgs have no alpha) — this canvas IS the
- *      final look. */
-export function fenceTexture(): THREE.Texture {
-  const [c, ctx] = makeCanvas()
-  const N = 2, S = TEX / N, B = 13        // cell 1 m, bar 13 px (~5 cm)
-  ctx.clearRect(0, 0, TEX, TEX)
-  for (let k = 0; k < N; k++) {
-    const p = k * S
-    // horizontal rail at each cell row top (bottom rails = next row's top;
-    // the v=1 edge wraps onto the v=0 rail, so the pattern tiles seamlessly)
-    // galvanized steel (t126 live: dark bars read as a 'corrupted black grid')
-    const g = ctx.createLinearGradient(0, p, 0, p + B)
-    g.addColorStop(0, '#a8b0ba'); g.addColorStop(0.4, '#828a95'); g.addColorStop(1, '#5c636d')
-    ctx.fillStyle = g
-    ctx.fillRect(0, p, TEX, B)
-    ctx.fillStyle = 'rgba(235,241,247,0.6)'
-    ctx.fillRect(0, p, TEX, 2)
-    // vertical post at each cell column left
-    const g2 = ctx.createLinearGradient(p, 0, p + B, 0)
-    g2.addColorStop(0, '#a8b0ba'); g2.addColorStop(0.4, '#828a95'); g2.addColorStop(1, '#5c636d')
-    ctx.fillStyle = g2
-    ctx.fillRect(p, 0, B, TEX)
-    ctx.fillStyle = 'rgba(235,241,247,0.6)'
-    ctx.fillRect(p, 0, 2, TEX)
-  }
-  // one thin mid picket per cell (0.5 m spacing — the thinnest feature that
-  // stays below the t126 moire threshold; fades to open air at distance
-  // instead of aliasing, rails+posts carry the silhouette)
-  for (let cy = 0; cy < N; cy++) for (let cx = 0; cx < N; cx++) {
-    const x0 = cx * S, y0 = cy * S
-    const g = ctx.createLinearGradient(x0 + S / 2 - 3, 0, x0 + S / 2 + 4, 0)
-    g.addColorStop(0, '#767e88'); g.addColorStop(0.5, '#8d95a0'); g.addColorStop(1, '#5f666f')
-    ctx.fillStyle = g
-    ctx.fillRect(x0 + S / 2 - 3, y0 + B, 7, S - B)
-  }
-  const t = new THREE.CanvasTexture(c)
-  t.wrapS = t.wrapT = THREE.RepeatWrapping
-  t.anisotropy = 4
-  t.colorSpace = THREE.SRGBColorSpace
-  return t
-}
 
 // Procedural CS-style operator skins: camo fabric, chest rig, face.
 
@@ -1214,8 +949,8 @@ export function soldierFace(team: 'CT' | 'T'): THREE.Texture {
 
 // ---------------- Task 131: island procedural fallbacks ----------------
 // Keep the map testable + pretty BEFORE the ambientCG photo bake lands
-// (PBR_BY_MAP.island upgrades these to jpgs the moment they exist — same
-// office pattern: canvas first, identity files later).
+// (PBR_BY_MAP.island upgrades these to jpgs the moment they exist —
+// canvas first, identity files later).
 function islandSpeckle(palette: string[], grain: number, blotch: number): THREE.CanvasTexture {
   const S = 256
   const [c, ctx] = makeCanvas(S, S)
@@ -1266,35 +1001,7 @@ export function leafTexture(): THREE.Texture {
 
 // ---------------- material factory (map + bump, shared by mapview/details) ----------------
 export type SurfaceTex = 'sand' | 'wall' | 'crate' | 'metal' | 'dark' | 'plank' | 'door' | 'doorBlue' | 'brick' | 'concrete'
-  | 'carpet' | 'offwall' | 'ceiling' | 'snow' | 'tile' | 'glass' | 'fence'   // Task 126 office families
   | 'isand' | 'igrass' | 'irock' | 'bark' | 'leaf'   // Task 131 island families
-
-/** fence bump: the railing's own relief — holes would poison bumpFrom's
- * grayscale copy (transparent canvas), so draw an opaque grayscale twin.
- * Task 141: bars only (rails/posts/pickets) — the old diagonal-X truss
- * relief is gone with the scaffolding look. */
-let fenceBumpCache: THREE.Texture | null = null
-function fenceBump(): THREE.Texture {
-  if (fenceBumpCache) return fenceBumpCache
-  const [c, ctx] = makeCanvas(128, 128)
-  ctx.fillStyle = '#20242a'   // hole depth
-  ctx.fillRect(0, 0, 128, 128)
-  // rails + posts every 64 px (= 1 m at the 2 m repeat)
-  ctx.fillStyle = '#b8bec6'   // bar relief
-  for (let k = 0; k < 2; k++) {
-    const p = k * 64
-    ctx.fillRect(0, p, 128, 7)
-    ctx.fillRect(p, 0, 7, 128)
-  }
-  // thin mid picket per cell
-  ctx.fillStyle = '#9aa0a8'
-  ctx.fillRect(32, 0, 4, 128)
-  ctx.fillRect(96, 0, 4, 128)
-  const t = new THREE.CanvasTexture(c)
-  t.wrapS = t.wrapT = THREE.RepeatWrapping
-  fenceBumpCache = t
-  return t
-}
 
 const matCache = new Map<string, THREE.MeshLambertMaterial>()
 
@@ -1318,15 +1025,6 @@ export function surfaceMaterial(tex: SurfaceTex, mapId?: string): THREE.MeshLamb
     case 'doorBlue': map = doorBlueTexture(); bumpScale = 0.35; break
     case 'brick': map = brickTexture(); bumpScale = 0.65; break
     case 'concrete': map = concreteTexture(); bumpScale = 0.3; break
-    // Task 126 office families — high-quality procedural canvases (see the
-    // generators above for what each one draws)
-    case 'carpet': map = carpetTexture(); bumpScale = 0.5; break
-    case 'offwall': map = offwallTexture(); bumpScale = 0.35; break
-    case 'ceiling': map = ceilingTexture(); bumpScale = 0.5; break
-    case 'snow': map = snowTexture(); bumpScale = 0.3; break
-    case 'tile': map = tileTexture(); bumpScale = 0.55; break
-    case 'glass': map = glassTexture(); bumpScale = 0.12; break
-    case 'fence': map = fenceTexture(); bumpScale = 0.7; break
     // Task 131 island families (canvas fallbacks — see generators above)
     case 'isand': map = isandTexture(); bumpScale = 0.5; break
     case 'igrass': map = igrassTexture(); bumpScale = 0.5; break
@@ -1337,26 +1035,14 @@ export function surfaceMaterial(tex: SurfaceTex, mapId?: string): THREE.MeshLamb
   const src = map.image as HTMLCanvasElement
   const mat = new THREE.MeshLambertMaterial({
     map,
-    bumpMap: tex === 'fence' ? fenceBump() : bumpFrom(src, tex === 'brick' ? 1.7 : 1.55),
+    bumpMap: bumpFrom(src, tex === 'brick' ? 1.7 : 1.55),
     bumpScale,
   })
-  // office BSP geom carries per-vertex BAKED CS 1.6 lightmap colors — the
-  // map's PBR_BY_MAP entries flag lit:true and this material multiplies them
+  // lit BSP maps (island) carry per-vertex baked light colors — the map's
+  // PBR_BY_MAP entries flag lit:true and this material multiplies them
   // in. Box-built maps have no color attribute, so non-lit scopes stay false
   // (a vertexColors material without geometry colors renders black).
   if (pbrSpec(tex, mapId).lit) mat.vertexColors = true
-  if (tex === 'glass') {
-    mat.transparent = true
-    mat.opacity = 0.34
-    mat.depthWrite = false      // see + shoot through windows cleanly
-    // BSP windows emit BOTH brush sides as coplanar panes — z-fight shimmer
-    mat.polygonOffset = true
-    mat.polygonOffsetFactor = -1
-    mat.polygonOffsetUnits = -1
-  }
-  if (tex === 'fence') {
-    mat.alphaTest = 0.45        // lattice holes discard — see-through railings
-  }
   mat.onBeforeCompile = patchSurfaceShader           // Task 76: world-space albedo variation
   mat.customProgramCacheKey = () => 'surface-var-2'  // patched materials share programs (v2: lightmap gamma lift)
   matCache.set(key, mat)
@@ -1481,17 +1167,6 @@ const PBR: Record<SurfaceTex, PbrSpec> = {
   dark:     { tile: 3.5, bump: 0.8  }, // asphalt_03 — dirty road
   door:     { tile: 1.1, bump: 1.0  }, // painted_metal_shutter
   doorBlue: { tile: 1.2, bump: 0.9  }, // blue_painted_planks
-  // Task 126 office families — conservative shared specs (office's real tiles
-  // live in PBR_BY_MAP.office, calibrated to the BSP's measured UV density).
-  // glass/fence ship no jpgs by design (alpha) — the loader 404s and the
-  // procedural canvas look stays, exactly like the fresh-clone fallback.
-  carpet:   { tile: 2.0, bump: 0.5  },
-  offwall:  { tile: 3.0, bump: 0.35 },
-  ceiling:  { tile: 2.4, bump: 0.5  },
-  snow:     { tile: 6.0, bump: 0.3  },
-  tile:     { tile: 1.2, bump: 0.55 },
-  glass:    { tile: 1.5, bump: 0.12 },
-  fence:    { tile: 1.2, bump: 0.7  },
   // Task 131 island families — conservative shared specs (island's real
   // tiles live in PBR_BY_MAP.island, calibrated to world/3 UVs). No shared
   // jpgs ship: the loader 404s and the procedural canvas look stays.
@@ -1582,30 +1257,6 @@ const PBR_BY_MAP: Record<string, Partial<Record<SurfaceTex, PbrSpec>>> = {
     dark:     { tile: 3.5, bump: 0.8,  normal: 0.6  }, // asphalt_03
     door:     { tile: 1.1, bump: 1.0,  normal: 0.9  }, // painted_metal_shutter
     doorBlue: { tile: 1.2, bump: 0.9,  normal: 0.9  }, // blue_painted_planks
-  },
-  office: {
-    // Task 126 — cs_office BSP import. Every family is lit:true (geom.json
-    // carries per-vertex baked GoldSrc lightmaps — surfaceMaterial flips
-    // vertexColors on from this flag). Tiles calibrated to the BSP's MEASURED
-    // UV density (scripts/bsp/office-uvdensity.ts): tile = 2.86 × target_m /
-    // m_per_uv. ambientCG CC0 identities for the five photo families + red
-    // brick / clean-wood overrides (the shared brick is desert SANDstone and
-    // plank is dirt planks — office wants classic red courses and clean oak
-    // desks); concrete/metal/dark/crate reuse the accepted shared sets.
-    // glass/fence stay procedural (alpha textures can't ship as jpgs).
-    carpet:   { tile: 2.39, bump: 0.55, normal: 0.75, lit: true },  // carpet fleck — 2 m span
-    offwall:  { tile: 4.00, bump: 0.40, normal: 0.45, lit: true },  // painted drywall — 3 m span
-    ceiling:  { tile: 4.16, bump: 0.50, normal: 0.60, lit: true },  // drop-ceiling 0.6 m grid
-    snow:     { tile: 2.02, bump: 0.35, normal: 0.50, lit: true },  // snow yard — 6 m drifts
-    tile:     { tile: 1.07, bump: 0.70, normal: 0.80, lit: true },  // hallway ceramic 0.3 m
-    concrete: { tile: 1.86, bump: 0.80, normal: 0.70, lit: true },
-    brick:    { tile: 0.89, bump: 1.30, normal: 1.00, lit: true },  // office override: classic RED brick (shared = sandstone)
-    metal:    { tile: 1.79, bump: 0.80, normal: 0.80, lit: true },
-    plank:    { tile: 2.84, bump: 1.10, normal: 0.90, lit: true },  // office override: clean oak desks/doors
-    dark:     { tile: 5.26, bump: 0.60, normal: 0.60, lit: true },  // parking asphalt
-    crate:    { tile: 1.80, bump: 1.20, normal: 0.90, lit: true },
-    glass:    { tile: 1.48, bump: 0.12,              lit: true },  // procedural only (no jpg by design)
-    fence:    { tile: 1.42, bump: 0.70,              lit: true },  // procedural only (alphaTest lattice)
   },
   island: {
     // Task 131 — tropical island. Every family lit:true (geom carries the

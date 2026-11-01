@@ -21,7 +21,7 @@ const io = new Server(httpServer, {
 const PORT = 3003
 const matches = new Map<string, Match>()
 const BOT_TEAM_SIZE = 5
-const VALID_MAPS = ['dust', 'dust2', 'aimhead', 'aimdepot', 'office', 'island'] as const   // Task 131: island (tropical bomb defusal)
+const VALID_MAPS = ['dust', 'dust2', 'aimhead', 'aimdepot', 'island'] as const   // Task 131: island (tropical bomb defusal)
 
 const now = () => Date.now()
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
@@ -222,7 +222,7 @@ function startRound(m: Match) {
   // rounds opened with at least two characters stacked on the exact same
   // spawn ("players overlapped at round start"). A running per-team index
   // makes the assignment a bijection whenever team size ≤ spawn count (the
-  // normal case: 5v5 on dust/dust2/island, 10 spawns on aim/office) and
+  // normal case: 5v5 on dust/dust2/island, 10 spawns on aim maps) and
   // still cycles + ring-offsets extras when a team overflows the spawn list.
   const spawnIdx: Record<TeamId, number> = { CT: 0, T: 0 }
   for (const p of m.players.values()) {

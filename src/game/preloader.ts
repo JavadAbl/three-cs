@@ -40,7 +40,7 @@ import { liveWeaponSoundFiles, liveGrenadeSoundFiles, NON_WEAPON_FILES } from '.
  * NEGATIVE entries too (Task 111): a 404 that becomes a real file must bump
  * just like a changed 200.
  */
-export const ASSET_CACHE_VERSION = 'v16'   // Task 143: island ACCEPTED — palm-props geom (2.12MB, 34 palms) ships committed in /assets/maps/island/geom.json, replacing the stale pre-Task-134 palm-soup 4.4MB; the 4 palm GLBs promote /staging/models/island -> /assets/models/island (2nd container wipe of gitignored /staging had left island geom 404 = "map broken completely"). geomUrl flips /staging -> /assets. The bump flushes any browser still holding the old /assets island geom bytes (BUMP RULE, Task 104). (v15 was Task 142's office door-leaf re-ship.)
+export const ASSET_CACHE_VERSION = 'v17'   // Task 152: office map REMOVED (user: "delete office map completely and its used materials") — /assets/maps/office/geom.json + /assets/textures/maps/office/ (22 jpgs) deleted; the bump flushes browser caches still holding the dead office URLs (~6 MB of orphan blobs). Remaining maps' bytes are untouched. (v16 was Task 143's island palm-props geom.)
 
 const DB_NAME = 'three-cs-assets'
 const STORE = 'blobs'
