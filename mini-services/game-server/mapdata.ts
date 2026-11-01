@@ -9,7 +9,7 @@
 //           mid doors + xbox, window room (mid -> B), upper/lower tunnels, B site
 // ============================================================
 
-export type MapId = 'dust' | 'dust2' | 'aimhead' | 'aimdepot' | 'island'
+export type MapId = 'dust' | 'dust2' | 'aimhead' | 'aimdepot' | 'island' | 'twin'
 
 export interface Box {
   x: number; y: number; z: number   // center
@@ -757,6 +757,219 @@ function buildAimDepot(): MapDef {
 }
 
 // ============================================================
+// TWIN VILLAS — two facing multi-storey villas, one per side (Task 153)
+//   user: "there are 2 Multi-story building In front of each other. each
+//   one for each side. players can shot each other through windows. also
+//   players can go basement and go to other building. there is no bomb in
+//   this map."
+//   West villa = CT home, east villa = T home — the east copy is the west
+//   build rotated 180° about Y, so both street facades (and every window
+//   lane) stay perfectly aligned across the 16 m street. L0 windows
+//   (sill 1.0, opening 1.0..2.6) control the street; L1/L2 windows duel
+//   each other through the aligned openings (floor+1.0..+2.6 — stand and
+//   shoot, crouch-vault through). Ground double doors open onto the
+//   street; a switchback stair core (0.243 risers) climbs L0->L1->L2;
+//   each villa has a basement, and a 4 m tunnel under the street joins
+//   them (the safe rotate). bomb:false — elimination-only rounds.
+// ============================================================
+function buildTwin(): MapDef {
+  const { boxes, box } = newBuilder()
+
+  // One villa emitted in the WEST frame; the east villa is the same build
+  // rotated 180° about Y (mx=mz=-1 flips every box center).
+  const villa = (mx: 1 | -1, mz: 1 | -1) => {
+    const B = (x: number, z: number, w: number, d: number, h: number, tex: Box['tex'], y0 = 0) =>
+      box(x * mx, z * mz, w, d, h, tex, y0)
+    // straight flight along Z: n = ceil(rise/0.25) risers climbing from
+    // yBase at zFrom to yBase+rise at zTo (either direction; solid riser
+    // masses like the dust stairs)
+    const flightZ = (xc: number, w: number, zFrom: number, zTo: number, yBase: number, rise: number, tex: Box['tex']) => {
+      const n = Math.ceil(rise / 0.25)
+      for (let i = 0; i < n; i++) {
+        const z0 = zFrom + ((zTo - zFrom) * i) / n, z1 = zFrom + ((zTo - zFrom) * (i + 1)) / n
+        B(xc, (z0 + z1) / 2, w, Math.abs(z1 - z0), (rise * (i + 1)) / n, tex, yBase)
+      }
+    }
+    // straight flight along X (the basement descent in the south room)
+    const flightX = (zc: number, d: number, xFrom: number, xTo: number, yBase: number, rise: number, tex: Box['tex']) => {
+      const n = Math.ceil(rise / 0.25)
+      for (let i = 0; i < n; i++) {
+        const x0 = xFrom + ((xTo - xFrom) * i) / n, x1 = xFrom + ((xTo - xFrom) * (i + 1)) / n
+        B((x0 + x1) / 2, zc, Math.abs(x1 - x0), d, (rise * (i + 1)) / n, tex, yBase)
+      }
+    }
+
+    // ---- shell (basement -3.5 .. roofline 10.2) ----
+    B(-27.55, 0, 0.9, 40, 13.7, 'wall', -3.5)       // back wall
+    B(-18, -19.55, 18.2, 0.9, 13.7, 'wall', -3.5)   // north wall
+    B(-18, 19.55, 18.2, 0.9, 13.7, 'wall', -3.5)    // south wall
+
+    // ---- street facade (x -8.9..-8, center -8.45) ----
+    // ground floor: double door (z -2..2) + 2 windows (z +/-12); piers run
+    // down to the basement, under-window bands seal below the sills
+    for (const [zc, d] of [[-16.625, 6.75], [-6.375, 8.75], [6.375, 8.75], [16.625, 6.75]] as const)
+      B(-8.45, zc, 0.9, d, 13.4, 'wall', -3.5)
+    for (const zw of [-12, 12]) {
+      B(-8.45, zw, 0.9, 2.5, 1.0, 'concrete', 0)     // sill y 0..1.0
+      B(-8.45, zw, 0.9, 2.5, 0.5, 'concrete', 2.6)   // lintel y 2.6..3.1
+      B(-8.45, zw, 0.9, 2.5, 3.5, 'wall', -3.5)      // basement band below the sill
+    }
+    B(-8.45, 0, 0.9, 4, 0.5, 'concrete', 2.6)       // door lintel (opening 0..2.4)
+    B(-8.45, 0, 0.9, 4, 0.3, 'wall', -0.3)          // threshold over the tunnel mouth
+    B(-8.45, -1.4, 0.3, 1.2, 2.4, 'doorBlue', 0)    // door panels, slid to the jambs
+    B(-8.45, 1.4, 0.3, 1.2, 2.4, 'doorBlue', 0)
+    // upper floors: 3 windows each (z -12 / 0 / +12), opening floor+1.0..+2.6
+    for (const [y0, lh] of [[3.4, 6.0], [6.8, 9.4]] as const) {
+      for (const [zc, d] of [[-16.625, 6.75], [-6, 9.5], [6, 9.5], [16.625, 6.75]] as const)
+        B(-8.45, zc, 0.9, d, 3.1, 'wall', y0)
+      for (const zw of [-12, 0, 12]) {
+        B(-8.45, zw, 0.9, 2.5, 1.0, 'concrete', y0)  // sill
+        B(-8.45, zw, 0.9, 2.5, 0.5, 'concrete', lh)  // lintel
+      }
+    }
+    B(-8.45, 0, 0.9, 40, 0.3, 'wall', 9.9)          // parapet band (flush with roof slab)
+
+    // ---- floor slabs ----
+    B(-18, -3.55, 18.2, 31.1, 0.3, 'plank', -0.3)   // L0 north of the basement-stair hole
+    B(-18, 17.55, 18.2, 3.1, 0.3, 'plank', -0.3)    // L0 south of it
+    B(-24.6, 14, 5, 4, 0.3, 'plank', -0.3)          // L0 west of the hole
+    B(-11.5, 14, 5.2, 4, 0.3, 'plank', -0.3)        // L0 east of the hole
+    B(-14, 0, 10.2, 38.2, 0.3, 'plank', 3.1)        // L1 (top 3.4)
+    B(-14, 0, 10.2, 38.2, 0.3, 'plank', 6.5)        // L2 (top 6.8)
+    B(-14, 0, 10.2, 38.2, 0.3, 'concrete', 9.9)     // roof (top 10.2)
+    B(-18, 0, 18.2, 38.2, 0.3, 'dark', -3.5)        // basement floor (top -3.2)
+
+    // ---- switchback stair core (back-west, z -6..6) ----
+    flightZ(-25.1, 4, 4, -4, 0, 3.4, 'plank')        // flight A: L0 -> L1 (climbs north)
+    B(-23.1, -5, 8, 2, 3.4, 'wall', 0)              // north landing (top 3.4)
+    flightZ(-21.1, 4, -4, 4, 3.4, 3.4, 'plank')     // flight B: L1 -> L2 (climbs south, over the hall)
+    B(-23.1, 5, 8, 2, 6.8, 'wall', 0)               // south landing (top 6.8)
+    flightX(14, 4, -22.1, -14.1, -3.2, 3.2, 'plank')// flight C: basement -> L0 south room
+
+    // ---- L0 partitions (window rooms vs stair/entry halls, gap x -21..-18) ----
+    B(-24.05, -6.45, 6.1, 0.9, 3.1, 'wall', 0)
+    B(-13.45, -6.45, 9.1, 0.9, 3.1, 'wall', 0)
+    B(-19.5, -6.45, 3, 0.9, 0.5, 'wall', 2.6)       // gap lintel
+    B(-24.05, 6.45, 6.1, 0.9, 3.1, 'wall', 0)
+    B(-13.45, 6.45, 9.1, 0.9, 3.1, 'wall', 0)
+    B(-19.5, 6.45, 3, 0.9, 0.5, 'wall', 2.6)
+
+    // ---- basement pillars ----
+    for (const [px, pz] of [[-24, -12], [-16, -12], [-24, -4], [-16, -4]] as const)
+      B(px, pz, 0.9, 0.9, 2.9, 'brick', -3.2)
+
+    // ---- props ----
+    B(-12.5, -14.5, 1.8, 1.8, 1.8, 'crate')         // L0 north window room
+    B(-24, -16, 2, 2, 2, 'crate')
+    B(-25, 6.5, 1.8, 1.8, 1.8, 'crate')             // L0 south window room
+    B(-11, 17.5, 2, 2, 2, 'crate')
+    B(-10.5, -4.5, 1.6, 1.6, 1.6, 'crate')          // entry hall
+    B(-12, -14.5, 1.8, 1.8, 1.8, 'crate', 3.4)      // L1 loft
+    B(-12, 14.5, 1.8, 1.8, 1.8, 'crate', 3.4)
+    B(-17.5, 2, 1.6, 1.6, 1.6, 'crate', 3.4)
+    B(-12, -14.5, 1.8, 1.8, 1.8, 'crate', 6.8)      // L2 loft
+    B(-12, 14.5, 1.8, 1.8, 1.8, 'crate', 6.8)
+    B(-17.5, 6, 1.6, 1.6, 1.6, 'crate', 6.8)
+    B(-12, -14, 1.8, 1.8, 1.8, 'crate', -3.2)       // basement
+    B(-22.5, 18, 2, 2, 2, 'crate', -3.2)
+    B(-11.5, 6.5, 1.6, 1.6, 1.6, 'crate', -3.2)
+  }
+  villa(1, 1)    // west villa (CT)
+  villa(-1, -1)  // east villa (T) — same build rotated 180°
+
+  // ---- shared: street canyon + the tunnel beneath it ----
+  box(0, -19.55, 16, 0.9, 13.7, 'wall', -3.5)       // street north end wall
+  box(0, 19.55, 16, 0.9, 13.7, 'wall', -3.5)        // street south end wall
+  box(0, 0, 16, 40, 0.3, 'dark', -0.3)              // street surface (doubles as tunnel ceiling)
+  box(0, 0, 17.8, 5.8, 0.3, 'dark', -3.5)           // tunnel floor (top -3.2)
+  box(0, -2.45, 17.8, 0.9, 2.9, 'dark', -3.2)       // tunnel wall north
+  box(0, 2.45, 17.8, 0.9, 2.9, 'dark', -3.2)        // tunnel wall south
+  box(0, -18, 1.8, 1.8, 1.8, 'crate')               // street cover, north end
+  box(0, 18, 1.8, 1.8, 1.8, 'crate')                // street cover, south end
+  box(-2.5, -2.5, 1.6, 1.6, 1.6, 'crate')           // street cover, mid (off the bot lines)
+  box(2.5, 2.5, 1.6, 1.6, 1.6, 'crate')
+
+  // ---- waypoints: the west set mirrored to the east (tspawn = east spawn) ----
+  const W: Array<[string, number, number, number]> = [
+    ['ctspawn', -14, 0, 0], ['hall', -11, 0, 0], ['door', -8.45, 0, 0], ['stair', -21, 0, 0],
+    ['strS', -21, 3.4, 0], ['strSE', -18.5, 3.4, 0],
+    ['chan', -18.55, 5.5, 0], ['chanS', -18.55, 7.5, 0],
+    ['chanN', -18.55, -5.5, 0], ['chanNs', -18.55, -7.5, 0],
+    ['gapN', -19.5, -7.5, 0], ['gapS', -19.5, 7.5, 0],
+    ['nMid', -18, -12, 0], ['nWin', -10.5, -12, 0], ['cornerN', -24, -12, 0],
+    ['sMid', -18, 9, 0], ['sWin', -11, 12, 0], ['cornerS', -24, 9, 0],
+    ['cTop', -12.5, 14, 0], ['c1', -16.25, 14, -0.74], ['c2', -18.7, 14, -1.72], ['cBot', -23.5, 14, -3.2],
+    ['baseS', -20, 10, -3.2], ['baseM', -16, 2, -3.2], ['baseN', -20, -8, -3.2], ['tunW', -11, 0, -3.2],
+    ['aEn', -25.1, 3.6, 0.25], ['a0', -25.1, 2.57, 0.73], ['a1', -25.1, 0.86, 1.46],
+    ['a2', -25.1, -0.86, 2.19], ['a3', -25.1, -2.57, 2.92], ['landN', -23.1, -5, 3.4],
+    ['b0', -21.1, -2.57, 4.12], ['b1', -21.1, -0.86, 4.86], ['b2', -21.1, 0.85, 5.59],
+    ['b3', -21.1, 2.57, 6.32], ['landS', -23.1, 5, 6.8],
+    ['l1h', -15, 0, 3.4], ['l1w', -17, -5, 3.4], ['l1n', -15, -12, 3.4], ['l1s', -15, 12, 3.4],
+    ['l1nw', -10.5, -12, 3.4], ['l1mw', -10.5, 0, 3.4], ['l1sw', -10.5, 12, 3.4],
+    ['l2h', -15, 0, 6.8], ['l2n', -15, -12, 6.8], ['l2s', -15, 12, 6.8],
+    ['l2nw', -10.5, -12, 6.8], ['l2mw', -10.5, 0, 6.8], ['l2sw', -10.5, 12, 6.8],
+  ]
+  const waypoints: WP[] = []
+  for (const [id, x, z, y] of W) waypoints.push({ id: 'w' + id, x, y, z })
+  for (const [id, x, z, y] of W) waypoints.push({ id: id === 'ctspawn' ? 'tspawn' : 'e' + id, x: -x, y, z: -z })
+  waypoints.push(
+    { id: 'stW', x: -5, y: 0, z: 0 }, { id: 'stC', x: 0, y: 0, z: 0 }, { id: 'stE', x: 5, y: 0, z: 0 },
+    { id: 'stWN', x: -5, y: 0, z: -12 }, { id: 'stEN', x: 5, y: 0, z: -12 },
+    { id: 'stWS', x: -5, y: 0, z: 12 }, { id: 'stES', x: 5, y: 0, z: 12 },
+    { id: 'stN', x: 0, y: 0, z: -16 }, { id: 'stS', x: 0, y: 0, z: 16 },
+    { id: 'tW', x: -4, y: -3.2, z: 0 }, { id: 'tE', x: 4, y: -3.2, z: 0 },
+  )
+  // west edges on short ids; the east set is the 180° mirror
+  const WE: Array<[string, string]> = [
+    ['ctspawn', 'hall'], ['hall', 'door'], ['hall', 'stair'], ['stair', 'ctspawn'],
+    ['stair', 'strS'], ['strS', 'aEn'], ['strS', 'strSE'], ['strSE', 'chan'],
+    ['chan', 'chanS'], ['chanS', 'gapS'], ['strSE', 'chanN'], ['chanN', 'chanNs'],
+    ['chanNs', 'gapN'], ['strSE', 'hall'], ['chanS', 'sMid'], ['chanNs', 'nMid'],
+    ['gapN', 'nMid'], ['gapN', 'cornerN'], ['nMid', 'nWin'],
+    ['gapS', 'sMid'], ['gapS', 'cornerS'], ['sMid', 'sWin'], ['sMid', 'cTop'], ['sWin', 'cTop'],
+    ['cTop', 'c1'], ['c1', 'c2'], ['c2', 'cBot'], ['cBot', 'baseS'], ['baseS', 'baseM'],
+    ['baseM', 'baseN'], ['baseM', 'tunW'],
+    ['aEn', 'a0'], ['a0', 'a1'], ['a1', 'a2'], ['a2', 'a3'], ['a3', 'landN'],
+    ['landN', 'b0'], ['b0', 'b1'], ['b1', 'b2'], ['b2', 'b3'], ['b3', 'landS'],
+    ['landN', 'l1w'], ['l1w', 'l1h'], ['landS', 'l2h'],
+    ['l1h', 'l1n'], ['l1h', 'l1s'], ['l1h', 'l1mw'], ['l1n', 'l1nw'], ['l1s', 'l1sw'], ['l1n', 'l1s'],
+    ['l2h', 'l2n'], ['l2h', 'l2s'], ['l2h', 'l2mw'], ['l2n', 'l2nw'], ['l2s', 'l2sw'], ['l2n', 'l2s'],
+  ]
+  const ed: Array<[string, string]> = []
+  for (const [a, b] of WE) ed.push(['w' + a, 'w' + b])
+  for (const [a, b] of WE) {
+    const A = a === 'ctspawn' ? 'tspawn' : 'e' + a
+    const B2 = b === 'ctspawn' ? 'tspawn' : 'e' + b
+    ed.push([A, B2])
+  }
+  ed.push(
+    ['wdoor', 'stW'], ['edoor', 'stE'], ['stW', 'stC'], ['stC', 'stE'],
+    ['stW', 'stWN'], ['stWN', 'stEN'], ['stEN', 'stE'], ['stW', 'stWS'], ['stWS', 'stES'], ['stES', 'stE'],
+    ['stWN', 'stN'], ['stN', 'stC'], ['stS', 'stC'], ['stWS', 'stS'],
+    ['wtunW', 'tW'], ['tW', 'tE'], ['tE', 'etunW'],
+  )
+
+  return {
+    ...finishMap('twin', 'Twin Villas', 1, { boxes, box } as Builder, {
+      CT: [
+        { x: -16, y: 0, z: -3 }, { x: -16, y: 0, z: 3 }, { x: -12, y: 0, z: -3 },
+        { x: -12, y: 0, z: 3 }, { x: -14, y: 0, z: 0 },
+      ],
+      T: [
+        { x: 16, y: 0, z: 3 }, { x: 16, y: 0, z: -3 }, { x: 12, y: 0, z: 3 },
+        { x: 12, y: 0, z: -3 }, { x: 14, y: 0, z: 0 },
+      ],
+    }, {
+      // no-bomb map: sites are strategic anchors only (bots push/hold these)
+      A: { x: -14, z: 0, r: 6, y: 0 },
+      B: { x: 14, z: 0, r: 6, y: 0 },
+    }, waypoints, ed, { minX: -28, maxX: 28, minZ: -20, maxZ: 20 }),
+    // CTs (west villa) face east across the street; Ts (east villa) face west
+    spawnYaw: { CT: -Math.PI / 2, T: Math.PI / 2 },
+  }
+}
+
+// ============================================================
 // registry
 // ============================================================
 import { AIMHEAD } from './map-aimhead'
@@ -768,6 +981,7 @@ export const MAPS: Record<MapId, MapDef> = {
   aimhead: { ...AIMHEAD, bomb: false },   // aim map — pure aim duels, no bomb objective
   aimdepot: { ...buildAimDepot(), bomb: false },   // aim map — crate-yard arena, no bomb objective
   island: { ...ISLAND },   // Task 131: tropical island — bomb defusal (A radar / B dock)
+  twin: { ...buildTwin(), bomb: false },   // Task 153: two facing villas — window duels + basement tunnel, elimination-only
 }
 
 export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
@@ -776,4 +990,5 @@ export const MAP_LIST: Array<{ id: MapId; name: string; desc: string }> = [
   { id: 'aimhead', name: 'Aim Headshot', desc: 'CS 1.6 BSP import · slit-wall aim arena' },
   { id: 'aimdepot', name: 'Aim Depot', desc: 'Crate-yard aim arena · low lane walls · moonlit night' },
   { id: 'island', name: 'Island', desc: 'Tropical island · day · bomb defusal · radar A / dock B' },
+  { id: 'twin', name: 'Twin Villas', desc: 'Two facing villas · window duels · basement tunnel · no bomb' },
 ]

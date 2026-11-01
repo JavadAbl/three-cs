@@ -244,6 +244,29 @@ const GRAPHS: Record<string, MapGraph> = {
       tWL: [-4, -12], tER: [4, -12], midS: [0, -20], hSW: [5, -12], hSE: [-5, -12],
     },
   }),
+  twin: buildGraph(MAPS.twin, {
+    // Task 153 — Twin Villas (elimination, bomb:false). West villa = CT
+    // home, east = T home across the street. CTs hold the west villa's L1
+    // windows (the cross-street duel lanes) + the entry hall; Ts hold the
+    // east mirror. T attack routes: straight across the street, or through
+    // the basement tunnel (tE/tW via nodes). plantA/plantB are inert (no
+    // bomb) but must be valid node ids. Watch: window holders face across
+    // the street at the enemy villa.
+    aHold: ['wl1mw', 'whall', 'wl1nw', 'wl1sw'],
+    bHold: ['el1mw', 'ehall', 'el1nw', 'el1sw'],
+    midHold: ['stC', 'stN', 'stS', 'stE'],
+    aRoutes: [['stC', 'whall'], ['tE', 'wbaseM']],
+    bRoutes: [['stC', 'ehall'], ['tW', 'ebaseM']],
+    tHoldA: 'esWin',
+    tHoldB: 'enWin',
+    plantA: 'whall',
+    plantB: 'ehall',
+    watch: {
+      wl1mw: [20, 0], wl1nw: [20, -12], wl1sw: [20, 12], whall: [12, 0],
+      el1mw: [-20, 0], el1nw: [-20, 12], el1sw: [-20, -12], ehall: [-12, 0],
+      stC: [12, 0], stN: [8, -12], stS: [8, 12], stE: [16, 0],
+    },
+  }),
   // Task 132 — island: derived from the generated MapDef (see deriveGraphCfg).
   // The Task-131 launch forgot this entry and graphFor() silently served the
   // DUST graph: island bots walked toward dust2 XZ with dust2 floor heights

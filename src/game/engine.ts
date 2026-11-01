@@ -945,7 +945,7 @@ export class Engine {
       mapId?: string; mapVersion: number; players: Array<Record<string, unknown>>; match: Record<string, unknown>
     }) => {
       // server is authoritative about the room's map — rebuild if we guessed wrong
-      if (d.mapId && d.mapId !== this.mapDef.id && (d.mapId === 'dust' || d.mapId === 'dust2' || d.mapId === 'aimhead' || d.mapId === 'aimdepot' || d.mapId === 'island')) this.rebuildMap(d.mapId as MapId)  // Task 139: whitelist was missing 'island' — live map-switch into island fell through
+      if (d.mapId && d.mapId !== this.mapDef.id && (d.mapId === 'dust' || d.mapId === 'dust2' || d.mapId === 'aimhead' || d.mapId === 'aimdepot' || d.mapId === 'island' || d.mapId === 'twin')) this.rebuildMap(d.mapId as MapId)  // Task 139: whitelist was missing 'island' — live map-switch into island fell through · Task 153: + 'twin'
       this.myId = d.youId
       this.myTeam = d.team
       this.pm.setMyTeam(d.team)

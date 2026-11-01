@@ -151,11 +151,12 @@ export function buildDetails(map: MapDef = MAPS.dust): DetailBuild {
     return { group, raycastMeshes }
   }
 
-  if (map.id === 'aimhead' || map.id === 'aimdepot') {
+  if (map.id === 'aimhead' || map.id === 'aimdepot' || map.id === 'twin') {
     // BSP-converted map (aimhead): real face geometry provides all visuals.
     // aimdepot: hand-built aim arena — boxes carry the whole look; the
     // generic dust prop builders are hard-positioned for the dust layout
-    // and must NOT run here.
+    // and must NOT run here. Task 153 twin: same — hand-built villas, the
+    // box build is the whole look (no floating dust props in the street).
     return { group, raycastMeshes }
   }
 
